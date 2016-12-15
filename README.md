@@ -1,19 +1,19 @@
-# SILENTARMY Standalone Version for Windows x86_64
+# Gateless Gate
 
-[Download precompiled binaries (v5-win64standalone-r12)](https://github.com/zawawawa/silentarmy/releases/tag/v5-win64standalone-r12) (Developmental)
+Gateless Gate is a cross-platform OpenCL Zcash miner. It is a completely redesigned fork of Marc's SILENTARMY V5 with a significant speed boost. Although the current foci of development are AMD video cards and Windows operating systems, it should be able to run on Linux and/or NVIDIA GPUs.
 
-[Download precompiled binaries (v5-win64standalone-r7)](https://github.com/zawawawa/silentarmy/releases/download/v5-win64standalone-r7/silentarmy-v5-win64standalone-r7.zip) (Stable)
+On Windows, All you have to do for mining is to run `list.bat` to get device ID's and edit and run `gatelessgate.bat`. MAKE SURE TO SPECIFY CORRECT DEVICE IDS WITH THE `--use` OPTION! See the documentation of the original SILENTARMY below for details. You may get the following error if you have missing DLL's on your system: `The application was unable to start correctly (0xc000007b)` In this case, you need to delete `vcruntime140.dll` in the package and install [Visual C++ 2015 Redistribution Package](https://www.microsoft.com/en-us/download/details.aspx?id=48145).
 
-This is a standalone Windows x86_64 port of SILENTARMY v5, which does not require Python, based on [Genoil's Windows port](https://github.com/Genoil/silentarmy/tree/windows). All you have to do for mining is to run `list.bat` to get device ID's and edit and run `silentarmy.bat`. MAKE SURE TO SPECIFY CORRECT DEVICE IDS WITH THE `--use` OPTION! See the documentation of the original SILENTARMY below for details.
-
-You may get the following error if you have missing DLL's on your system: `The application was unable to start correctly (0xc000007b)` In this case, you need to delete `vcruntime140.dll` in the package and install [Visual C++ 2015 Redistribution Package](https://www.microsoft.com/en-us/download/details.aspx?id=48145).
-
-If you find this port useful and/or would like to see a feature-rich ZEC miner based on it, please consider donations to: `t1NwUDeSKu4BxkD58mtEYKDjzw5toiLfmCu`
+If you find this port useful and/or would like to see a feature-rich ZEC miner based on it, please consider donations to: `t1NwUDeSKu4BxkD58mtEYKDjzw5toiLfmCu` I am particularly interested in purchasing a GTX 1060 for testing purposes.
 
 Last but not least, mrb, nerdralph, eXtremal, and Genoil, thank you all so much for the great work. You guys are 
 truly the cream of the FOSS movement.
 
 zawawa @ bitcointalk.org
+
+# SILENTARMY Standalone Version for Windows x86_64
+
+[Download precompiled binaries (v5-win64standalone-r12)](https://github.com/zawawawa/silentarmy/releases/tag/v5-win64standalone-r12) (Stable)
 
 # SILENTARMY
 
