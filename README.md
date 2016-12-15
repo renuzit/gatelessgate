@@ -273,20 +273,3 @@ invalid solutions with duplicate inputs. This check is implemented in
 
 Finally, SILENTARMY makes many optimization assumptions and currently only
 supports Equihash parameters 200,9.
-
-# Author
-
-Marc Bevand -- [http://zorinaq.com](http://zorinaq.com)
-
-Donations welcome: t1cVviFvgJinQ4w3C2m2CfRxgP5DnHYaoFC
-
-# Thanks
-
-I would like to thank these persons for their contributions to SILENTARMY,
-in alphabetical order:
-* eXtremal
-* kenshirothefist
-* lhl
-* nerdralph
-* poiuty
-* solardiz
