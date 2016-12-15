@@ -2,7 +2,7 @@
 
 Gateless Gate is a cross-platform OpenCL Zcash miner. It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://github.com/mbevand/silentarmy) with a significant speed boost. Although the current foci of development are AMD video cards and Windows operating systems, it should be able to run on Linux and/or NVIDIA GPUs.
 
-On Windows, All you have to do for mining is to run `list.bat` to get device ID's and edit and run `gatelessgate.bat`. MAKE SURE TO SPECIFY CORRECT DEVICE IDS WITH THE `--use` OPTION! See the documentation of the original SILENTARMY below for details. You may get the following error if you have missing DLL's on your system: `The application was unable to start correctly (0xc000007b)` In this case, you need to delete `vcruntime140.dll` in the package and install [Visual C++ 2015 Redistribution Package](https://www.microsoft.com/en-us/download/details.aspx?id=48145).
+On Windows, all you have to do for mining is to run `list.bat` to get device ID's and edit and run `gatelessgate.bat`. MAKE SURE TO SPECIFY CORRECT DEVICE IDS WITH THE `--use` OPTION! See the documentation of the original SILENTARMY below for details. You may get the following error if you have missing DLL's on your system: `The application was unable to start correctly (0xc000007b)` In this case, you need to delete `vcruntime140.dll` in the package and install [Visual C++ 2015 Redistribution Package](https://www.microsoft.com/en-us/download/details.aspx?id=48145).
 
 If you find this port useful and/or would like to see a feature-rich ZEC miner based on it, please consider donations to: `t1NwUDeSKu4BxkD58mtEYKDjzw5toiLfmCu` I am particularly interested in purchasing a GTX 1060 for testing purposes.
 
