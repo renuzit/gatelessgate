@@ -67,6 +67,10 @@ typedef SSIZE_T ssize_t;
 #include <getopt.h>
 #include "_kernel.h"
 
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
+
 #endif
 
 typedef uint8_t		uchar;
@@ -527,11 +531,8 @@ void examine_ht(unsigned round, cl_command_queue queue, cl_mem *hash_table_buffe
 	free(row_counters);
 }
 #else
-void examine_ht(unsigned round, cl_command_queue queue, cl_mem buf_ht)
+void examine_ht(unsigned round, cl_command_queue queue, cl_mem *hash_table_buffers, cl_mem row_counters_buffer)
 {
-	(void)round;
-	(void)queue;
-	(void)buf_ht;
 }
 #endif
 
