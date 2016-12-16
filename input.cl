@@ -32,8 +32,6 @@ typedef union {
 	uint4 ui4[2];
 	uint2 ui2[4];
 	uint  ui[8];
-	uint  us[16];
-	uint  uc[32];
 } slot_t;
 
 typedef __global slot_t *global_pointer_to_slot_t;
@@ -411,9 +409,10 @@ void kernel_round0(__constant ulong *blake_state_const, __global char *ht,
 **
 ** Return 0 if successfully stored, or 1 if the row overflowed.
 */
+// single-thread reads, parallel writes
 uint xor_and_store(uint round, __global char *ht_dst, uint row,
 				   uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
-				   __global uint *rowCounters, __local global_pointer_to_slot_t *dst)
+				   __global uint *rowCounters, __local slot_t *slot_write_cache, __local global_pointer_to_slot_t *slot_ptrs)
 {
 	uint ret = 0;
 	uint xi0, xi1, xi2, xi3, xi4, xi5;
@@ -425,7 +424,7 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 	slot_t slot;
 	__global slot_t *p = 0;
 #if THREADS_PER_WRITE != 1
-	*dst = 0;
+	slot_ptrs[get_local_id(0)] = 0;
 	barrier(CLK_LOCAL_MEM_FENCE);
 #endif
 
@@ -456,7 +455,7 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 
 		// invalid solutions (which start happenning in round 5) have duplicate
 		// inputs and xor to zero, so discard them
-		if (thread_index == 0 && (xi0 || xi1)) {
+		if (xi0 || xi1) {
 			uint new_row = get_row(round, xi0);
 			uint new_slot_index = inc_row_counter(rowCounters, new_row);
 			if (new_slot_index >= NR_SLOTS) {
@@ -465,7 +464,7 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 #if THREADS_PER_WRITE == 1
 				p
 #else
-				*dst
+				slot_ptrs[get_local_id(0)]
 #endif
 				    = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
 			}
@@ -475,9 +474,6 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 	barrier(CLK_LOCAL_MEM_FENCE);
 #if THREADS_PER_WRITE == 1
 	if (p) {
-#else
-	if (*dst) {
-#endif
 		slot.slot.i = ENCODE_INPUTS(row, slot_a, slot_b);
 		slot.slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
 		slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
@@ -485,26 +481,39 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 		slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
 		slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
 		slot.slot.xi[5] = ((xi5 >> 8));
-#if THREADS_PER_WRITE == 1
 		if (round <= 5)
 			*(__global uint8 *)p = slot.ui8;
 		else
 			*(__global uint4 *)p = slot.ui4[0];
-#elif THREADS_PER_WRITE == 2 
-		* ((__global uint4 *)*dst + thread_index) = slot.ui4[thread_index];
+	}
+#else
+	if (slot_ptrs[get_local_id(0)]) {
+		slot_write_cache[get_local_id(0)].slot.i = ENCODE_INPUTS(row, slot_a, slot_b);
+		slot_write_cache[get_local_id(0)].slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
+		slot_write_cache[get_local_id(0)].slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
+		slot_write_cache[get_local_id(0)].slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
+		slot_write_cache[get_local_id(0)].slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
+		slot_write_cache[get_local_id(0)].slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
+		slot_write_cache[get_local_id(0)].slot.xi[5] = ((xi5 >> 8));
+	}
+	barrier(CLK_LOCAL_MEM_FENCE);
+	uint local_id_base = get_local_id(0) - get_local_id(0) % THREADS_PER_WRITE;
+	for (uint write_index = local_id_base; write_index < local_id_base + THREADS_PER_WRITE; ++write_index) {
+		if (slot_ptrs[write_index]) {
+#if THREADS_PER_WRITE == 2 
+			* ((__global uint4 *)slot_ptrs[write_index] + thread_index) = slot_write_cache[write_index].ui4[thread_index];
 #elif THREADS_PER_WRITE == 4
-		* ((__global uint2 *)*dst + thread_index) = slot.ui2[thread_index];
+			* ((__global uint2 *)slot_ptrs[write_index] + thread_index) = slot_write_cache[write_index].ui2[thread_index];
 #elif THREADS_PER_WRITE == 8
-		* ((__global uint *)*dst + thread_index) = slot.ui[thread_index];
-#elif THREADS_PER_WRITE == 16
-		* ((__global ushort *)*dst + thread_index) = slot.us[thread_index];
-#elif THREADS_PER_WRITE == 32
-		* ((__global uchar *)*dst + thread_index) = slot.uc[thread_index];
+			* ((__global uint *)slot_ptrs[write_index] + thread_index) = slot_write_cache[write_index].ui[thread_index];
 #else
 #error "unsupported THREADS_PER_WRITE"
 #endif
+		}
 	}
-	return (THREADS_PER_WRITE == 1 || thread_index == 0) ? ret : 0;
+	barrier(CLK_LOCAL_MEM_FENCE);
+#endif
+	return ret;
 }
 
 /*
@@ -583,7 +592,8 @@ void equihash_round(uint round,
 	__local uchar *bins = &bins_data[localTid * NR_SLOTS * NR_BINS];
 	__local uint *bin_counters = &bin_counters_data[localTid * NR_BINS];
 #if THREADS_PER_WRITE != 1
-	__local global_pointer_to_slot_t slot_ptrs[LOCAL_WORK_SIZE / THREADS_PER_WRITE];
+	__local slot_t slot_write_cache[LOCAL_WORK_SIZE];
+	__local global_pointer_to_slot_t slot_ptrs[LOCAL_WORK_SIZE];
 #endif
 
 	uint rows_per_work_item = (NR_ROWS + get_global_size(0) / threadsPerRow - 1) / (get_global_size(0) / threadsPerRow);
@@ -671,9 +681,8 @@ void equihash_round(uint round,
 		if (tid < NR_ROWS) {
 			uint totalCollisions = *collisionsNum;
 			// Make sure all the work items in the work group enter and leave the loop at the same time.
-			uint nr_groups = get_local_size(0) / THREADS_PER_WRITE;
-			uint max_index = nr_groups * ((totalCollisions + nr_groups - 1) / nr_groups + 1) - 1;
-			for (uint index = get_local_id(0) / THREADS_PER_WRITE; index <= max_index; index += nr_groups) {
+			uint max_index = totalCollisions + (LOCAL_WORK_SIZE - totalCollisions % LOCAL_WORK_SIZE) - 1;
+			for (uint index = get_local_id(0); index <= max_index; index += LOCAL_WORK_SIZE) {
 				uint collision, collisionLocalThreadId, collisionThreadId;
 				uint i, j, slot_cache_index_i, slot_cache_index_j;
 				a = 0;
@@ -694,7 +703,6 @@ void equihash_round(uint round,
 				}
 				barrier(CLK_LOCAL_MEM_FENCE);
 
-				// parallel writes
 				dropped_stor += xor_and_store(
 					round,
 					ht_dst,
@@ -703,9 +711,9 @@ void equihash_round(uint round,
 					a, b,
 					rowCountersDst,
 #if THREADS_PER_WRITE == 1
-					0);
+					0, 0);
 #else
-					&slot_ptrs[get_local_id(0) / THREADS_PER_WRITE]);
+					slot_write_cache, slot_ptrs);
 #endif
 				barrier(CLK_LOCAL_MEM_FENCE);
 			}
