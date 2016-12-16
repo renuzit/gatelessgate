@@ -18,16 +18,17 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.If not, see <http://www.gnu.org/licenses/>.
 
-//#define ENABLE_DEBUG
+// #define ENABLE_DEBUG
 
 #define NR_ROWS_LOG            15
-#define NR_SLOTS               120
-#define LOCAL_WORK_SIZE        256
-#define THREADS_PER_ROW        256
+#define NR_SLOTS               121 // https://bitcointalk.org/index.php?topic=1716584.msg17197019#msg17197019
+#define LOCAL_WORK_SIZE        64
+#define THREADS_PER_ROW        64
 #define LOCAL_WORK_SIZE_SOLS   64
 #define THREADS_PER_ROW_SOLS   64
 #define GLOBAL_WORK_SIZE_RATIO 512
-#define SLOT_CACHE_SIZE        (NR_SLOTS * (LOCAL_WORK_SIZE/THREADS_PER_ROW) * 75 / 100)
+#define THREADS_PER_WRITE      1 // 1, 2, 4, or 8
+#define SLOT_CACHE_SIZE        (NR_SLOTS * (LOCAL_WORK_SIZE / THREADS_PER_ROW) * 75 / 100)
 #define LDS_COLL_SIZE          (NR_SLOTS * (LOCAL_WORK_SIZE / THREADS_PER_ROW) * 120 / 100)
 
 #define SLOT_CACHE_INDEX_TYPE uchar
@@ -153,7 +154,23 @@ typedef struct	sols_s
 	uint	values[MAX_SOLS][(1 << PARAM_K)];
 }		sols_t;
 
-#if NR_ROWS_LOG <= 16 && NR_SLOTS <= (1 << 8)
+#if NR_ROWS_LOG <= 12 && NR_SLOTS <= (1 << 10)
+
+#define ENCODE_INPUTS(row, slot0, slot1) \
+    ((row << 20) | ((slot1 & 0x3ff) << 10) | (slot0 & 0x3ff))
+#define DECODE_ROW(REF)   (REF >> 20)
+#define DECODE_SLOT1(REF) ((REF >> 10) & 0x3ff)
+#define DECODE_SLOT0(REF) (REF & 0x3ff)
+
+#elif NR_ROWS_LOG <= 14 && NR_SLOTS <= (1 << 9)
+
+#define ENCODE_INPUTS(row, slot0, slot1) \
+    ((row << 18) | ((slot1 & 0x1ff) << 9) | (slot0 & 0x1ff))
+#define DECODE_ROW(REF)   (REF >> 18)
+#define DECODE_SLOT1(REF) ((REF >> 9) & 0x1ff)
+#define DECODE_SLOT0(REF) (REF & 0x1ff)
+
+#elif NR_ROWS_LOG <= 16 && NR_SLOTS <= (1 << 8)
 
 #define ENCODE_INPUTS(row, slot0, slot1) \
     ((row << 16) | ((slot1 & 0xff) << 8) | (slot0 & 0xff))
@@ -193,6 +210,12 @@ typedef struct	sols_s
 #define DEFAULT_NUM_MINING_MODE_THREADS 1
 #define MAX_NUM_MINING_MODE_THREADS 16
 
+#if THREADS_PER_WRITE == 1
 #define ADJUSTED_SLOT_LEN(round) (((round) <= 5) ? SLOT_LEN : SLOT_LEN / 2)
+#else
+#define ADJUSTED_SLOT_LEN(round) SLOT_LEN
+#endif
+
 #define OPENCL_BUILD_OPTIONS_AMD "-I.. -I. -O1"
 #define OPENCL_BUILD_OPTIONS     "-I.. -I."
+

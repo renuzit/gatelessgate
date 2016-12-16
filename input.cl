@@ -30,7 +30,15 @@ typedef union {
 	} slot;
 	uint8 ui8;
 	uint4 ui4[2];
+	uint2 ui2[4];
+	uint  ui[8];
+	uint  us[16];
+	uint  uc[32];
 } slot_t;
+
+typedef __global slot_t *global_pointer_to_slot_t;
+
+
 
 /*
 ** The new hash table has this layout (length in bytes in parens):
@@ -115,7 +123,17 @@ void get_row_counters_index(uint *rowIdx, uint *rowOffset, uint row)
 uint get_row(uint round, uint xi0)
 {
 	uint           row;
-#if NR_ROWS_LOG == 14
+#if NR_ROWS_LOG == 12
+	if (!(round % 2))
+		row = (xi0 & 0xfff);
+	else
+		row = ((xi0 & 0x0f0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
+#elif NR_ROWS_LOG == 13
+	if (!(round % 2))
+		row = (xi0 & 0x1fff);
+	else
+		row = ((xi0 & 0x1f0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
+#elif NR_ROWS_LOG == 14
 	if (!(round % 2))
 		row = (xi0 & 0x3fff);
 	else
@@ -155,7 +173,7 @@ uint ht_store(uint round, __global char *ht, uint i,
 	uint row = get_row(round, xi0);
 	uint cnt = inc_row_counter(rowCounters, row);
 	if (cnt >= NR_SLOTS)
-		return 0;
+		return 1;
 	__global char *p = get_slot_ptr(ht, round, row, cnt);
 	slot_t slot;
 	slot.slot.i = i;
@@ -395,44 +413,99 @@ void kernel_round0(__constant ulong *blake_state_const, __global char *ht,
 */
 uint xor_and_store(uint round, __global char *ht_dst, uint row,
 				   uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
-				   __global uint *rowCounters)
+				   __global uint *rowCounters, __local global_pointer_to_slot_t *dst)
 {
-	ulong xi0, xi1, xi2, xi3, xi4, xi5;
-#if NR_ROWS_LOG >= 8 && NR_ROWS_LOG <= 20
-	// xor 24 bytes
-	xi0 = *(ai++);
-	xi1 = *(ai++);
-	if (round <= 7) xi2 = *(ai++);
-	if (round <= 6) xi3 = *(ai++);
-	if (round <= 4) xi4 = *(ai++);
-	if (round <= 2) xi5 = *ai;
+	uint ret = 0;
+	uint xi0, xi1, xi2, xi3, xi4, xi5;
+	uint thread_index = get_local_id(0) % THREADS_PER_WRITE;
 
-	xi0 ^= *(bi++);
-	xi1 ^= *(bi++);
-	if (round <= 7) xi2 ^= *(bi++);
-	if (round <= 6) xi3 ^= *(bi++);
-	if (round <= 4) xi4 ^= *(bi++);
-	if (round <= 2) xi5 ^= *bi;
-
-	if (!(round & 0x1)) {
-		// skip padding bytes
-		xi0 = (xi0 >> 24) | (xi1 << (32 - 24));
-		xi1 = (xi1 >> 24) | (xi2 << (32 - 24));
-		if (round <= 7) xi2 = (xi2 >> 24) | (xi3 << (32 - 24));
-		if (round <= 6) xi3 = (xi3 >> 24) | (xi4 << (32 - 24));
-		if (round <= 4) xi4 = (xi4 >> 24) | (xi5 << (32 - 24));
-		if (round <= 2) xi5 = (xi5 >> 24);
-	}
-
-	// invalid solutions (which start happenning in round 5) have duplicate
-	// inputs and xor to zero, so discard them
-	if (!xi0 && !xi1)
-		return 0;
-#else
+#if NR_ROWS_LOG < 8 && NR_ROWS_LOG > 20
 #error "unsupported NR_ROWS_LOG"
 #endif
-	return ht_store(round, ht_dst, ENCODE_INPUTS(row, slot_a, slot_b), xi0, xi1, xi2, xi3, xi4, xi5, 0, rowCounters);
+	slot_t slot;
+	__global slot_t *p = 0;
+#if THREADS_PER_WRITE != 1
+	*dst = 0;
+	barrier(CLK_LOCAL_MEM_FENCE);
+#endif
+
+	if (ai && bi) {
+		xi0 = *(ai++);
+		xi1 = *(ai++);
+		if (round <= 7) xi2 = *(ai++);
+		if (round <= 6) xi3 = *(ai++);
+		if (round <= 4) xi4 = *(ai++);
+		if (round <= 2) xi5 = *ai;
+
+		xi0 ^= *(bi++);
+		xi1 ^= *(bi++);
+		if (round <= 7) xi2 ^= *(bi++);
+		if (round <= 6) xi3 ^= *(bi++);
+		if (round <= 4) xi4 ^= *(bi++);
+		if (round <= 2) xi5 ^= *bi;
+
+		if (!(round & 0x1)) {
+			// skip padding bytes
+			xi0 = (xi0 >> 24) | (xi1 << (32 - 24));
+			xi1 = (xi1 >> 24) | (xi2 << (32 - 24));
+			if (round <= 7) xi2 = (xi2 >> 24) | (xi3 << (32 - 24));
+			if (round <= 6) xi3 = (xi3 >> 24) | (xi4 << (32 - 24));
+			if (round <= 4) xi4 = (xi4 >> 24) | (xi5 << (32 - 24));
+			if (round <= 2) xi5 = (xi5 >> 24);
+		}
+
+		// invalid solutions (which start happenning in round 5) have duplicate
+		// inputs and xor to zero, so discard them
+		if (thread_index == 0 && (xi0 || xi1)) {
+			uint new_row = get_row(round, xi0);
+			uint new_slot_index = inc_row_counter(rowCounters, new_row);
+			if (new_slot_index >= NR_SLOTS) {
+				ret = 1;
+			} else {
+#if THREADS_PER_WRITE == 1
+				p
+#else
+				*dst
+#endif
+				    = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
+			}
+		}
 	}
+
+	barrier(CLK_LOCAL_MEM_FENCE);
+#if THREADS_PER_WRITE == 1
+	if (p) {
+#else
+	if (*dst) {
+#endif
+		slot.slot.i = ENCODE_INPUTS(row, slot_a, slot_b);
+		slot.slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
+		slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
+		slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
+		slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
+		slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
+		slot.slot.xi[5] = ((xi5 >> 8));
+#if THREADS_PER_WRITE == 1
+		if (round <= 5)
+			*(__global uint8 *)p = slot.ui8;
+		else
+			*(__global uint4 *)p = slot.ui4[0];
+#elif THREADS_PER_WRITE == 2 
+		* ((__global uint4 *)*dst + thread_index) = slot.ui4[thread_index];
+#elif THREADS_PER_WRITE == 4
+		* ((__global uint2 *)*dst + thread_index) = slot.ui2[thread_index];
+#elif THREADS_PER_WRITE == 8
+		* ((__global uint *)*dst + thread_index) = slot.ui[thread_index];
+#elif THREADS_PER_WRITE == 16
+		* ((__global ushort *)*dst + thread_index) = slot.us[thread_index];
+#elif THREADS_PER_WRITE == 32
+		* ((__global uchar *)*dst + thread_index) = slot.uc[thread_index];
+#else
+#error "unsupported THREADS_PER_WRITE"
+#endif
+	}
+	return (THREADS_PER_WRITE == 1 || thread_index == 0) ? ret : 0;
+}
 
 /*
 ** Execute one Equihash round. Read from ht_src, XOR colliding pairs of Xi,
@@ -470,7 +543,7 @@ void equihash_round(uint round,
 					__local uint *collisionsNum,
 					__global uint *rowCountersSrc,
 					__global uint *rowCountersDst,
-					uint threadsPerRow,
+				             uint threadsPerRow,
 					__local uint *nr_slots_array,
 					__local uchar *bins_data,
 					__local uint *bin_counters_data)
@@ -488,7 +561,13 @@ void equihash_round(uint round,
 	// the mask is also computed to read data from the previous round
 #define BIN_MASK(round)        ((((round) + 1) % 2) ? 0xf000 : 0xf0000)
 #define BIN_MASK_OFFSET(round) ((((round) + 1) % 2) ? 3 * 4 : 4 * 4)
-#if NR_ROWS_LOG == 14
+#if NR_ROWS_LOG == 12
+#define BIN_MASK2(round)        ((((round) + 1) % 2) ? 0x00f0 : 0xf000)
+#define BIN_MASK2_OFFSET(round) ((((round) + 1) % 2) ? 0 : 8)
+#elif NR_ROWS_LOG == 13
+#define BIN_MASK2(round)        ((((round) + 1) % 2) ? 0x00e0 : 0xe000)
+#define BIN_MASK2_OFFSET(round) ((((round) + 1) % 2) ? 1 : 9)
+#elif NR_ROWS_LOG == 14
 #define BIN_MASK2(round)        ((((round) + 1) % 2) ? 0x00c0 : 0xc000)
 #define BIN_MASK2_OFFSET(round) ((((round) + 1) % 2) ? 2 : 10)
 #elif NR_ROWS_LOG == 15
@@ -500,9 +579,12 @@ void equihash_round(uint round,
 #else
 #error "unsupported NR_ROWS_LOG"
 #endif    
-#define NR_BINS (64 >> (NR_ROWS_LOG - 14))
+#define NR_BINS (256 >> (NR_ROWS_LOG - 12))
 	__local uchar *bins = &bins_data[localTid * NR_SLOTS * NR_BINS];
 	__local uint *bin_counters = &bin_counters_data[localTid * NR_BINS];
+#if THREADS_PER_WRITE != 1
+	__local global_pointer_to_slot_t slot_ptrs[LOCAL_WORK_SIZE / THREADS_PER_WRITE];
+#endif
 
 	uint rows_per_work_item = (NR_ROWS + get_global_size(0) / threadsPerRow - 1) / (get_global_size(0) / threadsPerRow);
 	uint rows_per_chunk = get_global_size(0) / threadsPerRow;
@@ -588,21 +670,44 @@ void equihash_round(uint round,
 		barrier(CLK_LOCAL_MEM_FENCE);
 		if (tid < NR_ROWS) {
 			uint totalCollisions = *collisionsNum;
-			for (uint index = get_local_id(0); index < totalCollisions; index += get_local_size(0)) {
-				uint collision = collisionsData[index];
-				uint collisionLocalThreadId = collision >> 24;
-				uint collisionThreadId = gid + collisionLocalThreadId;
-				uint i = (collision >> 12) & 0xfff;
-				uint j = collision & 0xfff;
-				uint slot_cache_index_i = slot_cache_indexes[collisionLocalThreadId * NR_SLOTS + i];
-				if (slot_cache_index_i >= SLOT_CACHE_SIZE)
-					continue;
-				uint slot_cache_index_j = slot_cache_indexes[collisionLocalThreadId * NR_SLOTS + j];
-				if (slot_cache_index_j >= SLOT_CACHE_SIZE)
-					continue;
-				a = (__local uint *)&slot_cache[slot_cache_index_i * RESERVED_FOR_XI(round - 1)];
-				b = (__local uint *)&slot_cache[slot_cache_index_j * RESERVED_FOR_XI(round - 1)];
-				dropped_stor += xor_and_store(round, ht_dst, collisionThreadId, i, j, a, b, rowCountersDst);
+			// Make sure all the work items in the work group enter and leave the loop at the same time.
+			uint nr_groups = get_local_size(0) / THREADS_PER_WRITE;
+			uint max_index = nr_groups * ((totalCollisions + nr_groups - 1) / nr_groups + 1) - 1;
+			for (uint index = get_local_id(0) / THREADS_PER_WRITE; index <= max_index; index += nr_groups) {
+				uint collision, collisionLocalThreadId, collisionThreadId;
+				uint i, j, slot_cache_index_i, slot_cache_index_j;
+				a = 0;
+				b = 0;
+
+				if (index < totalCollisions) {
+					collision = collisionsData[index];
+					collisionLocalThreadId = collision >> 24;
+					collisionThreadId = gid + collisionLocalThreadId;
+					i = (collision >> 12) & 0xfff;
+					j = collision & 0xfff;
+					slot_cache_index_i = slot_cache_indexes[collisionLocalThreadId * NR_SLOTS + i];
+					slot_cache_index_j = slot_cache_indexes[collisionLocalThreadId * NR_SLOTS + j];
+					if (slot_cache_index_i < SLOT_CACHE_SIZE)
+						a = (__local uint *)&slot_cache[slot_cache_index_i * RESERVED_FOR_XI(round - 1)];
+					if (slot_cache_index_j < SLOT_CACHE_SIZE)
+						b = (__local uint *)&slot_cache[slot_cache_index_j * RESERVED_FOR_XI(round - 1)];
+				}
+				barrier(CLK_LOCAL_MEM_FENCE);
+
+				// parallel writes
+				dropped_stor += xor_and_store(
+					round,
+					ht_dst,
+					collisionThreadId,
+					i, j,
+					a, b,
+					rowCountersDst,
+#if THREADS_PER_WRITE == 1
+					0);
+#else
+					&slot_ptrs[get_local_id(0) / THREADS_PER_WRITE]);
+#endif
+				barrier(CLK_LOCAL_MEM_FENCE);
 			}
 		}
 	}
