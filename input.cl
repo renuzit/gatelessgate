@@ -471,7 +471,6 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 		}
 	}
 
-	barrier(CLK_LOCAL_MEM_FENCE);
 #if THREADS_PER_WRITE == 1
 	if (p) {
 		slot.slot.i = ENCODE_INPUTS(row, slot_a, slot_b);
@@ -487,6 +486,7 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 			*(__global uint4 *)p = slot.ui4[0];
 	}
 #else
+	barrier(CLK_LOCAL_MEM_FENCE);
 	if (slot_ptrs[get_local_id(0)]) {
 		slot_write_cache[get_local_id(0)].slot.i = ENCODE_INPUTS(row, slot_a, slot_b);
 		slot_write_cache[get_local_id(0)].slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
@@ -560,9 +560,7 @@ void equihash_round(uint round,
 	uint globalTid = get_global_id(0) / threadsPerRow;
 	uint localTid = get_local_id(0) / threadsPerRow;
 	uint localGroupId = get_local_id(0) % threadsPerRow;
-
 	__global char *p;
-	uint     cnt;
 	uint     i, j;
 	uint     dropped_coll = 0;
 	uint     dropped_stor = 0;
@@ -589,7 +587,7 @@ void equihash_round(uint round,
 #error "unsupported NR_ROWS_LOG"
 #endif    
 #define NR_BINS (256 >> (NR_ROWS_LOG - 12))
-	__local uchar *bins = &bins_data[localTid * NR_SLOTS * NR_BINS];
+	__local uchar *bins = &bins_data[localTid * BIN_SIZE * NR_BINS];
 	__local uint *bin_counters = &bin_counters_data[localTid * NR_BINS];
 #if THREADS_PER_WRITE != 1
 	__local slot_t slot_write_cache[LOCAL_WORK_SIZE];
@@ -600,123 +598,130 @@ void equihash_round(uint round,
 	uint rows_per_chunk = get_global_size(0) / threadsPerRow;
 
 	for (uint chunk = 0; chunk < rows_per_work_item; chunk++) {
+		uint cnt = 0;
 		uint tid = globalTid + rows_per_chunk * chunk;
 		uint gid = tid & ~(get_local_size(0) / threadsPerRow - 1);
 
-		if (tid < NR_ROWS) {
-			if (!get_local_id(0)) {
-				*collisionsNum = 0;
-				*slot_cache_counter = 0;
-			}
-			for (i = localGroupId; i < NR_BINS; i += threadsPerRow)
-				bin_counters[i] = 0;
-			if (localGroupId == 0) {
-				uint rowIdx, rowOffset;
-				get_row_counters_index(&rowIdx, &rowOffset, tid);
-				cnt = (rowCountersSrc[rowIdx] >> rowOffset) & ROW_MASK;
-				cnt = min(cnt, (uint)NR_SLOTS); // handle possible overflow in last round
-				nr_slots_array[localTid] = cnt;
-			}
+		if (!get_local_id(0)) {
+			*collisionsNum = 0;
+			*slot_cache_counter = 0;
+		}
+		for (i = localGroupId; i < NR_BINS; i += threadsPerRow)
+			bin_counters[i] = 0;
+		if (tid < NR_ROWS && localGroupId == 0) {
+			uint rowIdx, rowOffset;
+			get_row_counters_index(&rowIdx, &rowOffset, tid);
+			cnt = (rowCountersSrc[rowIdx] >> rowOffset) & ROW_MASK;
+			cnt = min(cnt, (uint)NR_SLOTS); // handle possible overflow in last round
+			nr_slots_array[localTid] = cnt;
 		}
 		barrier(CLK_LOCAL_MEM_FENCE);
-		if (tid < NR_ROWS) {
-			if (localGroupId)
-				cnt = nr_slots_array[localTid];
+		if (tid < NR_ROWS && localGroupId) {
+			cnt = nr_slots_array[localTid];
 		}
 		barrier(CLK_LOCAL_MEM_FENCE);
 
 		// Perform a radix sort as slots get loaded into LDS.
-		if (tid < NR_ROWS) {
-			for (i = localGroupId; i < cnt; i += threadsPerRow) {
-				uint xi_first_bytes = *(__global uint *)get_xi_ptr(ht_src, round - 1, tid, i);
-
-				uint bin_to_use =
-					  ((xi_first_bytes & BIN_MASK(round - 1) ) >> BIN_MASK_OFFSET(round - 1))
+		uint xi_first_bytes;
+		uint bin_to_use;
+		uint bin_counter_copy;
+		// Make sure all the work items in the work group enter the loop.
+		uint i_max = cnt + (get_local_size(0) - cnt % get_local_size(0)) - 1;
+		for (i = localGroupId; i < i_max; i += threadsPerRow) {
+			if (tid < NR_ROWS && i < cnt) {
+				xi_first_bytes = *(__global uint *)get_xi_ptr(ht_src, round - 1, tid, i);
+				bin_to_use =
+					((xi_first_bytes & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
 					| ((xi_first_bytes & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
-				uint bin_counter_copy = atomic_inc(&bin_counters[bin_to_use]);
-				bins[bin_to_use * NR_SLOTS + bin_counter_copy] = i;
-
-				if (bin_counter_copy) {
-					uint slot_cache_counter_copy = atomic_inc(slot_cache_counter);
-					if (slot_cache_counter_copy >= SLOT_CACHE_SIZE) {
-						atomic_dec(slot_cache_counter);
-						++dropped_coll;
-						slot_cache_indexes[localTid * NR_SLOTS + i] = SLOT_CACHE_SIZE;
-					} else {
-						slot_cache[slot_cache_counter_copy * RESERVED_FOR_XI(round - 1)] = xi_first_bytes;
-						for (j = 1; j < UINTS_IN_XI(round - 1); ++j)
-							slot_cache[slot_cache_counter_copy * RESERVED_FOR_XI(round - 1) + j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, tid, i) + j);
-						slot_cache_indexes[localTid * NR_SLOTS + i] = slot_cache_counter_copy;
-					}
-
-					if (bin_counter_copy == 1) {
-						slot_cache_counter_copy = atomic_inc(slot_cache_counter);
-						uint first_slot_index = bins[bin_to_use * NR_SLOTS];
-						if (slot_cache_counter_copy >= SLOT_CACHE_SIZE) {
-							atomic_dec(slot_cache_counter);
-							++dropped_coll;
-							slot_cache_indexes[localTid * NR_SLOTS + first_slot_index] = SLOT_CACHE_SIZE;
-						} else {
-							for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-								slot_cache[slot_cache_counter_copy * RESERVED_FOR_XI(round - 1) + j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, tid, first_slot_index) + j);
-							slot_cache_indexes[localTid * NR_SLOTS + first_slot_index] = slot_cache_counter_copy;
-						}
-					}
+				bin_counter_copy = atomic_inc(&bin_counters[bin_to_use]);
+				if (bin_counter_copy >= BIN_SIZE) {
+					atomic_dec(&bin_counters[bin_to_use]);
+					++dropped_coll;
+				} else {
+					bins[bin_to_use * BIN_SIZE + bin_counter_copy] = i;
 				}
+			}
 
+			uint slot_cache_counter_copy;
+			if (tid < NR_ROWS && i < cnt && bin_counter_copy < BIN_SIZE && bin_counter_copy) {
+				slot_cache_counter_copy = atomic_inc(slot_cache_counter);
+				if (slot_cache_counter_copy >= SLOT_CACHE_SIZE) {
+					atomic_dec(slot_cache_counter);
+					++dropped_coll;
+					slot_cache_indexes[localTid * NR_SLOTS + i] = SLOT_CACHE_SIZE;
+				} else {
+					slot_cache[slot_cache_counter_copy * RESERVED_FOR_XI(round - 1)] = xi_first_bytes;
+					for (j = 1; j < UINTS_IN_XI(round - 1); ++j)
+						slot_cache[slot_cache_counter_copy * RESERVED_FOR_XI(round - 1) + j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, tid, i) + j);
+					slot_cache_indexes[localTid * NR_SLOTS + i] = slot_cache_counter_copy;
+				}
+			}
+
+			if (tid < NR_ROWS && i < cnt && bin_counter_copy == 1) {
+				slot_cache_counter_copy = atomic_inc(slot_cache_counter);
+				uint first_slot_index = bins[bin_to_use * BIN_SIZE];
+				if (slot_cache_counter_copy >= SLOT_CACHE_SIZE) {
+					atomic_dec(slot_cache_counter);
+					++dropped_coll;
+					slot_cache_indexes[localTid * NR_SLOTS + first_slot_index] = SLOT_CACHE_SIZE;
+				} else {
+					for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
+						slot_cache[slot_cache_counter_copy * RESERVED_FOR_XI(round - 1) + j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, tid, first_slot_index) + j);
+					slot_cache_indexes[localTid * NR_SLOTS + first_slot_index] = slot_cache_counter_copy;
+				}
+			}
+
+			if (tid < NR_ROWS && i < cnt) {
 				for (j = 0; j < bin_counter_copy; ++j) {
 					uint index = atomic_inc(collisionsNum);
 					if (index >= LDS_COLL_SIZE) {
 						atomic_dec(collisionsNum);
 						++dropped_coll;
-					} else {
-						collisionsData[index] = (localTid << 24) | (i << 12) | bins[bin_to_use * NR_SLOTS + j];
+					}
+					else {
+						collisionsData[index] = (localTid << 24) | (i << 12) | bins[bin_to_use * BIN_SIZE + j];
 					}
 				}
 			}
 		}
 
-	part2:
 		barrier(CLK_LOCAL_MEM_FENCE);
-		if (tid < NR_ROWS) {
-			uint totalCollisions = *collisionsNum;
-			// Make sure all the work items in the work group enter and leave the loop at the same time.
-			uint max_index = totalCollisions + (LOCAL_WORK_SIZE - totalCollisions % LOCAL_WORK_SIZE) - 1;
-			for (uint index = get_local_id(0); index <= max_index; index += LOCAL_WORK_SIZE) {
-				uint collision, collisionLocalThreadId, collisionThreadId;
-				uint i, j, slot_cache_index_i, slot_cache_index_j;
-				a = 0;
-				b = 0;
+		uint totalCollisions = *collisionsNum;
+		// Make sure all the work items in the work group enter and leave the loop at the same time.
+		uint max_index = totalCollisions + (LOCAL_WORK_SIZE - totalCollisions % LOCAL_WORK_SIZE) - 1;
+		for (uint index = get_local_id(0); index <= max_index; index += LOCAL_WORK_SIZE) {
+			uint collision, collisionLocalThreadId, collisionThreadId;
+			uint i, j, slot_cache_index_i, slot_cache_index_j;
+			a = 0;
+			b = 0;
 
-				if (index < totalCollisions) {
-					collision = collisionsData[index];
-					collisionLocalThreadId = collision >> 24;
-					collisionThreadId = gid + collisionLocalThreadId;
-					i = (collision >> 12) & 0xfff;
-					j = collision & 0xfff;
-					slot_cache_index_i = slot_cache_indexes[collisionLocalThreadId * NR_SLOTS + i];
-					slot_cache_index_j = slot_cache_indexes[collisionLocalThreadId * NR_SLOTS + j];
-					if (slot_cache_index_i < SLOT_CACHE_SIZE)
-						a = (__local uint *)&slot_cache[slot_cache_index_i * RESERVED_FOR_XI(round - 1)];
-					if (slot_cache_index_j < SLOT_CACHE_SIZE)
-						b = (__local uint *)&slot_cache[slot_cache_index_j * RESERVED_FOR_XI(round - 1)];
-				}
-				barrier(CLK_LOCAL_MEM_FENCE);
-
-				dropped_stor += xor_and_store(
-					round,
-					ht_dst,
-					collisionThreadId,
-					i, j,
-					a, b,
-					rowCountersDst,
-#if THREADS_PER_WRITE == 1
-					0, 0);
-#else
-					slot_write_cache, slot_ptrs);
-#endif
-				barrier(CLK_LOCAL_MEM_FENCE);
+			if (tid < NR_ROWS && index < totalCollisions) {
+				collision = collisionsData[index];
+				collisionLocalThreadId = collision >> 24;
+				collisionThreadId = gid + collisionLocalThreadId;
+				i = (collision >> 12) & 0xfff;
+				j = collision & 0xfff;
+				slot_cache_index_i = slot_cache_indexes[collisionLocalThreadId * NR_SLOTS + i];
+				slot_cache_index_j = slot_cache_indexes[collisionLocalThreadId * NR_SLOTS + j];
+				if (slot_cache_index_i < SLOT_CACHE_SIZE)
+					a = (__local uint *)&slot_cache[slot_cache_index_i * RESERVED_FOR_XI(round - 1)];
+				if (slot_cache_index_j < SLOT_CACHE_SIZE)
+					b = (__local uint *)&slot_cache[slot_cache_index_j * RESERVED_FOR_XI(round - 1)];
 			}
+
+			dropped_stor += xor_and_store(
+				round,
+				ht_dst,
+				collisionThreadId,
+				i, j,
+				a, b,
+				rowCountersDst,
+#if THREADS_PER_WRITE == 1
+				0, 0);
+#else
+				slot_write_cache, slot_ptrs);
+#endif
+			barrier(CLK_LOCAL_MEM_FENCE);
 		}
 	}
 
@@ -742,7 +747,7 @@ void kernel_round ## N(__global char *ht_src, __global char *ht_dst, \
     __local uint    collisionsData[LDS_COLL_SIZE]; \
     __local uint    collisionsNum; \
 	__local uint    nr_slots_array[LOCAL_WORK_SIZE / THREADS_PER_ROW]; \
-	__local uchar   bins_data[(LOCAL_WORK_SIZE / THREADS_PER_ROW) * NR_SLOTS * NR_BINS]; \
+	__local uchar   bins_data[(LOCAL_WORK_SIZE / THREADS_PER_ROW) * BIN_SIZE * NR_BINS]; \
 	__local uint    bin_counters_data[(LOCAL_WORK_SIZE / THREADS_PER_ROW) * NR_BINS]; \
 	equihash_round(N, ht_src, ht_dst, debug, slot_cache, &slot_cache_counter, slot_cache_indexes, collisionsData, \
 	    &collisionsNum, rowCountersSrc, rowCountersDst, THREADS_PER_ROW, nr_slots_array, bins_data, bin_counters_data); \
