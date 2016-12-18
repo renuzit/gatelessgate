@@ -1616,6 +1616,17 @@ void init_and_run_opencl(uint8_t *header, size_t header_len)
 #ifdef WIN32
 	load_file("input.cl", &source, &source_len, 0);
 	load_file("input.bin", &binary, &binary_len, 1);
+	char *combined;
+	char *param;
+	size_t param_len;
+	load_file("param.h", &param, &param_len, 0);
+	if (!(combined = malloc(source_len + 1 + param_len + 1)))
+		fatal("malloc");
+	strcpy(combined, param);
+	strcat(combined, "\n");
+	strcat(combined, source);
+	free(source);
+	source = combined;
 #else
 	source = ocl_code;
 #endif

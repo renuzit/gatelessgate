@@ -18,7 +18,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.If not, see <http://www.gnu.org/licenses/>.
 
+#ifndef PARAM_H
 #include "param.h"
+#endif
 
 #pragma OPENCL EXTENSION cl_khr_global_int32_base_atomics : enable
 
