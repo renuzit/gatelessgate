@@ -36,8 +36,9 @@ typedef union {
 	uint  ui[8];
 } slot_t;
 
+#if THREADS_PER_WRITE != 1
 typedef __global slot_t *global_pointer_to_slot_t;
-
+#endif
 
 
 /*
@@ -414,8 +415,12 @@ void kernel_round0(__constant ulong *blake_state_const, __global char *ht,
 // single-thread reads, parallel writes
 uint xor_and_store(uint round, __global char *ht_dst, uint row,
 				   uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
-				   __global uint *rowCounters, __local slot_t *slot_write_cache, __local global_pointer_to_slot_t *slot_ptrs)
-{
+				   __global uint *rowCounters
+#if THREADS_PER_WRITE != 1
+	, __local slot_t *slot_write_cache,
+	  __local global_pointer_to_slot_t *slot_ptrs
+#endif
+) {
 	uint ret = 0;
 	uint xi0, xi1, xi2, xi3, xi4, xi5;
 	uint thread_index = get_local_id(0) % THREADS_PER_WRITE;
@@ -717,11 +722,11 @@ void equihash_round(uint round,
 				collisionThreadId,
 				i, j,
 				a, b,
-				rowCountersDst,
+				rowCountersDst
 #if THREADS_PER_WRITE == 1
-				0, 0);
+				);
 #else
-				slot_write_cache, slot_ptrs);
+				, slot_write_cache, slot_ptrs);
 #endif
 			barrier(CLK_LOCAL_MEM_FENCE);
 		}

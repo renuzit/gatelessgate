@@ -20,21 +20,36 @@
 
 #define PARAM_H
 
+// When you tweak parameters in this file, make sure to uncomment the next line,
+// rebuild sa-solver, and run it to see how many slots get dropped
+// at each round. Note that performance suffers if too many slots get dropped.
+
 //define ENABLE_DEBUG
 
-#define NR_ROWS_LOG            15
-#define NR_SLOTS               127
-#define LOCAL_WORK_SIZE        64
+//
+// Parameters for Hash Tables
+//
+
+// There are PARAM_K - 1 hash tables, and each hash table has NR_ROWS rows.
+// Each row contains NR_SLOTS slots.
+
+#define NR_ROWS_LOG            15  // 12, 13, 14, or 15. 12 and 13 are not practically usable.
+#define NR_SLOTS               127 // A prime number is preferable, but NEXT_PRIME_NO() cannot be used here.
+#define LOCAL_WORK_SIZE        64  
 #define THREADS_PER_ROW        64
 #define LOCAL_WORK_SIZE_SOLS   128
 #define THREADS_PER_ROW_SOLS   128
-#define GLOBAL_WORK_SIZE_RATIO 512
-#define THREADS_PER_WRITE      1 // 1, 2, 4, or 8
+#define GLOBAL_WORK_SIZE_RATIO 512 // global_work_size = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * LOCAL_WORK_SIZE
+#define THREADS_PER_WRITE      1   // 1, 2, 4, or 8
 #define SLOT_CACHE_SIZE        NEXT_PRIME_NO(NR_SLOTS * (LOCAL_WORK_SIZE / THREADS_PER_ROW) * 75 / 100)
 #define LDS_COLL_SIZE          NEXT_PRIME_NO(NR_SLOTS * (LOCAL_WORK_SIZE / THREADS_PER_ROW) * 120 / 100)
 #define BIN_SIZE               NEXT_PRIME_NO(NR_SLOTS * 25 / 100)
 
+#if NR_SLOTS < 255
 #define SLOT_CACHE_INDEX_TYPE uchar
+#else
+#define SLOT_CACHE_INDEX_TYPE ushort
+#endif
 
 #define PARAM_N				   200
 #define PARAM_K			       9
