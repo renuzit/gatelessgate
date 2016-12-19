@@ -553,8 +553,6 @@ void equihash_round(uint round,
 					__global char *ht_dst,
 					__global uint *debug,
 					__local uint  *slot_cache,
-					__local uint  *slot_cache_counter,
-					__local SLOT_CACHE_INDEX_TYPE *slot_cache_indexes,
 					__local uint *collisionsData,
 					__local uint *collisionsNum,
 					__global uint *rowCountersSrc,
@@ -609,10 +607,8 @@ void equihash_round(uint round,
 		uint tid = globalTid + rows_per_chunk * chunk;
 		uint gid = tid & ~(get_local_size(0) / threadsPerRow - 1);
 
-		if (!get_local_id(0)) {
+		if (!get_local_id(0)) 
 			*collisionsNum = 0;
-			*slot_cache_counter = 0;
-		}
 		for (i = localGroupId; i < NR_BINS; i += threadsPerRow)
 			bin_counters[i] = 0;
 		if (tid < NR_ROWS && localGroupId == 0) {
@@ -637,6 +633,10 @@ void equihash_round(uint round,
 		for (i = localGroupId; i < i_max; i += threadsPerRow) {
 			if (tid < NR_ROWS && i < cnt) {
 				xi_first_bytes = *(__global uint *)get_xi_ptr(ht_src, round - 1, tid, i);
+				slot_cache[(localTid * NR_SLOTS + i) * RESERVED_FOR_XI(round - 1)] = xi_first_bytes;
+				for (j = 1; j < UINTS_IN_XI(round - 1); ++j)
+					slot_cache[(localTid * NR_SLOTS + i) * RESERVED_FOR_XI(round - 1) + j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, tid, i) + j);
+
 				bin_to_use =
 					((xi_first_bytes & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
 					| ((xi_first_bytes & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
@@ -648,35 +648,7 @@ void equihash_round(uint round,
 					bins[bin_to_use * BIN_SIZE + bin_counter_copy] = i;
 				}
 			}
-
-			uint slot_cache_counter_copy;
-			if (tid < NR_ROWS && i < cnt && bin_counter_copy < BIN_SIZE && bin_counter_copy) {
-				slot_cache_counter_copy = atomic_inc(slot_cache_counter);
-				if (slot_cache_counter_copy >= SLOT_CACHE_SIZE) {
-					atomic_dec(slot_cache_counter);
-					++dropped_coll;
-					slot_cache_indexes[localTid * NR_SLOTS + i] = SLOT_CACHE_SIZE;
-				} else {
-					slot_cache[slot_cache_counter_copy * RESERVED_FOR_XI(round - 1)] = xi_first_bytes;
-					for (j = 1; j < UINTS_IN_XI(round - 1); ++j)
-						slot_cache[slot_cache_counter_copy * RESERVED_FOR_XI(round - 1) + j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, tid, i) + j);
-					slot_cache_indexes[localTid * NR_SLOTS + i] = slot_cache_counter_copy;
-				}
-			}
-
-			if (tid < NR_ROWS && i < cnt && bin_counter_copy == 1) {
-				slot_cache_counter_copy = atomic_inc(slot_cache_counter);
-				uint first_slot_index = bins[bin_to_use * BIN_SIZE];
-				if (slot_cache_counter_copy >= SLOT_CACHE_SIZE) {
-					atomic_dec(slot_cache_counter);
-					++dropped_coll;
-					slot_cache_indexes[localTid * NR_SLOTS + first_slot_index] = SLOT_CACHE_SIZE;
-				} else {
-					for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-						slot_cache[slot_cache_counter_copy * RESERVED_FOR_XI(round - 1) + j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, tid, first_slot_index) + j);
-					slot_cache_indexes[localTid * NR_SLOTS + first_slot_index] = slot_cache_counter_copy;
-				}
-			}
+			barrier(CLK_LOCAL_MEM_FENCE);
 
 			if (tid < NR_ROWS && i < cnt) {
 				for (j = 0; j < bin_counter_copy; ++j) {
@@ -708,12 +680,8 @@ void equihash_round(uint round,
 				collisionThreadId = gid + collisionLocalThreadId;
 				i = (collision >> 12) & 0xfff;
 				j = collision & 0xfff;
-				slot_cache_index_i = slot_cache_indexes[collisionLocalThreadId * NR_SLOTS + i];
-				slot_cache_index_j = slot_cache_indexes[collisionLocalThreadId * NR_SLOTS + j];
-				if (slot_cache_index_i < SLOT_CACHE_SIZE)
-					a = (__local uint *)&slot_cache[slot_cache_index_i * RESERVED_FOR_XI(round - 1)];
-				if (slot_cache_index_j < SLOT_CACHE_SIZE)
-					b = (__local uint *)&slot_cache[slot_cache_index_j * RESERVED_FOR_XI(round - 1)];
+				a = (__local uint *)&slot_cache[(collisionLocalThreadId * NR_SLOTS + i) * RESERVED_FOR_XI(round - 1)];
+				b = (__local uint *)&slot_cache[(collisionLocalThreadId * NR_SLOTS + j) * RESERVED_FOR_XI(round - 1)];
 			}
 
 			dropped_stor += xor_and_store(
@@ -748,15 +716,13 @@ void kernel_round ## N(__global char *ht_src, __global char *ht_dst, \
 	__global uint *rowCountersSrc, __global uint *rowCountersDst, \
        	__global uint *debug) \
 { \
-    __local uint    slot_cache[RESERVED_FOR_XI(N - 1) * SLOT_CACHE_SIZE]; \
-    __local uint    slot_cache_counter; \
-    __local SLOT_CACHE_INDEX_TYPE slot_cache_indexes[NR_SLOTS * (LOCAL_WORK_SIZE/THREADS_PER_ROW)]; \
-    __local uint    collisionsData[LDS_COLL_SIZE]; \
+    __local uint    slot_cache[NEXT_PRIME_NO(RESERVED_FOR_XI(N - 1) * SLOT_CACHE_SIZE)]; \
+    __local uint    collisionsData[NEXT_PRIME_NO(LDS_COLL_SIZE)]; \
     __local uint    collisionsNum; \
-	__local uint    nr_slots_array[LOCAL_WORK_SIZE / THREADS_PER_ROW]; \
-	__local uchar   bins_data[(LOCAL_WORK_SIZE / THREADS_PER_ROW) * BIN_SIZE * NR_BINS]; \
-	__local uint    bin_counters_data[(LOCAL_WORK_SIZE / THREADS_PER_ROW) * NR_BINS]; \
-	equihash_round(N, ht_src, ht_dst, debug, slot_cache, &slot_cache_counter, slot_cache_indexes, collisionsData, \
+	__local uint    nr_slots_array[NEXT_PRIME_NO(LOCAL_WORK_SIZE / THREADS_PER_ROW)]; \
+	__local uchar   bins_data[NEXT_PRIME_NO((LOCAL_WORK_SIZE / THREADS_PER_ROW) * BIN_SIZE * NR_BINS)]; \
+	__local uint    bin_counters_data[NEXT_PRIME_NO((LOCAL_WORK_SIZE / THREADS_PER_ROW) * NR_BINS)]; \
+	equihash_round(N, ht_src, ht_dst, debug, slot_cache, collisionsData, \
 	    &collisionsNum, rowCountersSrc, rowCountersDst, THREADS_PER_ROW, nr_slots_array, bins_data, bin_counters_data); \
 }
 KERNEL_ROUND(1)
@@ -848,9 +814,9 @@ void kernel_sols(__global char *ht0,
 				 __global sols_t *sols,
 				 __global uint *rowCountersSrc)
 {
-	__local uint refs[NR_SLOTS*(LOCAL_WORK_SIZE_SOLS / THREADS_PER_ROW_SOLS)];
-	__local uint data[NR_SLOTS*(LOCAL_WORK_SIZE_SOLS / THREADS_PER_ROW_SOLS)];
-	__local uint	values_tmp[(1 << PARAM_K)];
+	__local uint refs[NEXT_PRIME_NO(NR_SLOTS*(LOCAL_WORK_SIZE_SOLS / THREADS_PER_ROW_SOLS))];
+	__local uint data[NEXT_PRIME_NO(NR_SLOTS*(LOCAL_WORK_SIZE_SOLS / THREADS_PER_ROW_SOLS))];
+	__local uint	values_tmp[NEXT_PRIME_NO(1 << PARAM_K)];
 	__local uint    semaphoe;
 
 	uint globalTid = get_global_id(0) / THREADS_PER_ROW_SOLS;

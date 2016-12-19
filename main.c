@@ -75,11 +75,7 @@ typedef SSIZE_T ssize_t;
 
 typedef uint8_t		uchar;
 typedef uint32_t	uint;
-#ifdef NVIDIA
-#include "param-nvidia.h"
-#else
 #include "param.h"
-#endif
 
 #define MIN(A, B)	(((A) < (B)) ? (A) : (B))
 #define MAX(A, B)	(((A) > (B)) ? (A) : (B))
