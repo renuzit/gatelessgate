@@ -24,7 +24,7 @@
 // rebuild sa-solver, and run it to see how many slots get dropped
 // at each round. Note that performance suffers if too many slots get dropped.
 
-//define ENABLE_DEBUG
+//#define ENABLE_DEBUG
 
 //
 // Parameters for Hash Tables
@@ -33,69 +33,27 @@
 // There are PARAM_K - 1 hash tables, and each hash table has NR_ROWS rows.
 // Each row contains NR_SLOTS slots.
 
-#define NR_ROWS_LOG            15  // 12, 13, 14, or 15. 12 and 13 are not practically usable.
-#define NR_SLOTS               127 // Prime numbers are preferable.
+#define NR_ROWS_LOG            14  // 12, 13, 14, 15, or 16. 12 and 13 are not practically usable.
+#define NR_SLOTS               199 // Prime numbers are preferable.
 #define LOCAL_WORK_SIZE        64  
 #define THREADS_PER_ROW        64
-#define LOCAL_WORK_SIZE_SOLS   128
-#define THREADS_PER_ROW_SOLS   128
+#define LOCAL_WORK_SIZE_SOLS   64
+#define THREADS_PER_ROW_SOLS   64
 #define GLOBAL_WORK_SIZE_RATIO 512 // global_work_size = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * LOCAL_WORK_SIZE
-#define THREADS_PER_WRITE      1   // 1, 2, 4, or 8
-#define SLOT_CACHE_SIZE        (NR_SLOTS * (LOCAL_WORK_SIZE / THREADS_PER_ROW))
-#define LDS_COLL_SIZE          (NR_SLOTS * (LOCAL_WORK_SIZE / THREADS_PER_ROW) * 120 / 100)
-#define BIN_SIZE               (NR_SLOTS * 25 / 100)
+#define THREADS_PER_WRITE      1  // 1, 2, 4, or 8
+#define SLOT_CACHE_SIZE        (NR_SLOTS * ROWS_IN_WORK_ITEM)
+#define LDS_COLL_SIZE          (NR_SLOTS * ROWS_IN_WORK_ITEM * 140 / 100)
+#define BIN_SIZE               (NR_SLOTS * 6 / 100)
+#define EXTRA_BITS_FOR_BINS_SOLS 1
+#define BIN_SIZE_SOLS          ((BIN_SIZE >> EXTRA_BITS_FOR_BINS_SOLS) * 250 / 100)
 
-#if NR_SLOTS < 255
-#define SLOT_CACHE_INDEX_TYPE uchar
-#else
-#define SLOT_CACHE_INDEX_TYPE ushort
-#endif
+
 
 #define PARAM_N				   200
 #define PARAM_K			       9
 #define PREFIX                 (PARAM_N / (PARAM_K + 1))
 #define NR_INPUTS              (1 << PREFIX)
-// Approximate log base 2 of number of elements in hash tables
-#define APX_NR_ELMS_LOG        (PREFIX + 1)
-
-// Setting this to 1 might make Gateless Gate faster, see TROUBLESHOOTING.md
-#define OPTIM_SIMPLIFY_ROUND   1
-
-// Ratio of time of sleeping before rechecking if task is done (0-1)
-#define SLEEP_RECHECK_RATIO 0.60
-// Ratio of time to busy wait for the solution (0-1)
-// The higher value the higher CPU usage with Nvidia
-#define SLEEP_SKIP_RATIO 0.005
-
-// Make hash tables OVERHEAD times larger than necessary to store the average
-// number of elements per row. The ideal value is as small as possible to
-// reduce memory usage, but not too small or else elements are dropped from the
-// hash tables.
-//
-// The actual number of elements per row is closer to the theoretical average
-// (less variance) when NR_ROWS_LOG is small. So accordingly OVERHEAD can be
-// smaller.
-//
-// Even (as opposed to odd) values of OVERHEAD sometimes significantly decrease
-// performance as they cause VRAM channel conflicts.
-#if NR_ROWS_LOG <= 16
-#define OVERHEAD                        2
-#elif NR_ROWS_LOG == 17
-#define OVERHEAD                        3
-#elif NR_ROWS_LOG == 18
-#define OVERHEAD                        3
-#elif NR_ROWS_LOG == 19
-#define OVERHEAD                        5
-#elif NR_ROWS_LOG == 20 && OPTIM_SIMPLIFY_ROUND
-#define OVERHEAD                        6
-#elif NR_ROWS_LOG == 20
-#define OVERHEAD                        9
-#endif
-
 #define NR_ROWS                         (1 << NR_ROWS_LOG)
-#ifndef NR_SLOTS
-#define NR_SLOTS                        (((1 << (APX_NR_ELMS_LOG - NR_ROWS_LOG)) * OVERHEAD))
-#endif
 // Length of 1 element (slot) in byte
 #define SLOT_LEN                        32
 // Total size of hash table
@@ -234,7 +192,7 @@ typedef struct	sols_s
 #define ADJUSTED_SLOT_LEN(round) SLOT_LEN
 #endif
 
-#define OPENCL_BUILD_OPTIONS_AMD "-I.. -I. -O1"
+#define OPENCL_BUILD_OPTIONS_AMD "-I.. -I. -O5"
 #define OPENCL_BUILD_OPTIONS     "-I.. -I."
 
 #define NEXT_PRIME_NO(n) \
@@ -408,3 +366,6 @@ typedef struct	sols_s
      ((n) <= 997) ? 997 : \
      ((n) <= 1009) ? 1009 : \
 		             (n))
+
+#define ROWS_IN_WORK_ITEM      (LOCAL_WORK_SIZE      / THREADS_PER_ROW     )
+#define ROWS_IN_WORK_ITEM_SOLS (LOCAL_WORK_SIZE_SOLS / THREADS_PER_ROW_SOLS)

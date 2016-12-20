@@ -595,8 +595,8 @@ void equihash_round(uint round,
 	__local uchar *bins = &bins_data[localTid * BIN_SIZE * NR_BINS];
 	__local uint *bin_counters = &bin_counters_data[localTid * NR_BINS];
 #if THREADS_PER_WRITE != 1
-	__local slot_t slot_write_cache[LOCAL_WORK_SIZE];
-	__local global_pointer_to_slot_t slot_ptrs[LOCAL_WORK_SIZE];
+	__local slot_t slot_write_cache[NEXT_PRIME_NO(LOCAL_WORK_SIZE)];
+	__local global_pointer_to_slot_t slot_ptrs[NEXT_PRIME_NO(LOCAL_WORK_SIZE)];
 #endif
 
 	uint rows_per_work_item = (NR_ROWS + get_global_size(0) / threadsPerRow - 1) / (get_global_size(0) / threadsPerRow);
@@ -719,9 +719,9 @@ void kernel_round ## N(__global char *ht_src, __global char *ht_dst, \
     __local uint    slot_cache[NEXT_PRIME_NO(RESERVED_FOR_XI(N - 1) * SLOT_CACHE_SIZE)]; \
     __local uint    collisionsData[NEXT_PRIME_NO(LDS_COLL_SIZE)]; \
     __local uint    collisionsNum; \
-	__local uint    nr_slots_array[NEXT_PRIME_NO(LOCAL_WORK_SIZE / THREADS_PER_ROW)]; \
-	__local uchar   bins_data[NEXT_PRIME_NO((LOCAL_WORK_SIZE / THREADS_PER_ROW) * BIN_SIZE * NR_BINS)]; \
-	__local uint    bin_counters_data[NEXT_PRIME_NO((LOCAL_WORK_SIZE / THREADS_PER_ROW) * NR_BINS)]; \
+	__local uint    nr_slots_array[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM)]; \
+	__local uchar   bins_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM * BIN_SIZE * NR_BINS)]; \
+	__local uint    bin_counters_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM * NR_BINS)]; \
 	equihash_round(N, ht_src, ht_dst, debug, slot_cache, collisionsData, \
 	    &collisionsNum, rowCountersSrc, rowCountersDst, THREADS_PER_ROW, nr_slots_array, bins_data, bin_counters_data); \
 }
@@ -801,6 +801,12 @@ void potential_sol(__global char **htabs, __global sols_t *sols,
 /*
 ** Scan the hash tables to find Equihash solutions.
 */
+
+// Add more bins for efficient sorting.
+#define NR_BINS_SOLS         (NR_BINS << EXTRA_BITS_FOR_BINS_SOLS)
+#define BIN_MASK_SOLS        (((0x1 << EXTRA_BITS_FOR_BINS_SOLS) - 1) << 12)
+#define BIN_MASK_SOLS_OFFSET (20 - NR_ROWS_LOG)
+
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_SOLS, 1, 1)))
 void kernel_sols(__global char *ht0,
 				 __global char *ht1,
@@ -814,10 +820,10 @@ void kernel_sols(__global char *ht0,
 				 __global sols_t *sols,
 				 __global uint *rowCountersSrc)
 {
-	__local uint refs[NEXT_PRIME_NO(NR_SLOTS*(LOCAL_WORK_SIZE_SOLS / THREADS_PER_ROW_SOLS))];
-	__local uint data[NEXT_PRIME_NO(NR_SLOTS*(LOCAL_WORK_SIZE_SOLS / THREADS_PER_ROW_SOLS))];
+	__local uint refs[NEXT_PRIME_NO(NR_SLOTS*ROWS_IN_WORK_ITEM_SOLS)];
+	__local uint data[NEXT_PRIME_NO(NR_SLOTS*ROWS_IN_WORK_ITEM_SOLS)];
 	__local uint	values_tmp[NEXT_PRIME_NO(1 << PARAM_K)];
-	__local uint    semaphoe;
+	__local volatile uint    semaphoe;
 
 	uint globalTid = get_global_id(0) / THREADS_PER_ROW_SOLS;
 	uint localTid = get_local_id(0) / THREADS_PER_ROW_SOLS;
@@ -831,10 +837,10 @@ void kernel_sols(__global char *ht0,
 	uint		i, j;
 	__global char	*p;
 	uint		ref_i, ref_j;
-	__local uchar   bins_data[(LOCAL_WORK_SIZE_SOLS / THREADS_PER_ROW_SOLS) * NR_SLOTS * NR_BINS];
-	__local uint    bin_counters_data[(LOCAL_WORK_SIZE_SOLS / THREADS_PER_ROW_SOLS) * NR_BINS];
-	__local uchar *bins = &bins_data[localTid * NR_SLOTS * NR_BINS];
-	__local uint *bin_counters = &bin_counters_data[localTid * NR_BINS];
+	__local uchar   bins_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM_SOLS * BIN_SIZE_SOLS * NR_BINS_SOLS)];
+	__local uint    bin_counters_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM_SOLS * NR_BINS_SOLS)];
+	__local uchar *bins = &bins_data[localTid * BIN_SIZE_SOLS * NR_BINS_SOLS];
+	__local uint *bin_counters = &bin_counters_data[localTid * NR_BINS_SOLS];
 
 	if (!get_global_id(0))
 		sols->nr = sols->likely_invalids = 0;
@@ -848,11 +854,13 @@ void kernel_sols(__global char *ht0,
 		uint gid = tid & ~(get_local_size(0) / THREADS_PER_ROW_SOLS - 1);
 
 		__local uint nr_slots_array[LOCAL_WORK_SIZE_SOLS / THREADS_PER_ROW_SOLS];
+		if (!get_local_id(0))
+			semaphoe = 0;
+		for (i = localGroupId; i < NR_BINS_SOLS; i += THREADS_PER_ROW_SOLS)
+			bin_counters[i] = 0;
+		for (i = localGroupId; i < NR_SLOTS; i += THREADS_PER_ROW_SOLS)
+			refsPtr[i] = 0xffffffff;
 		if (tid < NR_ROWS) {
-			if (!get_local_id(0))
-				semaphoe = 0;
-			for (i = localGroupId; i < NR_BINS; i += THREADS_PER_ROW_SOLS)
-				bin_counters[i] = 0;
 			if (localGroupId == 0) {
 				uint rowIdx, rowOffset;
 				get_row_counters_index(&rowIdx, &rowOffset, tid);
@@ -872,26 +880,35 @@ void kernel_sols(__global char *ht0,
 		// part of the previous PREFIX colliding bits, and the last PREFIX bits.
 		__local ulong coll;
 		if (tid < NR_ROWS) {
-			for (i = localGroupId; i < cnt && !semaphoe; i += THREADS_PER_ROW_SOLS) {
+			for (i = localGroupId; i < cnt; i += THREADS_PER_ROW_SOLS) {
 				p = get_slot_ptr(htabs[ht_i], PARAM_K - 1, tid, i);
-				refsPtr[i] = ((__global slot_t *)p)->slot.i;
+				uint ref_i = refsPtr[i] = ((__global slot_t *)p)->slot.i;
 				uint xi_first_bytes = dataPtr[i] = ((__global slot_t *)p)->slot.xi[0];
 				uint bin_to_use =
-					  ((xi_first_bytes & BIN_MASK(PARAM_K - 1)) >> BIN_MASK_OFFSET(PARAM_K - 1))
-					| ((xi_first_bytes & BIN_MASK2(PARAM_K - 1)) >> BIN_MASK2_OFFSET(PARAM_K - 1));
+					((xi_first_bytes & BIN_MASK(PARAM_K - 1)) >> BIN_MASK_OFFSET(PARAM_K - 1))
+					| ((xi_first_bytes & BIN_MASK2(PARAM_K - 1)) >> BIN_MASK2_OFFSET(PARAM_K - 1))
+					| ((xi_first_bytes & BIN_MASK_SOLS) >> BIN_MASK_SOLS_OFFSET);
 				uint bin_counter_copy = atomic_inc(&bin_counters[bin_to_use]);
-				bins[bin_to_use * NR_SLOTS + bin_counter_copy] = i;
-				if (bin_counter_copy) {
-					for (j = 0; j < bin_counter_copy && !semaphoe; ++j) {
-						uint slot_index_j = bins[bin_to_use * NR_SLOTS + j];
-						if (xi_first_bytes == dataPtr[slot_index_j]) {
-							if (atomic_inc(&semaphoe) == 0)
-								coll = ((ulong)refsPtr[i] << 32) | refsPtr[slot_index_j];
+				if (bin_counter_copy >= BIN_SIZE_SOLS) {
+					// TODO: Implement a way to detect overflow for DEBUG_MODE.
+					atomic_dec(&bin_counters[bin_to_use]);
+				} else {
+					bins[bin_to_use * BIN_SIZE_SOLS + bin_counter_copy] = i;
+					if (bin_counter_copy) {
+						for (j = 0; j < bin_counter_copy; ++j) {
+							uint slot_index_j = bins[bin_to_use * BIN_SIZE_SOLS + j];
+							if (xi_first_bytes == dataPtr[slot_index_j]) {
+								uint ref_j = refsPtr[slot_index_j];
+								if (ref_j != 0xffffffff && atomic_inc(&semaphoe) == 0)
+									coll = ((ulong)ref_i << 32) | ref_j;
+								goto quit_loop;
+							}
 						}
 					}
 				}
 			}
 		}
+	quit_loop:
 
 		barrier(CLK_LOCAL_MEM_FENCE);
 		if (tid < NR_ROWS) {
