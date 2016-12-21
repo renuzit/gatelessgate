@@ -494,7 +494,7 @@ void examine_ht(unsigned round, cl_command_queue queue, cl_mem *hash_table_buffe
 		rowIdx = row / ROWS_PER_UINT;
 		rowOffset = BITS_PER_ROW * (row % ROWS_PER_UINT);
 		uint32_t cnt = (row_counters[rowIdx] >> rowOffset) & ROW_MASK;
-		cnt = min(cnt, (uint32_t)NR_SLOTS);
+		cnt = MIN(cnt, (uint32_t)NR_SLOTS);
 		if (cnt >= NR_SLOTS)
 			++overflow_count;
 		if (cnt == 0)
