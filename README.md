@@ -1,10 +1,8 @@
 # Gateless Gate
 
-[Download precompiled binaries for Windows (0.0.2)](https://github.com/zawawawa/gatelessgate/releases/download/v0.0.2/gatelessgate-windows-0.0.2.zip) (Developmental)
-
-[Download precompiled binaries for Windows and NVIDIA (0.0.2)](https://github.com/zawawawa/gatelessgate/releases/download/v0.0.2/gatelessgate-windows-0.0.2-NVIDIA.zip) (Developmental)
-
-[Download the source code for Linux (0.0.2)](https://github.com/zawawawa/gatelessgate/archive/v0.0.2.tar.gz) (Developmental)
+- [Download precompiled binaries for Windows (0.0.2)](https://github.com/zawawawa/gatelessgate/releases/download/v0.0.2/gatelessgate-windows-0.0.2.zip) 
+- [Download precompiled binaries for Windows and NVIDIA (0.0.2)](https://github.com/zawawawa/gatelessgate/releases/download/v0.0.2/gatelessgate-windows-0.0.2-NVIDIA.zip)
+- [Download the source code for Linux (0.0.2)](https://github.com/zawawawa/gatelessgate/archive/v0.0.2.tar.gz)
 
 Gateless Gate is a cross-platform OpenCL Zcash miner. It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://github.com/mbevand/silentarmy) with a significant speed boost. (This miner runs at around 167 sol/s on RX 480 and 128 sol/s on GTX 1060 3GB.) Although the current foci of development are AMD video cards and Windows operating systems, it should be able to run on Linux and/or NVIDIA GPUs.
 
