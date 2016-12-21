@@ -2,11 +2,13 @@
 
 [Download precompiled binaries for Windows (0.0.1)](https://github.com/zawawawa/gatelessgate/releases/download/v0.0.1/gatelessgate-windows-0.0.1.zip) (Developmental)
 
-Gateless Gate is a cross-platform OpenCL Zcash miner. It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://github.com/mbevand/silentarmy) with a significant speed boost. (This miner runs at around 150 sol/s on RX 480.) Although the current foci of development are AMD video cards and Windows operating systems, it should be able to run on Linux and/or NVIDIA GPUs.
+Gateless Gate is a cross-platform OpenCL Zcash miner. It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://github.com/mbevand/silentarmy) with a significant speed boost. (This miner runs at around 167 sol/s on RX 480 and 128 sol/s on GTX 1060 3GB.) Although the current foci of development are AMD video cards and Windows operating systems, it should be able to run on Linux and/or NVIDIA GPUs.
 
 On Windows, all you have to do for mining is to run `list.bat` to get device ID's and edit and run `gatelessgate.bat`. MAKE SURE TO SPECIFY CORRECT DEVICE IDS WITH THE `--use` OPTION! See the documentation of the original SILENTARMY below for details. You may get the following error if you have missing DLL's on your system: `The application was unable to start correctly (0xc000007b)` In this case, you need to delete `vcruntime140.dll` in the package and install [Visual C++ 2015 Redistribution Package](https://www.microsoft.com/en-us/download/details.aspx?id=48145).
 
-If you find this port useful and/or would like to see a feature-rich ZEC miner based on it, please consider donations to: `t1NwUDeSKu4BxkD58mtEYKDjzw5toiLfmCu` I am particularly interested in purchasing a GTX 1060 for testing purposes.
+On linux, you should be able to build the miner with the Makefile in the repository. See the documentation of the original SILENTARMY below for details. Please note that fgrlx drivers are no longer supported.
+
+If you find this miner useful and/or would like to see a feature-rich ZEC miner based on it, please consider donations to: `t1NwUDeSKu4BxkD58mtEYKDjzw5toiLfmCu` I am particularly interested in purchasing a Radeon R9 Nano for testing purposes.
 
 Last but not least, mrb, nerdralph, eXtremal, and Genoil, thank you all so much for the great work. You guys are 
 truly the cream of the FOSS movement.
@@ -73,21 +75,6 @@ Options:
   -p PWD, --pwd=PWD     password for connecting to the pool
 ```
 
-# Performance
-
-* 115 sol/s with one R9 Nano
-* 75 sol/s with one RX 480 8GB
-* 70 sol/s with one GTX 1070
-
-See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#performance) to resolve performance
-issues.
-
-Note: the `silentarmy` **miner** automatically achieves this performance level,
-however the `sa-solver` **command-line solver** by design runs only 1 instance
-of the Equihash proof-of-work algorithm causing it to slightly underperform by
-5-10%. One must manually run 2 instances of `sa-solver` (eg. in 2 terminal
-consoles) to achieve the same performance level as the `silentarmy` **miner**.
-
 # Compilation and installation
 
 The steps below describe how to obtain the dependencies needed by SILENTARMY,
@@ -122,16 +109,7 @@ subsection below:
 
 8. Install system-wide by running as root (accept all the default options):
    `$ sudo ./AMD-APP-SDK-v3.0.130.136-GA-linux64.sh`
-
-### Ubuntu 14.04 / fglrx
-
-1. Install the official Ubuntu package for the **Radeon Software Crimson
-   Edition** driver:
-   `$ sudo apt-get install fglrx`
-   (as of 30 Oct 2016, the latest version is 2:15.201-0ubuntu0.14.04.1)
-
-2. Follow steps 5-8 above: reboot, install the AMD APP SDK...
-
+   
 ### Ubuntu 16.04 / Nvidia
 
 1. Install the OpenCL development files and the latest driver:
