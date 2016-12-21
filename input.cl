@@ -70,7 +70,8 @@ __constant ulong blake_iv_const[] =
 __kernel
 void kernel_init_ht(__global char *ht, __global uint *rowCounters)
 {
-	rowCounters[get_global_id(0)] = 0;
+	if (get_global_id(0) < RC_SIZE / 4)
+		rowCounters[get_global_id(0)] = 0;
 }
 
 /*
@@ -210,7 +211,7 @@ vb = rotate((vb ^ vc), (ulong)64 - 63);
 ** Memory (LDS) Optimization 2-10" in:
 ** http://developer.amd.com/tools-and-sdks/opencl-zone/amd-accelerated-parallel-processing-app-sdk/opencl-optimization-guide/
 */
-__kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE, 1, 1)))
+__kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_ROUND0, 1, 1)))
 void kernel_round0(__constant ulong *blake_state_const, __global char *ht,
 				   __global uint *rowCounters, __global uint *debug)
 {
@@ -218,7 +219,7 @@ void kernel_round0(__constant ulong *blake_state_const, __global char *ht,
 	__local ulong blake_iv[8];
 	uint                tid = get_global_id(0);
 	ulong               v[16];
-	uint                inputs_per_thread = NR_INPUTS / get_global_size(0);
+	uint                inputs_per_thread = (NR_INPUTS + get_global_size(0) - 1) / get_global_size(0);
 	uint                input = tid * inputs_per_thread;
 	uint                input_end = (tid + 1) * inputs_per_thread;
 	uint                dropped = 0;
@@ -227,7 +228,7 @@ void kernel_round0(__constant ulong *blake_state_const, __global char *ht,
 	if (get_local_id(0) < 8)
 		blake_iv[get_local_id(0)] = blake_iv_const[get_local_id(0)];
 	barrier(CLK_LOCAL_MEM_FENCE);
-	while (input < input_end) {
+	while (input < input_end && input < NR_INPUTS) {
 		// shift "i" to occupy the high 32 bits of the second ulong word in the
 		// message block
 		ulong word1 = (ulong)input << 32;
@@ -559,7 +560,7 @@ void equihash_round(uint round,
 					__global uint *rowCountersDst,
 				             uint threadsPerRow,
 					__local uint *nr_slots_array,
-					__local uchar *bins_data,
+					__local BIN_INDEX_TYPE *bins_data,
 					__local uint *bin_counters_data)
 {
 	uint globalTid = get_global_id(0) / threadsPerRow;
@@ -592,7 +593,7 @@ void equihash_round(uint round,
 #error "unsupported NR_ROWS_LOG"
 #endif    
 #define NR_BINS (256 >> (NR_ROWS_LOG - 12))
-	__local uchar *bins = &bins_data[localTid * BIN_SIZE * NR_BINS];
+	__local BIN_INDEX_TYPE *bins = &bins_data[localTid * BIN_SIZE * NR_BINS];
 	__local uint *bin_counters = &bin_counters_data[localTid * NR_BINS];
 #if THREADS_PER_WRITE != 1
 	__local slot_t slot_write_cache[NEXT_PRIME_NO(LOCAL_WORK_SIZE)];
@@ -648,6 +649,7 @@ void equihash_round(uint round,
 					bins[bin_to_use * BIN_SIZE + bin_counter_copy] = i;
 				}
 			}
+
 			barrier(CLK_LOCAL_MEM_FENCE);
 
 			if (tid < NR_ROWS && i < cnt) {
@@ -662,6 +664,8 @@ void equihash_round(uint round,
 					}
 				}
 			}
+
+			barrier(CLK_LOCAL_MEM_FENCE);
 		}
 
 		barrier(CLK_LOCAL_MEM_FENCE);
@@ -720,7 +724,7 @@ void kernel_round ## N(__global char *ht_src, __global char *ht_dst, \
     __local uint    collisionsData[NEXT_PRIME_NO(LDS_COLL_SIZE)]; \
     __local uint    collisionsNum; \
 	__local uint    nr_slots_array[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM)]; \
-	__local uchar   bins_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM * BIN_SIZE * NR_BINS)]; \
+	__local BIN_INDEX_TYPE   bins_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM * BIN_SIZE * NR_BINS)]; \
 	__local uint    bin_counters_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM * NR_BINS)]; \
 	equihash_round(N, ht_src, ht_dst, debug, slot_cache, collisionsData, \
 	    &collisionsNum, rowCountersSrc, rowCountersDst, THREADS_PER_ROW, nr_slots_array, bins_data, bin_counters_data); \
@@ -837,9 +841,9 @@ void kernel_sols(__global char *ht0,
 	uint		i, j;
 	__global char	*p;
 	uint		ref_i, ref_j;
-	__local uchar   bins_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM_SOLS * BIN_SIZE_SOLS * NR_BINS_SOLS)];
+	__local BIN_INDEX_TYPE   bins_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM_SOLS * BIN_SIZE_SOLS * NR_BINS_SOLS)];
 	__local uint    bin_counters_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM_SOLS * NR_BINS_SOLS)];
-	__local uchar *bins = &bins_data[localTid * BIN_SIZE_SOLS * NR_BINS_SOLS];
+	__local BIN_INDEX_TYPE *bins = &bins_data[localTid * BIN_SIZE_SOLS * NR_BINS_SOLS];
 	__local uint *bin_counters = &bin_counters_data[localTid * NR_BINS_SOLS];
 
 	if (!get_global_id(0))
@@ -879,36 +883,47 @@ void kernel_sols(__global char *ht0,
 		// in the final hash table, we are looking for a match on both the bits
 		// part of the previous PREFIX colliding bits, and the last PREFIX bits.
 		__local ulong coll;
-		if (tid < NR_ROWS) {
-			for (i = localGroupId; i < cnt; i += THREADS_PER_ROW_SOLS) {
+		for (i = localGroupId; i < cnt; i += THREADS_PER_ROW_SOLS) {
+			uint ref_i;
+			uint xi_first_bytes;
+			uint bin_to_use;
+			uint bin_counter_copy;
+			if (tid < NR_ROWS) {
 				p = get_slot_ptr(htabs[ht_i], PARAM_K - 1, tid, i);
-				uint ref_i = refsPtr[i] = ((__global slot_t *)p)->slot.i;
-				uint xi_first_bytes = dataPtr[i] = ((__global slot_t *)p)->slot.xi[0];
-				uint bin_to_use =
+				ref_i = refsPtr[i] = ((__global slot_t *)p)->slot.i;
+				xi_first_bytes = dataPtr[i] = ((__global slot_t *)p)->slot.xi[0];
+				bin_to_use =
 					((xi_first_bytes & BIN_MASK(PARAM_K - 1)) >> BIN_MASK_OFFSET(PARAM_K - 1))
 					| ((xi_first_bytes & BIN_MASK2(PARAM_K - 1)) >> BIN_MASK2_OFFSET(PARAM_K - 1))
 					| ((xi_first_bytes & BIN_MASK_SOLS) >> BIN_MASK_SOLS_OFFSET);
-				uint bin_counter_copy = atomic_inc(&bin_counters[bin_to_use]);
+				bin_counter_copy = atomic_inc(&bin_counters[bin_to_use]);
 				if (bin_counter_copy >= BIN_SIZE_SOLS) {
 					// TODO: Implement a way to detect overflow for DEBUG_MODE.
 					atomic_dec(&bin_counters[bin_to_use]);
 				} else {
 					bins[bin_to_use * BIN_SIZE_SOLS + bin_counter_copy] = i;
-					if (bin_counter_copy) {
-						for (j = 0; j < bin_counter_copy; ++j) {
-							uint slot_index_j = bins[bin_to_use * BIN_SIZE_SOLS + j];
-							if (xi_first_bytes == dataPtr[slot_index_j]) {
-								uint ref_j = refsPtr[slot_index_j];
-								if (ref_j != 0xffffffff && atomic_inc(&semaphoe) == 0)
-									coll = ((ulong)ref_i << 32) | ref_j;
-								goto quit_loop;
-							}
+				}
+			}
+
+			barrier(CLK_LOCAL_MEM_FENCE);
+
+			if (tid < NR_ROWS) {
+				if (bin_counter_copy && bin_counter_copy < BIN_SIZE_SOLS) {
+					for (j = 0; j < bin_counter_copy; ++j) {
+						uint slot_index_j = bins[bin_to_use * BIN_SIZE_SOLS + j];
+						if (xi_first_bytes == dataPtr[slot_index_j]) {
+							uint ref_j = refsPtr[slot_index_j];
+							if (ref_j != 0xffffffff && atomic_inc(&semaphoe) == 0)
+								coll = ((ulong)ref_i << 32) | ref_j;
+							//goto quit_loop;
 						}
 					}
 				}
 			}
+
+			barrier(CLK_LOCAL_MEM_FENCE);
 		}
-	quit_loop:
+	//quit_loop:
 
 		barrier(CLK_LOCAL_MEM_FENCE);
 		if (tid < NR_ROWS) {

@@ -88,6 +88,7 @@ uint32_t	gpu_to_use = 0;
 uint32_t	mining = 0;
 struct timeval kern_avg_run_time;
 int amd_flag = 0;
+int nvidia_flag = 0;
 const char *source = NULL;
 size_t source_len;
 const char *binary = NULL;
@@ -123,6 +124,8 @@ void fatal(const char *fmt, ...)
 	va_start(ap, fmt);
 	vfprintf(stderr, fmt, ap);
 	va_end(ap);
+	if (!mining)
+		getchar();
 	exit(1);
 }
 
@@ -382,6 +385,18 @@ int is_platform_amd(cl_platform_id plat)
 	if (status != CL_SUCCESS)
 		fatal("clGetPlatformInfo (%d)\n", status);
 	return strncmp(name, "AMD Accelerated Parallel Processing", len) == 0;
+}
+
+int is_platform_nvidia(cl_platform_id plat)
+{
+	char	name[1024];
+	size_t	len = 0;
+	int		status;
+	status = clGetPlatformInfo(plat, CL_PLATFORM_NAME, sizeof(name), &name,
+		&len);
+	if (status != CL_SUCCESS)
+		fatal("clGetPlatformInfo (%d)\n", status);
+	return strncmp(name, "NVIDIA CUDA", len) == 0;
 }
 
 void print_device_info(unsigned i, cl_device_id d)
@@ -1003,7 +1018,9 @@ uint32_t solve_equihash(cl_device_id dev_id, cl_context ctx, cl_command_queue qu
 			check_clSetKernelArg(k_rounds[round], 0, &buf_blake_st);
 			check_clSetKernelArg(k_rounds[round], 1, &buf_ht[round]);
 			check_clSetKernelArg(k_rounds[round], 2, &rowCounters[round % 2]);
-			global_ws = select_work_size_blake();
+			local_work_size = LOCAL_WORK_SIZE_ROUND0;
+			global_ws = NR_INPUTS / ROUND0_INPUTS_PER_WORK_ITEM;
+			global_ws += ((nr_compute_units * local_work_size) - NR_INPUTS % (nr_compute_units * local_work_size));
 		}
 		else
 		{
@@ -1011,7 +1028,8 @@ uint32_t solve_equihash(cl_device_id dev_id, cl_context ctx, cl_command_queue qu
 			check_clSetKernelArg(k_rounds[round], 1, &buf_ht[round]);
 			check_clSetKernelArg(k_rounds[round], 2, &rowCounters[(round - 1) % 2]);
 			check_clSetKernelArg(k_rounds[round], 3, &rowCounters[round % 2]);
-			global_ws = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * LOCAL_WORK_SIZE;
+			local_work_size = LOCAL_WORK_SIZE;
+			global_ws = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * local_work_size;
 			if (global_ws > NR_ROWS * THREADS_PER_ROW)
 				global_ws = NR_ROWS * THREADS_PER_ROW;
 		}
@@ -1238,7 +1256,13 @@ DWORD mining_mode_thread(LPVOID *args)
 	if (!mining || verbose)
 		fprintf(stderr, "Building program\n");
 	status = clBuildProgram(program, 1, &(ARGS->dev_id),
-		(binary) ? "" : (amd_flag) ? (OPENCL_BUILD_OPTIONS_AMD) : (OPENCL_BUILD_OPTIONS), // compile options
+#ifdef NVIDIA
+		OPENCL_BUILD_OPTIONS_NVIDIA,
+#else
+		(binary)   ? "" :
+		(amd_flag) ? (OPENCL_BUILD_OPTIONS_AMD) :
+		             (OPENCL_BUILD_OPTIONS),
+#endif
 		NULL, NULL);
 	if (status != CL_SUCCESS)
 	{
@@ -1586,6 +1610,7 @@ void scan_platforms(cl_platform_id *plat_id, cl_device_id *dev_id)
 		exit(0);
 	debug("Using GPU device ID %d\n", gpu_to_use);
 	amd_flag = is_platform_amd(*plat_id);
+	nvidia_flag = is_platform_nvidia(*plat_id);
 	free(platforms);
 }
 
@@ -1641,7 +1666,13 @@ void init_and_run_opencl(uint8_t *header, size_t header_len)
 		if (!mining || verbose)
 			fprintf(stderr, "Building program\n");
 		status = clBuildProgram(program, 1, &dev_id,
-			(amd_flag) ? (OPENCL_BUILD_OPTIONS_AMD) : (OPENCL_BUILD_OPTIONS), // compile options
+#ifdef NVIDIA
+			OPENCL_BUILD_OPTIONS_NVIDIA,
+#else
+			(binary) ? "" :
+			(amd_flag) ? (OPENCL_BUILD_OPTIONS_AMD) :
+			(OPENCL_BUILD_OPTIONS),
+#endif
 			NULL, NULL);
 		if (status != CL_SUCCESS)
 		{
