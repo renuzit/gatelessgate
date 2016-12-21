@@ -6,7 +6,7 @@ Gateless Gate is a cross-platform OpenCL Zcash miner. It is a completely redesig
 
 On Windows, all you have to do for mining is to run `list.bat` to get device ID's and edit and run `gatelessgate.bat`. MAKE SURE TO SPECIFY CORRECT DEVICE IDS WITH THE `--use` OPTION! See the documentation of the original SILENTARMY below for details. You may get the following error if you have missing DLL's on your system: `The application was unable to start correctly (0xc000007b)` In this case, you need to delete `vcruntime140.dll` in the package and install [Visual C++ 2015 Redistributable](https://www.microsoft.com/en-us/download/details.aspx?id=48145) manually.
 
-On Linux, you should be able to build the miner with the Makefile in the repository. You need to specify the `-DNVIDIA` for NVIDIA video cards. See the documentation of the original SILENTARMY below for details. Please note that fglrx drivers are no longer supported.
+On Linux, you should be able to build the miner with the Makefile in the repository. You need to specify the `-DNVIDIA` build option for NVIDIA video cards. See the documentation of the original SILENTARMY below for details. Please note that fglrx drivers are no longer supported.
 
 If you find this miner useful and/or would like to see a feature-rich ZEC miner based on it, please consider donations to: `t1NwUDeSKu4BxkD58mtEYKDjzw5toiLfmCu` I am particularly interested in purchasing a Radeon R9 Nano for testing purposes.
 
