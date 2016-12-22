@@ -215,7 +215,7 @@
 copy  $(SolutionDir)..\sa-solver.exe $(SolutionDir)\dist\gatelessgate\
 copy  $(SolutionDir)..\input.cl $(SolutionDir)\dist\gatelessgate\
 copy  $(SolutionDir)..\param.h $(SolutionDir)\dist\gatelessgate\
-copy  $(SolutionDir)..\gatelessgate.bat $(SolutionDir)\dist\gatelessgate\
+copy  $(SolutionDir)..\gatelessgate*.bat $(SolutionDir)\dist\gatelessgate\
 copy  $(SolutionDir)..\list.bat $(SolutionDir)\dist\gatelessgate\
 copy  $(SolutionDir)..\README.md $(SolutionDir)\dist\gatelessgate\
 copy  $(SolutionDir)..\LICENSE.txt $(SolutionDir)\dist\gatelessgate\
@@ -249,7 +249,7 @@ copy  $(SolutionDir)..\SILENTARMY-v5.zip $(SolutionDir)\dist\gatelessgate\
 copy  $(SolutionDir)..\sa-solver.exe $(SolutionDir)\dist\gatelessgate\
 copy  $(SolutionDir)..\input.cl $(SolutionDir)\dist\gatelessgate\
 copy  $(SolutionDir)..\param.h $(SolutionDir)\dist\gatelessgate\
-copy  $(SolutionDir)..\gatelessgate.bat $(SolutionDir)\dist\gatelessgate\
+copy  $(SolutionDir)..\gatelessgate*.bat $(SolutionDir)\dist\gatelessgate\
 copy  $(SolutionDir)..\list.bat $(SolutionDir)\dist\gatelessgate\
 copy  $(SolutionDir)..\README.md $(SolutionDir)\dist\gatelessgate\
 copy  $(SolutionDir)..\LICENSE.txt $(SolutionDir)\dist\gatelessgate\

@@ -433,19 +433,19 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 #endif
 
 	if (ai && bi) {
-		xi0 = *(ai++);
-		xi1 = *(ai++);
-		if (round <= 7) xi2 = *(ai++);
-		if (round <= 6) xi3 = *(ai++);
-		if (round <= 4) xi4 = *(ai++);
-		if (round <= 2) xi5 = *ai;
+		xi0 = *ai;
+		xi1 = *(ai += SLOT_CACHE_OFFSET);
+		if (round <= 7) xi2 = *(ai += SLOT_CACHE_OFFSET);
+		if (round <= 6) xi3 = *(ai += SLOT_CACHE_OFFSET);
+		if (round <= 4) xi4 = *(ai += SLOT_CACHE_OFFSET);
+		if (round <= 2) xi5 = *(ai += SLOT_CACHE_OFFSET);
 
-		xi0 ^= *(bi++);
-		xi1 ^= *(bi++);
-		if (round <= 7) xi2 ^= *(bi++);
-		if (round <= 6) xi3 ^= *(bi++);
-		if (round <= 4) xi4 ^= *(bi++);
-		if (round <= 2) xi5 ^= *bi;
+		xi0 ^= *bi;
+		xi1 ^= *(bi += SLOT_CACHE_OFFSET);
+		if (round <= 7) xi2 ^= *(bi += SLOT_CACHE_OFFSET);
+		if (round <= 6) xi3 ^= *(bi += SLOT_CACHE_OFFSET);
+		if (round <= 4) xi4 ^= *(bi += SLOT_CACHE_OFFSET);
+		if (round <= 2) xi5 ^= *(bi += SLOT_CACHE_OFFSET);
 
 		if (!(round & 0x1)) {
 			// skip padding bytes
@@ -535,16 +535,6 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
                             ((round) == 7) ? 2 : \
                                              1)
 
-#define RESERVED_FOR_XI(round) (((round) == 0) ? 6 : \
-                            ((round) == 1) ? 6 : \
-                            ((round) == 2) ? 6 : \
-                            ((round) == 3) ? 6 : \
-                            ((round) == 4) ? 4 : \
-                            ((round) == 5) ? 4 : \
-                            ((round) == 6) ? 4 : \
-                            ((round) == 7) ? 2 : \
-                                             2)
-
 void equihash_round(uint round,
 					__global char *ht_src,
 					__global char *ht_dst,
@@ -587,8 +577,9 @@ void equihash_round(uint round,
 #define BIN_MASK2_OFFSET(round) 0
 #else
 #error "unsupported NR_ROWS_LOG"
-#endif    
-#define NR_BINS (256 >> (NR_ROWS_LOG - 12))
+#endif  
+#define NR_BINS_LOG (20 - NR_ROWS_LOG)
+#define NR_BINS (1 << NR_BINS_LOG)
 	__local uint *bins = &bins_data[localTid * ((BIN_SIZE * NR_BINS + BIN_INDEXES_IN_UINT - 1) / BIN_INDEXES_IN_UINT)];
 	__local uint *bin_counters = &bin_counters_data[localTid * NR_BINS];
 #if THREADS_PER_WRITE != 1
@@ -623,7 +614,17 @@ void equihash_round(uint round,
 		}
 		barrier(CLK_LOCAL_MEM_FENCE);
 
-		// Perform a radix sort as slots get loaded into LDS.
+
+		if (tid < NR_ROWS) {
+			for (i = localGroupId; i < cnt; i += threadsPerRow) {
+				for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
+					slot_cache[j * SLOT_CACHE_OFFSET + localTid * NR_SLOTS + i] = *((__global uint *)get_xi_ptr(ht_src, round - 1, tid, i) + j);
+			}
+		}
+
+		barrier(CLK_LOCAL_MEM_FENCE);
+
+		// Perform a radix sort.
 		uint xi_first_bytes;
 		uint bin_to_use;
 		uint bin_counter_copy;
@@ -631,11 +632,7 @@ void equihash_round(uint round,
 		uint i_max = cnt + (get_local_size(0) - cnt % get_local_size(0)) - 1;
 		for (i = localGroupId; i < i_max; i += threadsPerRow) {
 			if (tid < NR_ROWS && i < cnt) {
-				xi_first_bytes = *(__global uint *)get_xi_ptr(ht_src, round - 1, tid, i);
-				slot_cache[(localTid * NR_SLOTS + i) * RESERVED_FOR_XI(round - 1)] = xi_first_bytes;
-				for (j = 1; j < UINTS_IN_XI(round - 1); ++j)
-					slot_cache[(localTid * NR_SLOTS + i) * RESERVED_FOR_XI(round - 1) + j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, tid, i) + j);
-
+				xi_first_bytes = slot_cache[localTid * NR_SLOTS + i];
 				bin_to_use =
 					((xi_first_bytes & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
 					| ((xi_first_bytes & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
@@ -684,8 +681,8 @@ void equihash_round(uint round,
 				collisionThreadId = gid + collisionLocalThreadId;
 				i = (collision >> 12) & 0xfff;
 				j = collision & 0xfff;
-				a = (__local uint *)&slot_cache[(collisionLocalThreadId * NR_SLOTS + i) * RESERVED_FOR_XI(round - 1)];
-				b = (__local uint *)&slot_cache[(collisionLocalThreadId * NR_SLOTS + j) * RESERVED_FOR_XI(round - 1)];
+				a = (__local uint *)&slot_cache[collisionLocalThreadId * NR_SLOTS + i];
+				b = (__local uint *)&slot_cache[collisionLocalThreadId * NR_SLOTS + j];
 			}
 
 			dropped_stor += xor_and_store(
@@ -720,7 +717,7 @@ void kernel_name(__global char *ht_src, __global char *ht_dst, \
 	__global uint *rowCountersSrc, __global uint *rowCountersDst, \
        	__global uint *debug) \
 { \
-    __local uint    slot_cache[NEXT_PRIME_NO(RESERVED_FOR_XI(N - 1) * NR_SLOTS * ROWS_IN_WORK_ITEM)]; \
+    __local uint    slot_cache[NEXT_PRIME_NO(UINTS_IN_XI(N - 1) * SLOT_CACHE_OFFSET)]; \
     __local uint    collisionsData[NEXT_PRIME_NO(LDS_COLL_SIZE)]; \
     __local uint    collisionsNum; \
 	__local uint    nr_slots_array[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM)]; \

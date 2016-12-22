@@ -36,7 +36,7 @@
 #ifdef NVIDIA
 
 #define NR_ROWS_LOG              12  // 12, 13, 14, 15, or 16.
-#define NR_SLOTS                 683 // Prime numbers are preferable.
+#define NR_SLOTS                 684
 
 #define LDS_COLL_SIZE            (NR_SLOTS * ROWS_IN_WORK_ITEM * 120 / 100)
 #define BIN_SIZE                 (NR_SLOTS * 5 / 100)
@@ -55,7 +55,7 @@
 #else
 
 #define NR_ROWS_LOG            14  // 12, 13, 14, 15, or 16.
-#define NR_SLOTS               199 // Prime numbers are preferable.
+#define NR_SLOTS               200
 #define SLOT_CACHE_SIZE        (NR_SLOTS * ROWS_IN_WORK_ITEM)
 #define LDS_COLL_SIZE          (NR_SLOTS * ROWS_IN_WORK_ITEM * 140 / 100)
 #define BIN_SIZE               (NR_SLOTS * 6 / 100)
@@ -434,3 +434,5 @@ typedef struct	sols_s
 #else
 #error "Unsupported NR_SLOTS"
 #endif
+
+#define SLOT_CACHE_OFFSET (NR_SLOTS * ROWS_IN_WORK_ITEM)
