@@ -600,16 +600,8 @@ void init_ht(cl_command_queue queue, cl_kernel k_init_ht, cl_mem buf_ht,
 	size_t      global_ws = RC_SIZE / sizeof(cl_uint);
 	size_t      local_ws = 256;
 	cl_int      status;
-#if 0
-	uint32_t    pat = -1;
-	status = clEnqueueFillBuffer(queue, buf_ht, &pat, sizeof(pat), 0,
-		NR_ROWS * NR_SLOTS * SLOT_LEN,
-		0,		// cl_uint	num_events_in_wait_list
-		NULL,	// cl_event	*event_wait_list
-		NULL);	// cl_event	*event
-	if (status != CL_SUCCESS)
-		fatal("clEnqueueFillBuffer (%d)\n", status);
-#endif
+
+	global_ws += local_ws - global_ws % local_ws;
 	status = clSetKernelArg(k_init_ht, 0, sizeof(buf_ht), &buf_ht);
 	clSetKernelArg(k_init_ht, 1, sizeof(rowCounters), &rowCounters);
 	if (status != CL_SUCCESS)

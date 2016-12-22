@@ -104,11 +104,7 @@ void kernel_init_ht(__global char *ht, __global uint *rowCounters)
 
 __global char *get_slot_ptr(__global char *ht, uint round, uint row, uint slot)
 {
-#if 1
 	return ht + (row * NR_SLOTS + slot) * ADJUSTED_SLOT_LEN(round);
-#else
-	return ht + (slot * NR_ROWS + row) * ADJUSTED_SLOT_LEN(round);
-#endif
 }
 
 __global char *get_xi_ptr(__global char *ht, uint round, uint row, uint slot)
@@ -560,7 +556,7 @@ void equihash_round(uint round,
 					__global uint *rowCountersDst,
 				             uint threadsPerRow,
 					__local uint *nr_slots_array,
-					__local BIN_INDEX_TYPE *bins_data,
+					__local uint *bins_data,
 					__local uint *bin_counters_data)
 {
 	uint globalTid = get_global_id(0) / threadsPerRow;
@@ -593,7 +589,7 @@ void equihash_round(uint round,
 #error "unsupported NR_ROWS_LOG"
 #endif    
 #define NR_BINS (256 >> (NR_ROWS_LOG - 12))
-	__local BIN_INDEX_TYPE *bins = &bins_data[localTid * BIN_SIZE * NR_BINS];
+	__local uint *bins = &bins_data[localTid * ((BIN_SIZE * NR_BINS + BIN_INDEXES_IN_UINT - 1) / BIN_INDEXES_IN_UINT)];
 	__local uint *bin_counters = &bin_counters_data[localTid * NR_BINS];
 #if THREADS_PER_WRITE != 1
 	__local slot_t slot_write_cache[NEXT_PRIME_NO(LOCAL_WORK_SIZE)];
@@ -612,6 +608,8 @@ void equihash_round(uint round,
 			*collisionsNum = 0;
 		for (i = localGroupId; i < NR_BINS; i += threadsPerRow)
 			bin_counters[i] = 0;
+		for (i = localGroupId; i < ROWS_IN_WORK_ITEM * ((BIN_SIZE * NR_BINS + BIN_INDEXES_IN_UINT - 1) / BIN_INDEXES_IN_UINT); i += THREADS_PER_ROW)
+			bins_data[i] = 0;
 		if (tid < NR_ROWS && localGroupId == 0) {
 			uint rowIdx, rowOffset;
 			get_row_counters_index(&rowIdx, &rowOffset, tid);
@@ -646,7 +644,8 @@ void equihash_round(uint round,
 					atomic_dec(&bin_counters[bin_to_use]);
 					++dropped_coll;
 				} else {
-					bins[bin_to_use * BIN_SIZE + bin_counter_copy] = i;
+					uint bin_index = bin_to_use + bin_counter_copy * NR_BINS;
+					atomic_or(&bins[bin_index / BIN_INDEXES_IN_UINT], i << (BITS_IN_BIN_INDEX * (bin_index % BIN_INDEXES_IN_UINT)));
 				}
 			}
 
@@ -658,9 +657,10 @@ void equihash_round(uint round,
 					if (index >= LDS_COLL_SIZE) {
 						atomic_dec(collisionsNum);
 						++dropped_coll;
-					}
-					else {
-						collisionsData[index] = (localTid << 24) | (i << 12) | bins[bin_to_use * BIN_SIZE + j];
+					} else {
+						uint bin_index = bin_to_use + j * NR_BINS;
+						uint slot_index_j = (bins[bin_index / BIN_INDEXES_IN_UINT] >> (BITS_IN_BIN_INDEX * (bin_index % BIN_INDEXES_IN_UINT))) & BIN_INDEX_MASK;
+						collisionsData[index] = (localTid << 24) | (i << 12) | slot_index_j;
 					}
 				}
 			}
@@ -714,29 +714,29 @@ void equihash_round(uint round,
 /*
 ** This defines kernel_round1, kernel_round2, ..., kernel_round7.
 */
-#define KERNEL_ROUND(N) \
+#define KERNEL_ROUND(kernel_name, N) \
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE, 1, 1))) \
-void kernel_round ## N(__global char *ht_src, __global char *ht_dst, \
+void kernel_name(__global char *ht_src, __global char *ht_dst, \
 	__global uint *rowCountersSrc, __global uint *rowCountersDst, \
        	__global uint *debug) \
 { \
-    __local uint    slot_cache[NEXT_PRIME_NO(RESERVED_FOR_XI(N - 1) * SLOT_CACHE_SIZE)]; \
+    __local uint    slot_cache[NEXT_PRIME_NO(RESERVED_FOR_XI(N - 1) * NR_SLOTS * ROWS_IN_WORK_ITEM)]; \
     __local uint    collisionsData[NEXT_PRIME_NO(LDS_COLL_SIZE)]; \
     __local uint    collisionsNum; \
 	__local uint    nr_slots_array[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM)]; \
-	__local BIN_INDEX_TYPE   bins_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM * BIN_SIZE * NR_BINS)]; \
+	__local uint   bins_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM * ((BIN_SIZE * NR_BINS + BIN_INDEXES_IN_UINT - 1) / BIN_INDEXES_IN_UINT))]; \
 	__local uint    bin_counters_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM * NR_BINS)]; \
 	equihash_round(N, ht_src, ht_dst, debug, slot_cache, collisionsData, \
 	    &collisionsNum, rowCountersSrc, rowCountersDst, THREADS_PER_ROW, nr_slots_array, bins_data, bin_counters_data); \
 }
-KERNEL_ROUND(1)
-KERNEL_ROUND(2)
-KERNEL_ROUND(3)
-KERNEL_ROUND(4)
-KERNEL_ROUND(5)
-KERNEL_ROUND(6)
-KERNEL_ROUND(7)
-KERNEL_ROUND(8)
+KERNEL_ROUND(kernel_round1, 1)
+KERNEL_ROUND(kernel_round2, 2)
+KERNEL_ROUND(kernel_round3, 3)
+KERNEL_ROUND(kernel_round4, 4)
+KERNEL_ROUND(kernel_round5, 5)
+KERNEL_ROUND(kernel_round6, 6)
+KERNEL_ROUND(kernel_round7, 7)
+KERNEL_ROUND(kernel_round8, 8)
 
 uint expand_ref(__global char *ht, uint round, uint row, uint slot)
 {
@@ -841,9 +841,9 @@ void kernel_sols(__global char *ht0,
 	uint		i, j;
 	__global char	*p;
 	uint		ref_i, ref_j;
-	__local BIN_INDEX_TYPE   bins_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM_SOLS * BIN_SIZE_SOLS * NR_BINS_SOLS)];
-	__local uint    bin_counters_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM_SOLS * NR_BINS_SOLS)];
-	__local BIN_INDEX_TYPE *bins = &bins_data[localTid * BIN_SIZE_SOLS * NR_BINS_SOLS];
+	__local uint  bins_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM_SOLS * ((BIN_SIZE_SOLS * NR_BINS_SOLS + BIN_INDEXES_IN_UINT - 1) / BIN_INDEXES_IN_UINT))];
+	__local uint  bin_counters_data[NEXT_PRIME_NO(ROWS_IN_WORK_ITEM_SOLS * NR_BINS_SOLS)];
+	__local uint *bins = &bins_data[localTid * ((BIN_SIZE_SOLS * NR_BINS_SOLS + BIN_INDEXES_IN_UINT - 1) / BIN_INDEXES_IN_UINT)];
 	__local uint *bin_counters = &bin_counters_data[localTid * NR_BINS_SOLS];
 
 	if (!get_global_id(0))
@@ -862,6 +862,8 @@ void kernel_sols(__global char *ht0,
 			semaphoe = 0;
 		for (i = localGroupId; i < NR_BINS_SOLS; i += THREADS_PER_ROW_SOLS)
 			bin_counters[i] = 0;
+		for (i = localGroupId; i < sizeof(bins_data) / sizeof(uint); i += THREADS_PER_ROW_SOLS)
+			bins_data[i] = 0;
 		for (i = localGroupId; i < NR_SLOTS; i += THREADS_PER_ROW_SOLS)
 			refsPtr[i] = 0xffffffff;
 		if (tid < NR_ROWS) {
@@ -901,7 +903,8 @@ void kernel_sols(__global char *ht0,
 					// TODO: Implement a way to detect overflow for DEBUG_MODE.
 					atomic_dec(&bin_counters[bin_to_use]);
 				} else {
-					bins[bin_to_use * BIN_SIZE_SOLS + bin_counter_copy] = i;
+					uint bin_index = bin_to_use + bin_counter_copy * NR_BINS_SOLS;
+					atomic_or(&bins[bin_index / BIN_INDEXES_IN_UINT], i << (BITS_IN_BIN_INDEX * (bin_index % BIN_INDEXES_IN_UINT)));
 				}
 			}
 
@@ -910,7 +913,8 @@ void kernel_sols(__global char *ht0,
 			if (tid < NR_ROWS) {
 				if (bin_counter_copy && bin_counter_copy < BIN_SIZE_SOLS) {
 					for (j = 0; j < bin_counter_copy; ++j) {
-						uint slot_index_j = bins[bin_to_use * BIN_SIZE_SOLS + j];
+						uint bin_index = bin_to_use + j * NR_BINS_SOLS;
+						uint slot_index_j = (bins[bin_index / BIN_INDEXES_IN_UINT] >> (BITS_IN_BIN_INDEX * (bin_index % BIN_INDEXES_IN_UINT))) & BIN_INDEX_MASK;
 						if (xi_first_bytes == dataPtr[slot_index_j]) {
 							uint ref_j = refsPtr[slot_index_j];
 							if (ref_j != 0xffffffff && atomic_inc(&semaphoe) == 0)

@@ -24,7 +24,7 @@
 // rebuild sa-solver, and run it to see how many slots get dropped
 // at each round. Note that performance suffers if too many slots get dropped.
 
-// #define ENABLE_DEBUG
+//#define ENABLE_DEBUG
 
 //
 // Parameters for Hash Tables
@@ -38,7 +38,6 @@
 #define NR_ROWS_LOG              12  // 12, 13, 14, 15, or 16.
 #define NR_SLOTS                 683 // Prime numbers are preferable.
 
-#define SLOT_CACHE_SIZE          (NR_SLOTS * ROWS_IN_WORK_ITEM)
 #define LDS_COLL_SIZE            (NR_SLOTS * ROWS_IN_WORK_ITEM * 120 / 100)
 #define BIN_SIZE                 (NR_SLOTS * 5 / 100)
 #define EXTRA_BITS_FOR_BINS_SOLS 0
@@ -49,15 +48,14 @@
 #define LOCAL_WORK_SIZE_SOLS     256
 #define THREADS_PER_ROW_SOLS     256
 #define LOCAL_WORK_SIZE_ROUND0   32
-#define ROUND0_INPUTS_PER_WORK_ITEM 32
-#define GLOBAL_WORK_SIZE_RATIO   512 // global_work_size = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * LOCAL_WORK_SIZE
+#define ROUND0_INPUTS_PER_WORK_ITEM 1
+#define GLOBAL_WORK_SIZE_RATIO   768 // global_work_size = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * LOCAL_WORK_SIZE
 #define THREADS_PER_WRITE        1  // 1, 2, 4, or 8
 
 #else
 
 #define NR_ROWS_LOG            14  // 12, 13, 14, 15, or 16.
 #define NR_SLOTS               199 // Prime numbers are preferable.
-
 #define SLOT_CACHE_SIZE        (NR_SLOTS * ROWS_IN_WORK_ITEM)
 #define LDS_COLL_SIZE          (NR_SLOTS * ROWS_IN_WORK_ITEM * 140 / 100)
 #define BIN_SIZE               (NR_SLOTS * 6 / 100)
@@ -69,14 +67,14 @@
 #define LOCAL_WORK_SIZE_SOLS   128
 #define THREADS_PER_ROW_SOLS   128
 #define LOCAL_WORK_SIZE_ROUND0 64  
-#define ROUND0_INPUTS_PER_WORK_ITEM 8
+#define ROUND0_INPUTS_PER_WORK_ITEM 4
 #define GLOBAL_WORK_SIZE_RATIO 512 // global_work_size = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * LOCAL_WORK_SIZE
 #define THREADS_PER_WRITE      1  // 1, 2, 4, or 8
 
 #endif
 
 #define OPENCL_BUILD_OPTIONS_AMD    "-I.. -I. -O1"
-#define OPENCL_BUILD_OPTIONS_NVIDIA "-I.. -I. -DNVIDIA -cl-nv-maxrregcount=31"
+#define OPENCL_BUILD_OPTIONS_NVIDIA "-I.. -I. -DNVIDIA"
 #define OPENCL_BUILD_OPTIONS        "-I.. -I."
 
 
@@ -140,12 +138,16 @@
 #define BITS_PER_ROW 8
 #define ROWS_PER_UINT 4
 #define ROW_MASK 0xFF
+#elif 0//(NR_SLOTS < 1023)
+#define BITS_PER_ROW 10
+#define ROWS_PER_UINT 3
+#define ROW_MASK 0x3FF
 #else
 #define BITS_PER_ROW 16
 #define ROWS_PER_UINT 2
 #define ROW_MASK 0xFFFF
 #endif
-#define RC_SIZE (NR_ROWS * 4 / ROWS_PER_UINT)
+#define RC_SIZE ((NR_ROWS * 4 + ROWS_PER_UINT - 1) / ROWS_PER_UINT)
 
 /*
 ** Return the offset of Xi in bytes from the beginning of the slot.
@@ -396,12 +398,39 @@ typedef struct	sols_s
      ((n) <= 1009) ? 1009 : \
 		             (n))
 
+#define NEXT_POWER_OF_TWO(n) \
+	(((n) <= 2) ? 2 : \
+	((n) <= 4) ? 4 : \
+	((n) <= 8) ? 8 : \
+	((n) <= 16) ? 16 : \
+	((n) <= 32) ? 32 : \
+	((n) <= 64) ? 64 : \
+	((n) <= 128) ? 128 : \
+	((n) <= 256) ? 256 : \
+	((n) <= 512) ? 512 : \
+	((n) <= 1024) ? 1024 : \
+	((n) <= 2048) ? 2048 : \
+	((n) <= 4096) ? 4096 : \
+	((n) <= 8192) ? 8192 : \
+	((n) <= 16384) ? 16384 : \
+	((n) <= 32768) ? 32768 : \
+                     (n))
+
 #define ROWS_IN_WORK_ITEM      (LOCAL_WORK_SIZE      / THREADS_PER_ROW     )
 #define ROWS_IN_WORK_ITEM_SOLS (LOCAL_WORK_SIZE_SOLS / THREADS_PER_ROW_SOLS)
 
 #if NR_SLOTS < 255
-#define BIN_INDEX_TYPE uchar
+#define BIN_INDEXES_IN_UINT 4
+#define BIN_INDEX_MASK 0xff
+#define BITS_IN_BIN_INDEX 8
+#elif NR_SLOTS < 1024
+#define BIN_INDEXES_IN_UINT 3
+#define BIN_INDEX_MASK 0x3ff
+#define BITS_IN_BIN_INDEX 10
+#elif NR_SLOTS < 65535
+#define BIN_INDEXES_IN_UINT 2
+#define BIN_INDEX_MASK 0xffff
+#define BITS_IN_BIN_INDEX 16
 #else
-#define BIN_INDEX_TYPE ushort
+#error "Unsupported NR_SLOTS"
 #endif
-
