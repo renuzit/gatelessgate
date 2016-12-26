@@ -46,8 +46,7 @@
 
 typedef union {
 	struct {
-		uint i;
-		uint xi[6];
+		uint xi[7];
 		uint padding;
 	} slot;
 	uint8 ui8;
@@ -57,6 +56,17 @@ typedef union {
 } slot_t;
 
 typedef __global slot_t *global_pointer_to_slot_t;
+
+
+#define UINTS_IN_XI(round) (((round) == 0) ? 6 : \
+                            ((round) == 1) ? 6 : \
+                            ((round) == 2) ? 5 : \
+                            ((round) == 3) ? 5 : \
+                            ((round) == 4) ? 4 : \
+                            ((round) == 5) ? 4 : \
+                            ((round) == 6) ? 3 : \
+                            ((round) == 7) ? 2 : \
+                                             1)
 
 /*
 ** Reset counters in a hash table.
@@ -99,12 +109,17 @@ void kernel_init_ht(__global char *ht, __global uint *rowCounters)
 
 __global char *get_slot_ptr(__global char *ht, uint round, uint row, uint slot)
 {
-	return ht + (row * NR_SLOTS + slot) * ADJUSTED_SLOT_LEN(round);
+	return ht + (row * NR_SLOTS(round) + slot) * ADJUSTED_SLOT_LEN(round);
 }
 
-__global char *get_xi_ptr(__global char *ht, uint round, uint row, uint slot)
+__global uint *get_xi_ptr(__global char *ht, uint round, uint row, uint slot)
 {
-	return get_slot_ptr(ht, round, row, slot) + xi_offset_for_round(round);
+	return (__global uint *)get_slot_ptr(ht, round, row, slot);
+}
+
+__global uint *get_ref_ptr(__global char *ht, uint round, uint row, uint slot)
+{
+	return get_xi_ptr(ht, round, row, slot) + UINTS_IN_XI(round);
 }
 
 void get_row_counters_index(uint *rowIdx, uint *rowOffset, uint row)
@@ -147,13 +162,13 @@ uint get_row(uint round, uint xi0)
 	return row;
 }
 
-uint inc_row_counter(__global uint *rowCounters, uint row)
+uint inc_row_counter(uint round, __global uint *rowCounters, uint row)
 {
 	uint rowIdx, rowOffset;
 	get_row_counters_index(&rowIdx, &rowOffset, row);
 	uint nr_slots = atom_add(rowCounters + rowIdx, 1 << rowOffset);
 	nr_slots = (nr_slots >> rowOffset) & ROW_MASK;
-	if (nr_slots >= NR_SLOTS) {
+	if (nr_slots >= NR_SLOTS(round)) {
 		// avoid overflows
 		atom_sub(rowCounters + rowIdx, 1 << rowOffset);
 	}
@@ -164,18 +179,18 @@ uint ht_store(uint round, __global char *ht, uint i,
 			  uint xi0, uint xi1, uint xi2, uint xi3, uint xi4, uint xi5, uint xi6, __global uint *rowCounters)
 {
 	uint row = get_row(round, xi0);
-	uint nr_slots = inc_row_counter(rowCounters, row);
-	if (nr_slots >= NR_SLOTS)
+	uint nr_slots = inc_row_counter(round, rowCounters, row);
+	if (nr_slots >= NR_SLOTS(round))
 		return 1;
 	__global char *p = get_slot_ptr(ht, round, row, nr_slots);
 	slot_t slot;
-	slot.slot.i = i;
 	slot.slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
 	slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
 	slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
 	slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
 	slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
 	slot.slot.xi[5] = ((xi6 << 24) | (xi5 >> 8));
+	slot.slot.xi[UINTS_IN_XI(round)] = i;
 	if (round <= 5) {
 		*(__global uint8 *)p = slot.ui8;
 	} else {
@@ -444,18 +459,18 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 
 	if (ai && bi) {
 		xi0 = *ai;
-		xi1 = *(ai += SLOT_CACHE_OFFSET);
-		if (round <= 7) xi2 = *(ai += SLOT_CACHE_OFFSET);
-		if (round <= 6) xi3 = *(ai += SLOT_CACHE_OFFSET);
-		if (round <= 4) xi4 = *(ai += SLOT_CACHE_OFFSET);
-		if (round <= 2) xi5 = *(ai += SLOT_CACHE_OFFSET);
+		xi1 = *(ai += NR_SLOTS(round - 1));
+		if (round <= 7) xi2 = *(ai += NR_SLOTS(round - 1));
+		if (round <= 6) xi3 = *(ai += NR_SLOTS(round - 1));
+		if (round <= 4) xi4 = *(ai += NR_SLOTS(round - 1));
+		if (round <= 2) xi5 = *(ai += NR_SLOTS(round - 1));
 
 		xi0 ^= *bi;
-		xi1 ^= *(bi += SLOT_CACHE_OFFSET);
-		if (round <= 7) xi2 ^= *(bi += SLOT_CACHE_OFFSET);
-		if (round <= 6) xi3 ^= *(bi += SLOT_CACHE_OFFSET);
-		if (round <= 4) xi4 ^= *(bi += SLOT_CACHE_OFFSET);
-		if (round <= 2) xi5 ^= *(bi += SLOT_CACHE_OFFSET);
+		xi1 ^= *(bi += NR_SLOTS(round - 1));
+		if (round <= 7) xi2 ^= *(bi += NR_SLOTS(round - 1));
+		if (round <= 6) xi3 ^= *(bi += NR_SLOTS(round - 1));
+		if (round <= 4) xi4 ^= *(bi += NR_SLOTS(round - 1));
+		if (round <= 2) xi5 ^= *(bi += NR_SLOTS(round - 1));
 
 		if (!(round & 0x1)) {
 			// skip padding bytes
@@ -471,8 +486,8 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 		// inputs and xor to zero, so discard them
 		if (xi0 || xi1) {
 			uint new_row = get_row(round, xi0);
-			uint new_slot_index = inc_row_counter(rowCounters, new_row);
-			if (new_slot_index >= NR_SLOTS) {
+			uint new_slot_index = inc_row_counter(round, rowCounters, new_row);
+			if (new_slot_index >= NR_SLOTS(round)) {
 				ret = 1;
 			} else {
 #if THREADS_PER_WRITE == 1
@@ -487,13 +502,13 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 
 #if THREADS_PER_WRITE == 1
 	if (p) {
-		slot.slot.i = ENCODE_INPUTS(row, slot_a, slot_b);
 		slot.slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
 		slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
 		slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
 		slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
 		slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
 		slot.slot.xi[5] = ((xi5 >> 8));
+		slot.slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(row, slot_a, slot_b);
 		if (round <= 5)
 			*(__global uint8 *)p = slot.ui8;
 		else
@@ -502,13 +517,13 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 #else
 	barrier(CLK_LOCAL_MEM_FENCE);
 	if (slot_ptrs[get_local_id(0)]) {
-		slot_write_cache[get_local_id(0)].slot.i = ENCODE_INPUTS(row, slot_a, slot_b);
 		slot_write_cache[get_local_id(0)].slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
 		slot_write_cache[get_local_id(0)].slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
 		slot_write_cache[get_local_id(0)].slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
 		slot_write_cache[get_local_id(0)].slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
 		slot_write_cache[get_local_id(0)].slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
 		slot_write_cache[get_local_id(0)].slot.xi[5] = ((xi5 >> 8));
+		slot_write_cache[get_local_id(0)].slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(row, slot_a, slot_b);
 	}
 	barrier(CLK_LOCAL_MEM_FENCE);
 	uint local_id_base = get_local_id(0) - get_local_id(0) % THREADS_PER_WRITE;
@@ -534,16 +549,6 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 ** Execute one Equihash round. Read from ht_src, XOR colliding pairs of Xi,
 ** store them in ht_dst. Each work group processes only one row at a time.
 */
-
-#define UINTS_IN_XI(round) (((round) == 0) ? 6 : \
-                            ((round) == 1) ? 6 : \
-                            ((round) == 2) ? 5 : \
-                            ((round) == 3) ? 5 : \
-                            ((round) == 4) ? 4 : \
-                            ((round) == 5) ? 4 : \
-                            ((round) == 6) ? 3 : \
-                            ((round) == 7) ? 2 : \
-                                             1)
 
 void equihash_round(uint round,
 					__global char *ht_src,
@@ -604,14 +609,14 @@ void equihash_round(uint round,
 		if (!get_local_id(0)) 
 			*nr_collisions = 0;
 		for (i = localGroupId; i < NR_BINS; i += get_local_size(0))
-			bin_first_slots[i] = NR_SLOTS;
-		for (i = localGroupId; i < NR_SLOTS; i += THREADS_PER_ROW)
-			bin_next_slots[i] = NR_SLOTS;
+			bin_first_slots[i] = NR_SLOTS(round - 1);
+		for (i = localGroupId; i < NR_SLOTS(round - 1); i += THREADS_PER_ROW)
+			bin_next_slots[i] = NR_SLOTS(round - 1);
 		if (assigned_row_index < NR_ROWS && localGroupId == 0) {
 			uint rowIdx, rowOffset;
 			get_row_counters_index(&rowIdx, &rowOffset, assigned_row_index);
 			nr_slots = (rowCountersSrc[rowIdx] >> rowOffset) & ROW_MASK;
-			nr_slots = min(nr_slots, (uint)NR_SLOTS); // handle possible overflow in last round
+			nr_slots = min(nr_slots, (uint)NR_SLOTS(round - 1)); // handle possible overflow in last round
 			nr_slots_array[0] = nr_slots;
 		}
 		barrier(CLK_LOCAL_MEM_FENCE);
@@ -626,34 +631,48 @@ void equihash_round(uint round,
 		uint i_max = nr_slots + (get_local_size(0) - nr_slots % get_local_size(0)) - 1;
 		for (i = localGroupId; i <= i_max; i += get_local_size(0)) {
 			if (assigned_row_index < NR_ROWS && i < nr_slots) {
+				uint xi0;
+#ifdef NVIDIA
+				uint2 slot_data[3];
+				for (j = 0; j < UINTS_IN_XI(round - 1) / 2; ++j)
+					slot_data[j] = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, i) + j);
+				if (UINTS_IN_XI(round - 1) % 2) {
+					j = UINTS_IN_XI(round - 1) - 1;
+					slot_data[j / 2].s0 = *((__global uint *)get_slot_ptr(ht_src, round - 1, assigned_row_index, i) + j);
+				}
+
+				for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
+					slot_cache[j * NR_SLOTS(round - 1) + i] = (j % 2) ? slot_data[j / 2].s1 : slot_data[j / 2].s0;
+				xi0 = slot_data[0].s0;
+#else
 				uint xi[6];
 				for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
 					xi[j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, assigned_row_index, i) + j);
 				for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-					slot_cache[j * SLOT_CACHE_OFFSET + i] = xi[j];
+					slot_cache[j * NR_SLOTS(round - 1) + i] = xi[j];
+				xi0 = xi[0];
+#endif
 				uint bin_to_use =
-					  ((xi[0] & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
-					| ((xi[0] & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
+					  ((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
+					| ((xi0 & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
 				bin_next_slots[i] = atom_xchg(&bin_first_slots[bin_to_use], i);
 			}
 			barrier(CLK_LOCAL_MEM_FENCE);
 		}
 
 		barrier(CLK_LOCAL_MEM_FENCE);
-
-		// Collision search. Note that collisions are processed right away
 		// in order to reduce the size of collision_array[].
 		if (!get_local_id(0)) {
 			*nr_collisions = 0;
 		}
-		uint max_slot_a_index = NR_SLOTS + (LOCAL_WORK_SIZE - NR_SLOTS % LOCAL_WORK_SIZE) - 1;
+		uint max_slot_a_index = NR_SLOTS(round - 1) + (LOCAL_WORK_SIZE - NR_SLOTS(round - 1) % LOCAL_WORK_SIZE) - 1;
 		barrier(CLK_LOCAL_MEM_FENCE);
 		for (uint slot_a_index = get_local_id(0); slot_a_index <= max_slot_a_index; slot_a_index += get_local_size(0)) {
-			int valid_slot_a_index = assigned_row_index < NR_ROWS && slot_a_index < NR_SLOTS;
-			uint slot_b_index = valid_slot_a_index ? bin_next_slots[slot_a_index] : NR_SLOTS;
-			while (slot_b_index < NR_SLOTS) {
+			int valid_slot_a_index = assigned_row_index < NR_ROWS && slot_a_index < NR_SLOTS(round - 1);
+			uint slot_b_index = valid_slot_a_index ? bin_next_slots[slot_a_index] : NR_SLOTS(round - 1);
+			while (slot_b_index < NR_SLOTS(round - 1)) {
 				uint coll_index = atom_inc(nr_collisions);
-				if (coll_index >= LDS_COLL_SIZE) {
+				if (coll_index >= LDS_COLL_SIZE(round - 1)) {
 					atom_dec(nr_collisions);
 					++dropped_coll;
 				} else {
@@ -709,12 +728,12 @@ void kernel_name(__global char *ht_src, __global char *ht_dst, \
 	__global uint *rowCountersSrc, __global uint *rowCountersDst, \
        	__global uint *debug) \
 { \
-    __local uint    slot_cache[NEXT_PRIME_NO(UINTS_IN_XI(N - 1) * SLOT_CACHE_OFFSET)]; \
-    __local uint    collision_array[NEXT_PRIME_NO(LDS_COLL_SIZE)]; \
+    __local uint    slot_cache[NEXT_PRIME_NO(UINTS_IN_XI(N - 1) * NR_SLOTS(N - 1))]; \
+    __local uint    collision_array[NEXT_PRIME_NO(LDS_COLL_SIZE(N - 1))]; \
     __local uint    nr_collisions; \
 	__local uint    nr_slots_array[NEXT_PRIME_NO(1)]; \
 	__local uint    bin_first_slots[NEXT_PRIME_NO(NR_BINS)]; \
-	__local BIN_INDEX_TYPE    bin_next_slots[NEXT_PRIME_NO(NR_SLOTS)]; \
+	__local BIN_INDEX_TYPE    bin_next_slots[NEXT_PRIME_NO(NR_SLOTS(N - 1))]; \
 	equihash_round(N, ht_src, ht_dst, debug, slot_cache, collision_array, \
 	    &nr_collisions, rowCountersSrc, rowCountersDst, nr_slots_array, bin_first_slots, bin_next_slots); \
 }
@@ -727,68 +746,15 @@ KERNEL_ROUND(kernel_round6, 6)
 KERNEL_ROUND(kernel_round7, 7)
 KERNEL_ROUND(kernel_round8, 8)
 
-uint expand_ref(__global char *ht, uint round, uint row, uint slot)
-{
-	return ((__global slot_t *)get_slot_ptr(ht, round, row, slot))->slot.i;
-}
 
-/*
-** Expand references to inputs. Return 1 if so far the solution appears valid,
-** or 0 otherwise (an invalid solution would be a solution with duplicate
-** inputs, which can be detected at the last step: round == 0).
-*/
-uint expand_refs(__local uint *ins, uint nr_inputs, __global char **htabs,
-				 uint round)
-{
-	__global char	*ht = htabs[round];
-	uint		i = nr_inputs - 1;
-	uint		j = nr_inputs * 2 - 1;
-	int			dup_to_watch = -1;
-	do {
-		ins[j] = expand_ref(ht, round,
-							DECODE_ROW(ins[i]), DECODE_SLOT1(ins[i]));
-		ins[j - 1] = expand_ref(ht, round,
-								DECODE_ROW(ins[i]), DECODE_SLOT0(ins[i]));
-		if (!round) {
-			if (dup_to_watch == -1)
-				dup_to_watch = ins[j];
-			else if (ins[j] == dup_to_watch || ins[j - 1] == dup_to_watch)
-				return 0;
-		}
-		if (!i)
-			break;
-		i--;
-		j -= 2;
-	} while (1);
-	return 1;
-}
 
-/*
-** Verify if a potential solution is in fact valid.
-*/
-void potential_sol(__global char **htabs, __global sols_t *sols,
-				   uint ref0, uint ref1, __local uint *values_tmp)
+void mark_potential_sol(__global potential_sols_t *potential_sols, uint ref0, uint ref1)
 {
-	uint	nr_values;
-	uint	sol_i;
-	uint	i;
-	nr_values = 0;
-	values_tmp[nr_values++] = ref0;
-	values_tmp[nr_values++] = ref1;
-	uint round = PARAM_K - 1;
-	do {
-		round--;
-		if (!expand_refs(values_tmp, nr_values, htabs, round))
-			return;
-		nr_values *= 2;
-	} while (round > 0);
-	// solution appears valid, copy it to sols
-	sol_i = atom_inc(&sols->nr);
-	if (sol_i >= MAX_SOLS)
+	uint sol_i = atom_inc(&potential_sols->nr);
+	if (sol_i >= MAX_POTENTIAL_SOLS)
 		return;
-	for (i = 0; i < (1 << PARAM_K); i++)
-		sols->values[sol_i][i] = values_tmp[i];
-	sols->valid[sol_i] = 1;
+	potential_sols->values[sol_i][0] = ref0;
+	potential_sols->values[sol_i][1] = ref1;
 }
 
 /*
@@ -800,39 +766,29 @@ void potential_sol(__global char **htabs, __global sols_t *sols,
 #define BIN_MASK_SOLS        (((0x1 << EXTRA_BITS_FOR_BINS_SOLS) - 1) << 12)
 #define BIN_MASK_SOLS_OFFSET (20 - NR_ROWS_LOG)
 
-__kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_SOLS, 1, 1)))
-void kernel_sols(__global char *ht0,
-				 __global char *ht1,
-				 __global char *ht2,
-				 __global char *ht3,
-				 __global char *ht4,
-				 __global char *ht5,
-				 __global char *ht6,
-				 __global char *ht7,
-				 __global char *ht8,
-				 __global sols_t *sols,
-				 __global uint *rowCountersSrc)
+__kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_POTENTIAL_SOLS, 1, 1)))
+void kernel_potential_sols(
+	__global char *ht_src,
+	__global potential_sols_t *potential_sols,
+	__global uint *rowCountersSrc)
 {
-	__local uint refs[NEXT_PRIME_NO(NR_SLOTS)];
-	__local uint data[NEXT_PRIME_NO(NR_SLOTS)];
-	__local uint	values_tmp[NEXT_PRIME_NO(1 << PARAM_K)];
+	__local uint refs[NEXT_PRIME_NO(NR_SLOTS(PARAM_K - 1))];
+	__local uint data[NEXT_PRIME_NO(NR_SLOTS(PARAM_K - 1))];
 	__local volatile uint    semaphoe;
 
 	uint globalTid = get_global_id(0) / get_local_size(0);
 	uint localTid = get_local_id(0) / get_local_size(0);
 	uint localGroupId = get_local_id(0) % get_local_size(0);
 
-	__global char	*htabs[] = { ht0, ht1, ht2, ht3, ht4, ht5, ht6, ht7, ht8 };
-	uint		ht_i = (PARAM_K - 1); // table filled at last round
 	uint		nr_slots;
 	uint		i, j;
 	__global char	*p;
 	uint		ref_i, ref_j;
 	__local uint    bin_first_slots[NEXT_PRIME_NO(NR_BINS_SOLS)];
-	__local BIN_INDEX_TYPE    bin_next_slots[NEXT_PRIME_NO(NR_SLOTS)];
+	__local BIN_INDEX_TYPE    bin_next_slots[NEXT_PRIME_NO(NR_SLOTS(PARAM_K - 1))];
 
 	if (!get_global_id(0))
-		sols->nr = sols->likely_invalids = 0;
+		potential_sols->nr = 0;
 	barrier(CLK_GLOBAL_MEM_FENCE);
 
 	uint rows_per_work_item = (NR_ROWS + get_num_groups(0) - 1) / (get_num_groups(0));
@@ -845,15 +801,15 @@ void kernel_sols(__global char *ht0,
 		if (!get_local_id(0))
 			semaphoe = 0;
 		for (i = localGroupId; i < NR_BINS; i += get_local_size(0))
-			bin_first_slots[i] = NR_SLOTS;
-		for (i = localGroupId; i < NR_SLOTS; i += THREADS_PER_ROW_SOLS)
-			bin_next_slots[i] = NR_SLOTS;
+			bin_first_slots[i] = NR_SLOTS(PARAM_K - 1);
+		for (i = localGroupId; i < NR_SLOTS(PARAM_K - 1); i += THREADS_PER_ROW_SOLS)
+			bin_next_slots[i] = NR_SLOTS(PARAM_K - 1);
 		if (assigned_row_index < NR_ROWS) {
 			if (localGroupId == 0) {
 				uint rowIdx, rowOffset;
 				get_row_counters_index(&rowIdx, &rowOffset, assigned_row_index);
 				nr_slots = (rowCountersSrc[rowIdx] >> rowOffset) & ROW_MASK;
-				nr_slots = min(nr_slots, (uint)NR_SLOTS); // handle possible overflow in last round
+				nr_slots = min(nr_slots, (uint)NR_SLOTS(PARAM_K - 1)); // handle possible overflow in last round
 				nr_slots_array[localTid] = nr_slots;
 			}
 		}
@@ -868,13 +824,13 @@ void kernel_sols(__global char *ht0,
 		// part of the previous PREFIX colliding bits, and the last PREFIX bits.
 		if (assigned_row_index < NR_ROWS) {
 			for (i = localGroupId; i < nr_slots; i += get_local_size(0)) {
-				p = get_slot_ptr(htabs[ht_i], PARAM_K - 1, assigned_row_index, i);
-				uint ref_i = refs[i] = ((__global slot_t *)p)->slot.i;
-				uint xi_first_bytes = data[i] = ((__global slot_t *)p)->slot.xi[0];
+				ulong slot_first_8bytes = *(__global ulong *) get_slot_ptr(ht_src, PARAM_K - 1, assigned_row_index, i);
+				uint ref_i = refs[i] = slot_first_8bytes >> 32;
+				uint xi_first_4bytes = data[i] = slot_first_8bytes & 0xffffffff;
 				uint bin_to_use =
-					((xi_first_bytes & BIN_MASK(PARAM_K - 1)) >> BIN_MASK_OFFSET(PARAM_K - 1))
-					| ((xi_first_bytes & BIN_MASK2(PARAM_K - 1)) >> BIN_MASK2_OFFSET(PARAM_K - 1))
-					| ((xi_first_bytes & BIN_MASK_SOLS) >> BIN_MASK_SOLS_OFFSET);
+					((xi_first_4bytes & BIN_MASK(PARAM_K - 1)) >> BIN_MASK_OFFSET(PARAM_K - 1))
+					| ((xi_first_4bytes & BIN_MASK2(PARAM_K - 1)) >> BIN_MASK2_OFFSET(PARAM_K - 1))
+					| ((xi_first_4bytes & BIN_MASK_SOLS) >> BIN_MASK_SOLS_OFFSET);
 				bin_next_slots[i] = atom_xchg(&bin_first_slots[bin_to_use], i);
 			}
 		}
@@ -885,7 +841,7 @@ void kernel_sols(__global char *ht0,
 			for (i = localGroupId; i < nr_slots; i += get_local_size(0)) {
 				uint data_i = data[i];
 				j = bin_next_slots[i];
-				while (j < NR_SLOTS) {
+				while (j < NR_SLOTS(PARAM_K - 1)) {
 					if (data_i == data[j] && atom_inc(&semaphoe) == 0)
 						coll = ((ulong)refs[i] << 32) | refs[j];
 					j = bin_next_slots[j];
@@ -896,7 +852,76 @@ void kernel_sols(__global char *ht0,
 		barrier(CLK_LOCAL_MEM_FENCE);
 		if (assigned_row_index < NR_ROWS) {
 			if (get_local_id(0) == 0 && semaphoe)
-				potential_sol(htabs, sols, coll >> 32, coll & 0xffffffff, values_tmp);
+				mark_potential_sol(potential_sols, coll >> 32, coll & 0xffffffff);
+		}
+	}
+}
+
+
+
+/*
+** Verify if a potential solution is in fact valid.
+*/
+
+__kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_SOLS, 1, 1)))
+void kernel_sols(__global char *ht0,
+	__global char *ht1,
+	__global char *ht2,
+	__global char *ht3,
+	__global char *ht4,
+	__global char *ht5,
+	__global char *ht6,
+	__global char *ht7,
+	__global char *ht8,
+	__global potential_sols_t *potential_sols,
+	__global sols_t *sols)
+{
+	__local uint	inputs_a[NEXT_PRIME_NO(1 << PARAM_K)], inputs_b[NEXT_PRIME_NO(1 << (PARAM_K - 1))];
+	__global char	*htabs[] = { ht0, ht1, ht2, ht3, ht4, ht5, ht6, ht7, ht8 };
+
+	if (!get_global_id(0))
+		sols->nr = 0;
+	barrier(CLK_GLOBAL_MEM_FENCE);
+
+	if (get_group_id(0) < potential_sols->nr && get_group_id(0) < MAX_POTENTIAL_SOLS) {
+		__local uint dup_counter;
+		if (get_local_id(0) == 0) {
+			dup_counter = 0;
+			inputs_a[0] = potential_sols->values[get_group_id(0)][0];
+			inputs_a[1] = potential_sols->values[get_group_id(0)][1];
+		}
+		barrier(CLK_LOCAL_MEM_FENCE);
+
+		for (int round = 7; round >= 0; --round) {
+			if (round % 2) {
+				for (uint i = get_local_id(0); i < (1 << (8 - round)); i += get_local_size(0)) {
+					inputs_b[i * 2 + 1] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_a[i]), DECODE_SLOT1(inputs_a[i]));
+					inputs_b[i * 2] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_a[i]), DECODE_SLOT0(inputs_a[i]));
+				}
+			} else {
+				for (uint i = get_local_id(0); i < (1 << (8 - round)); i += get_local_size(0)) {
+					inputs_a[i * 2 + 1] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_b[i]), DECODE_SLOT1(inputs_b[i]));
+					inputs_a[i * 2] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_b[i]), DECODE_SLOT0(inputs_b[i]));
+				}
+			}
+			barrier(CLK_LOCAL_MEM_FENCE);
+		}
+		barrier(CLK_LOCAL_MEM_FENCE);
+
+		int	dup_to_watch = inputs_a[256 * 2 - 1];
+		for (uint j = 3 + get_local_id(0); j < 256 * 2 - 2; j += get_local_size(0))
+			if (inputs_a[j] == dup_to_watch)
+				atomic_inc(&dup_counter);
+		barrier(CLK_LOCAL_MEM_FENCE);
+
+		// solution appears valid, copy it to sols
+		if (get_local_id(0) == 0 && !dup_counter) {
+			uint sol_i = atom_inc(&sols->nr);
+			if (sol_i >= MAX_SOLS)
+				return;
+			for (uint i = 0; i < (1 << PARAM_K); i++)
+				sols->values[sol_i][i] = inputs_a[i];
+			sols->valid[sol_i] = 1;
 		}
 	}
 }

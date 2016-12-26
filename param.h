@@ -20,83 +20,111 @@
 
 #define PARAM_H
 
+
+
 // When you tweak parameters in this file, make sure to uncomment the next line,
 // rebuild sa-solver, and run it to see how many slots get dropped
 // at each round. Note that performance suffers if too many slots get dropped.
 
 //#define ENABLE_DEBUG
 
+
+
 //
 // Parameters for Hash Tables
 //
 
-// There are PARAM_K - 1 hash tables, and each hash table has NR_ROWS rows.
-// Each row contains NR_SLOTS slots.
-
 #ifdef NVIDIA
 
-#define NR_ROWS_LOG              12  /* 12, 13, 14, 15, or 16. */
-#define NR_SLOTS                 684
-
-#define LDS_COLL_SIZE            (NR_SLOTS * 67 / 100)
-#define EXTRA_BITS_FOR_BINS_SOLS 0
-
-#define LOCAL_WORK_SIZE          256  
-#define LOCAL_WORK_SIZE_SOLS     256
-#define LOCAL_WORK_SIZE_ROUND0   32
-#define ROUND0_INPUTS_PER_WORK_ITEM 1
-#define GLOBAL_WORK_SIZE_RATIO   768 /* global_work_size = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * LOCAL_WORK_SIZE */
-#define THREADS_PER_WRITE        1  /* 1, 2, 4, or 8 */
+#define NR_ROWS_LOG                    12
+#define LOCAL_WORK_SIZE                256
+#define LOCAL_WORK_SIZE_POTENTIAL_SOLS 256
 
 #else
 
-#define NR_ROWS_LOG              14  /* 12, 13, 14, 15, or 16. */
-#define NR_SLOTS                 200
-
-#define LDS_COLL_SIZE            (LOCAL_WORK_SIZE * 120 / 100)
-#define EXTRA_BITS_FOR_BINS_SOLS 0
-
-#define LOCAL_WORK_SIZE          256
-#define LOCAL_WORK_SIZE_SOLS     128
-#define LOCAL_WORK_SIZE_ROUND0   64
-#define ROUND0_INPUTS_PER_WORK_ITEM 4
-#define GLOBAL_WORK_SIZE_RATIO   512 /* global_work_size = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * LOCAL_WORK_SIZE */
-#define THREADS_PER_WRITE        1  /* 1, 2, 4, or 8 */
+#define NR_ROWS_LOG                    12
+#define LOCAL_WORK_SIZE                256
+#define LOCAL_WORK_SIZE_POTENTIAL_SOLS 256
 
 /*
-#define NR_ROWS_LOG              12  // 12, 13, 14, 15, or 16.
-#define NR_SLOTS                 684
+#define NR_ROWS_LOG                    12
+#define LOCAL_WORK_SIZE                128
+#define LOCAL_WORK_SIZE_POTENTIAL_SOLS 128
 
-#define LDS_COLL_SIZE            (NR_SLOTS * 67 / 100)
-#define EXTRA_BITS_FOR_BINS_SOLS 0
-#define LOCAL_WORK_SIZE          256  
-#define LOCAL_WORK_SIZE_SOLS     128
-#define LOCAL_WORK_SIZE_ROUND0   64
-#define ROUND0_INPUTS_PER_WORK_ITEM 1
-#define GLOBAL_WORK_SIZE_RATIO   768 // global_work_size = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * LOCAL_WORK_SIZE
-#define THREADS_PER_WRITE        1  // 1, 2, 4, or 8
-*/
+#define NR_ROWS_LOG                    13
+#define LOCAL_WORK_SIZE                256
+#define LOCAL_WORK_SIZE_POTENTIAL_SOLS 128
 
-/*
-#define NR_ROWS_LOG              13  // 12, 13, 14, 15, or 16.
-#define NR_SLOTS                 360
+#define NR_ROWS_LOG                    14
+#define LOCAL_WORK_SIZE                256
+#define LOCAL_WORK_SIZE_POTENTIAL_SOLS 64
 
-#define LDS_COLL_SIZE            (LOCAL_WORK_SIZE * 200 / 100)
-#define EXTRA_BITS_FOR_BINS_SOLS 0
+#define NR_ROWS_LOG                    15
+#define LOCAL_WORK_SIZE                128
+#define LOCAL_WORK_SIZE_POTENTIAL_SOLS 128
 
-#define LOCAL_WORK_SIZE          256
-#define LOCAL_WORK_SIZE_SOLS     128
-#define LOCAL_WORK_SIZE_ROUND0   64
-#define ROUND0_INPUTS_PER_WORK_ITEM 4
-#define GLOBAL_WORK_SIZE_RATIO   512 // global_work_size = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * LOCAL_WORK_SIZE
-#define THREADS_PER_WRITE        1  // 1, 2, 4, or 8
+#define NR_ROWS_LOG                    16
+#define LOCAL_WORK_SIZE                64
+#define LOCAL_WORK_SIZE_POTENTIAL_SOLS 64
 */
 
 #endif
 
-#define OPENCL_BUILD_OPTIONS_AMD    "-I.. -I. -O1"
-#define OPENCL_BUILD_OPTIONS_NVIDIA "-I.. -I. -DNVIDIA"
+#ifdef NVIDIA
+#define GLOBAL_WORK_SIZE_RATIO         768
+#define ROUND0_INPUTS_PER_WORK_ITEM    1
+#define THREADS_PER_WRITE              1
+#define WAVEFRONT_SIZE 32
+#else
+#define GLOBAL_WORK_SIZE_RATIO         512
+#define ROUND0_INPUTS_PER_WORK_ITEM    4
+#define THREADS_PER_WRITE              1
+#define WAVEFRONT_SIZE 64
+#endif
+
+#define LOCAL_WORK_SIZE_ROUND0         WAVEFRONT_SIZE
+#define LOCAL_WORK_SIZE_SOLS           WAVEFRONT_SIZE
+
+#define OPENCL_BUILD_OPTIONS_AMD    "-I.. -I. -O1 -DAMD"
+#define OPENCL_BUILD_OPTIONS_NVIDIA "-I.. -I. -DNVIDIA -cl-nv-maxrregcount=63"
 #define OPENCL_BUILD_OPTIONS        "-I.. -I."
+
+
+
+// You should not touch these parameters unless you know what you are doing.
+#if NR_ROWS_LOG == 12
+#define MAX_NR_SLOTS             684
+#define NR_SLOTS(round)          (((round) <= 6) ? (MAX_NR_SLOTS * 87 / 100) : (MAX_NR_SLOTS))
+#define LDS_COLL_SIZE(round)     (NR_SLOTS(round) * 90 / 100)
+#define EXTRA_BITS_FOR_BINS_SOLS 0
+
+#elif NR_ROWS_LOG == 13
+#define MAX_NR_SLOTS             360
+#define NR_SLOTS(round)          (((round) <= 6) ? (MAX_NR_SLOTS * 87 / 100) : (MAX_NR_SLOTS))
+#define LDS_COLL_SIZE(round)     (NR_SLOTS(round) * 100 / 100)
+#define EXTRA_BITS_FOR_BINS_SOLS 0
+
+#elif NR_ROWS_LOG == 14
+#define MAX_NR_SLOTS             200
+#define NR_SLOTS(round)          (((round) <= 6) ? (MAX_NR_SLOTS * 87 / 100) : (MAX_NR_SLOTS))
+#define LDS_COLL_SIZE(round)     (NR_SLOTS(round) * 140 / 100)
+#define EXTRA_BITS_FOR_BINS_SOLS 0
+
+#elif NR_ROWS_LOG == 15
+#define MAX_NR_SLOTS             126
+#define NR_SLOTS(round)          (((round) <= 6) ? (MAX_NR_SLOTS * 87 / 100) : (MAX_NR_SLOTS))
+#define LDS_COLL_SIZE(round)     (NR_SLOTS(round) * 150 / 100)
+#define EXTRA_BITS_FOR_BINS_SOLS 0
+
+#elif NR_ROWS_LOG == 16
+#define MAX_NR_SLOTS             61
+#define NR_SLOTS(round)          (((round) <= 6) ? (MAX_NR_SLOTS * 87 / 100) : (MAX_NR_SLOTS))
+#define LDS_COLL_SIZE(round)     (NR_SLOTS(round) * 2500 / 100)
+#define EXTRA_BITS_FOR_BINS_SOLS 0
+
+#else
+#error "Unsupported NR_ROWS_LOG"
+#endif
 
 
 
@@ -108,7 +136,7 @@
 // Length of 1 element (slot) in byte
 #define SLOT_LEN                        32
 // Total size of hash table
-#define HT_SIZE				(NR_ROWS * NR_SLOTS * SLOT_LEN)
+#define HT_SIZE				(NR_ROWS * MAX_NR_SLOTS * SLOT_LEN)
 // Length of Zcash block header, nonce (part of header)
 #define ZCASH_BLOCK_HEADER_LEN		140
 // Offset of nTime in header
@@ -131,36 +159,37 @@
 // instructions. 10 is the max supported by the hw.
 #define BLAKE_WPS               	10
 // Maximum number of solutions reported by kernel to host
-#define MAX_SOLS			11
+#define MAX_SOLS			16
+#define MAX_POTENTIAL_SOLS  4096
 // Length of SHA256 target
 #define SHA256_TARGET_LEN               (256 / 8)
 
-#if (NR_SLOTS < 3)
+#if (MAX_NR_SLOTS < 3)
 #define BITS_PER_ROW 2
 #define ROWS_PER_UINT 16
 #define ROW_MASK 0x03
-#elif (NR_SLOTS < 7)
+#elif (MAX_NR_SLOTS < 7)
 #define BITS_PER_ROW 3
 #define ROWS_PER_UINT 10
 #define ROW_MASK 0x07
-#elif (NR_SLOTS < 15)
+#elif (MAX_NR_SLOTS < 15)
 #define BITS_PER_ROW 4
 #define ROWS_PER_UINT 8
 #define ROW_MASK 0x0F
-#elif (NR_SLOTS < 31)
+#elif (MAX_NR_SLOTS < 31)
 #define BITS_PER_ROW 5
 #define ROWS_PER_UINT 6
 #define ROW_MASK 0x1F
-#elif (NR_SLOTS < 63)
+#elif (MAX_NR_SLOTS < 63)
 #define BITS_PER_ROW 6
 #define ROWS_PER_UINT 5
 #define ROW_MASK 0x3F
-#elif (NR_SLOTS < 255)
+#elif (MAX_NR_SLOTS < 255)
 #define BITS_PER_ROW 8
 #define ROWS_PER_UINT 4
 #define ROW_MASK 0xFF
 #elif 0
-//#elif (NR_SLOTS < 1023)
+//#elif (MAX_NR_SLOTS < 1023)
 #define BITS_PER_ROW 10
 #define ROWS_PER_UINT 3
 #define ROW_MASK 0x3FF
@@ -174,7 +203,7 @@
 /*
 ** Return the offset of Xi in bytes from the beginning of the slot.
 */
-#define xi_offset_for_round(round)	4
+#define xi_offset_for_round(round)	0
 
 // An (uncompressed) solution stores (1 << PARAM_K) 32-bit values
 #define SOL_SIZE			((1 << PARAM_K) * 4)
@@ -186,7 +215,13 @@ typedef struct	sols_s
 	uint	values[MAX_SOLS][(1 << PARAM_K)];
 }		sols_t;
 
-#if NR_ROWS_LOG <= 12 && NR_SLOTS <= (1 << 10)
+typedef struct	potential_sols_s
+{
+	uint	nr;
+	uint	values[MAX_POTENTIAL_SOLS][2];
+} potential_sols_t;
+
+#if NR_ROWS_LOG <= 12 && MAX_NR_SLOTS <= (1 << 10)
 
 #define ENCODE_INPUTS(row, slot0, slot1) \
     ((row << 20) | ((slot1 & 0x3ff) << 10) | (slot0 & 0x3ff))
@@ -194,7 +229,7 @@ typedef struct	sols_s
 #define DECODE_SLOT1(REF) ((REF >> 10) & 0x3ff)
 #define DECODE_SLOT0(REF) (REF & 0x3ff)
 
-#elif NR_ROWS_LOG <= 14 && NR_SLOTS <= (1 << 9)
+#elif NR_ROWS_LOG <= 14 && MAX_NR_SLOTS <= (1 << 9)
 
 #define ENCODE_INPUTS(row, slot0, slot1) \
     ((row << 18) | ((slot1 & 0x1ff) << 9) | (slot0 & 0x1ff))
@@ -202,7 +237,7 @@ typedef struct	sols_s
 #define DECODE_SLOT1(REF) ((REF >> 9) & 0x1ff)
 #define DECODE_SLOT0(REF) (REF & 0x1ff)
 
-#elif NR_ROWS_LOG <= 16 && NR_SLOTS <= (1 << 8)
+#elif NR_ROWS_LOG <= 16 && MAX_NR_SLOTS <= (1 << 8)
 
 #define ENCODE_INPUTS(row, slot0, slot1) \
     ((row << 16) | ((slot1 & 0xff) << 8) | (slot0 & 0xff))
@@ -210,7 +245,7 @@ typedef struct	sols_s
 #define DECODE_SLOT1(REF) ((REF >> 8) & 0xff)
 #define DECODE_SLOT0(REF) (REF & 0xff)
 
-#elif NR_ROWS_LOG <= 18 && NR_SLOTS <= (1 << 7)
+#elif NR_ROWS_LOG <= 18 && MAX_NR_SLOTS <= (1 << 7)
 
 #define ENCODE_INPUTS(row, slot0, slot1) \
     ((row << 14) | ((slot1 & 0x7f) << 7) | (slot0 & 0x7f))
@@ -218,7 +253,7 @@ typedef struct	sols_s
 #define DECODE_SLOT1(REF) ((REF >> 7) & 0x7f)
 #define DECODE_SLOT0(REF) (REF & 0x7f)
 
-#elif NR_ROWS_LOG == 19 && NR_SLOTS <= (1 << 6)
+#elif NR_ROWS_LOG == 19 && MAX_NR_SLOTS <= (1 << 6)
 
 #define ENCODE_INPUTS(row, slot0, slot1) \
     ((row << 13) | ((slot1 & 0x3f) << 6) | (slot0 & 0x3f)) /* 1 spare bit */
@@ -226,7 +261,7 @@ typedef struct	sols_s
 #define DECODE_SLOT1(REF) ((REF >> 6) & 0x3f)
 #define DECODE_SLOT0(REF) (REF & 0x3f)
 
-#elif NR_ROWS_LOG == 20 && NR_SLOTS <= (1 << 6)
+#elif NR_ROWS_LOG == 20 && MAX_NR_SLOTS <= (1 << 6)
 
 #define ENCODE_INPUTS(row, slot0, slot1) \
     ((row << 12) | ((slot1 & 0x3f) << 6) | (slot0 & 0x3f))
@@ -238,7 +273,7 @@ typedef struct	sols_s
 #error "unsupported NR_ROWS_LOG"
 #endif
 
-// Windows only for now
+/* Windows only for now */
 #define DEFAULT_NUM_MINING_MODE_THREADS 1
 #define MAX_NUM_MINING_MODE_THREADS 16
 
@@ -438,26 +473,24 @@ typedef struct	sols_s
 	((n) <= 32768) ? 32768 : \
                      (n))
 
-#if NR_SLOTS < 255
+#if MAX_NR_SLOTS < 255
 #define BIN_INDEX_TYPE uchar
 #define BIN_INDEXES_IN_UINT 4
 #define BIN_INDEX_MASK 0xff
 #define BITS_IN_BIN_INDEX 8
-#elif NR_SLOTS < 1024
+#elif MAX_NR_SLOTS < 1024
 #define BIN_INDEX_TYPE ushort
 #define BIN_INDEXES_IN_UINT 3
 #define BIN_INDEX_MASK 0x3ff
 #define BITS_IN_BIN_INDEX 10
-#elif NR_SLOTS < 65535
+#elif MAX_NR_SLOTS < 65535
 #define BIN_INDEX_TYPE ushort
 #define BIN_INDEXES_IN_UINT 2
 #define BIN_INDEX_MASK 0xffff
 #define BITS_IN_BIN_INDEX 16
 #else
-#error "Unsupported NR_SLOTS"
+#error "Unsupported MAX_NR_SLOTS"
 #endif
-
-#define SLOT_CACHE_OFFSET NR_SLOTS
 
 // Don't change these.
 #define THREADS_PER_ROW          LOCAL_WORK_SIZE

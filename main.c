@@ -433,45 +433,6 @@ void print_device_info(unsigned i, cl_device_id d)
 }
 
 #ifdef ENABLE_DEBUG
-uint32_t has_i(uint32_t round, uint8_t *ht, uint32_t row, uint32_t i,
-	uint32_t mask, uint32_t *res)
-{
-	uint32_t	slot;
-	uint8_t	*p = (uint8_t *)(ht + row * NR_SLOTS * SLOT_LEN);
-	uint32_t	cnt = *(uint32_t *)p;
-	cnt = MIN(cnt, NR_SLOTS);
-	for (slot = 0; slot < cnt; slot++, p += SLOT_LEN)
-	{
-		if ((*(uint32_t *)(p + xi_offset_for_round(round) - 4) & mask) ==
-			(i & mask))
-		{
-			if (res)
-				*res = slot;
-			return 1;
-		}
-	}
-	return 0;
-}
-
-uint32_t has_xi(uint32_t round, uint8_t *ht, uint32_t row, uint32_t xi,
-	uint32_t *res)
-{
-	uint32_t	slot;
-	uint8_t	*p = (uint8_t *)(ht + row * NR_SLOTS * SLOT_LEN);
-	uint32_t	cnt = *(uint32_t *)p;
-	cnt = MIN(cnt, NR_SLOTS);
-	for (slot = 0; slot < cnt; slot++, p += SLOT_LEN)
-	{
-		if ((*(uint32_t *)(p + xi_offset_for_round(round))) == (xi))
-		{
-			if (res)
-				*res = slot;
-			return 1;
-		}
-	}
-	return 0;
-}
-
 void examine_ht(unsigned round, cl_command_queue queue, cl_mem *hash_table_buffers, cl_mem row_counters_buffer)
 {
 	uint32_t     *hash_tables[PARAM_K];
@@ -515,28 +476,28 @@ void examine_ht(unsigned round, cl_command_queue queue, cl_mem *hash_table_buffe
 		rowIdx = row / ROWS_PER_UINT;
 		rowOffset = BITS_PER_ROW * (row % ROWS_PER_UINT);
 		uint32_t cnt = (row_counters[rowIdx] >> rowOffset) & ROW_MASK;
-		cnt = MIN(cnt, (uint32_t)NR_SLOTS);
-		if (cnt >= NR_SLOTS)
+		cnt = MIN(cnt, (uint32_t)NR_SLOTS(round));
+		if (cnt >= NR_SLOTS(round))
 			++overflow_count;
 		if (cnt == 0)
 			++empty_count;
 		slot_count += cnt;
 
-		if (NR_ROWS_LOG >= 15) {
-			for (uint32_t slot_index = 0; slot_index < NR_SLOTS; ++slot_index) {
-				uint32_t *slot = hash_tables[round] + (row * NR_SLOTS + slot_index) * (ADJUSTED_SLOT_LEN(round) / 4);
+		if (0 && NR_ROWS_LOG >= 15) {
+			for (uint32_t slot_index = 0; slot_index < NR_SLOTS(round); ++slot_index) {
+				uint32_t *slot = hash_tables[round] + (row * NR_SLOTS(round) + slot_index) * (ADJUSTED_SLOT_LEN(round) / 4);
 				uint32_t i = slot[0];
 				if (round) {
 					uint32_t prev_row = DECODE_ROW(i);
 					uint32_t prev_slot0_index = DECODE_SLOT0(i);
 					uint32_t prev_slot1_index = DECODE_SLOT1(i);
-					if (prev_row >= NR_ROWS || prev_slot0_index >= NR_SLOTS || prev_slot1_index >= NR_SLOTS) {
+					if (prev_row >= NR_ROWS || prev_slot0_index >= NR_SLOTS(round - 1) || prev_slot1_index >= NR_SLOTS(round - 1)) {
 						printf("Invalid reference (i: 0x%08x).\n", i);
 					}
 					else {
-						uint32_t *prev_slot0 = hash_tables[round - 1] + (prev_row * NR_SLOTS + prev_slot0_index) * (ADJUSTED_SLOT_LEN(round - 1) / 4);
-						uint32_t *prev_slot1 = hash_tables[round - 1] + (prev_row * NR_SLOTS + prev_slot1_index) * (ADJUSTED_SLOT_LEN(round - 1) / 4);
-						if (0 && (prev_slot0[1] & 0xff) != (prev_slot1[1] & 0xff))
+						uint32_t *prev_slot0 = hash_tables[round - 1] + (prev_row * NR_SLOTS(round - 1) + prev_slot0_index) * (ADJUSTED_SLOT_LEN(round - 1) / 4);
+						uint32_t *prev_slot1 = hash_tables[round - 1] + (prev_row * NR_SLOTS(round - 1) + prev_slot1_index) * (ADJUSTED_SLOT_LEN(round - 1) / 4);
+						if (0)// TODO
 							printf("Invalid reference (row: %u, i: 0x%08x, slot0: 0x%08x 0x%08x, slot1: 0x%08x 0x%08x).\n",
 							(unsigned int)row,
 								(unsigned int)i,
@@ -552,7 +513,7 @@ void examine_ht(unsigned round, cl_command_queue queue, cl_mem *hash_table_buffe
 	printf("%d slots were generated in %d rows (capacity: %d, average: %.1f, full: %.1f%%, empty: %.1f%%).\n",
 		(int)slot_count,
 		   (int)NR_ROWS,
-		   (int)NR_SLOTS,
+		   (int)MAX_NR_SLOTS,
 		   (float)slot_count / NR_ROWS,
 		   (float)overflow_count / NR_ROWS * 100,
 		   (float)empty_count / NR_ROWS * 100);
@@ -873,7 +834,7 @@ uint32_t verify_sol(sols_t *sols, unsigned sol_i)
 	{
 		if (inputs[i] / 8 >= SEEN_LEN)
 		{
-			warn("Invalid input retrieved from device: %d\n", inputs[i]);
+			//warn("Invalid input retrieved from device: %d\n", inputs[i]);
 			sols->valid[sol_i] = 0;
 			return 0;
 		}
@@ -911,7 +872,7 @@ uint32_t verify_sols(cl_command_queue queue, cl_mem buf_sols, uint64_t *nonce,
 #ifdef WIN32
 	timeBeginPeriod(1);
 	DWORD duration = (DWORD)kern_avg_run_time.tv_sec * 1000 + (DWORD)kern_avg_run_time.tv_usec / 1000;
-	if (!amd_flag && duration < 1000)
+	if (duration < 1000)
 		Sleep(duration);
 #endif
 	check_clEnqueueReadBuffer(queue, buf_sols,
@@ -980,8 +941,8 @@ unsigned get_value(unsigned *data, unsigned row)
 ** Return the number of solutions found.
 */
 uint32_t solve_equihash(cl_device_id dev_id, cl_context ctx, cl_command_queue queue,
-	cl_kernel k_init_ht, cl_kernel *k_rounds, cl_kernel k_sols,
-	cl_mem *buf_ht, cl_mem buf_sols, cl_mem buf_dbg, size_t dbg_size,
+	cl_kernel k_init_ht, cl_kernel *k_rounds, cl_kernel k_potential_sols, cl_kernel k_sols,
+	cl_mem *buf_ht, cl_mem buf_potential_sols, cl_mem buf_sols, cl_mem buf_dbg, size_t dbg_size,
 	uint8_t *header, size_t header_len, char do_increment,
 	size_t fixed_nonce_bytes, uint8_t *target, char *job_id,
 	uint32_t *shares, cl_mem *rowCounters, cl_mem buf_blake_st)
@@ -1052,6 +1013,17 @@ uint32_t solve_equihash(cl_device_id dev_id, cl_context ctx, cl_command_queue qu
 		examine_ht(round, queue, buf_ht, rowCounters[round % 2]);
 		examine_dbg(queue, buf_dbg, dbg_size);
 	}
+
+	check_clSetKernelArg(k_potential_sols, 0, &buf_ht[8]);
+	check_clSetKernelArg(k_potential_sols, 1, &buf_potential_sols);
+	check_clSetKernelArg(k_potential_sols, 2, &rowCounters[0]);
+	global_ws = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * LOCAL_WORK_SIZE_SOLS;
+	if (global_ws > NR_ROWS * THREADS_PER_ROW_SOLS)
+		global_ws = NR_ROWS * THREADS_PER_ROW_SOLS;
+	local_work_size = LOCAL_WORK_SIZE_POTENTIAL_SOLS;
+	check_clEnqueueNDRangeKernel(queue, k_potential_sols, 1, NULL,
+		&global_ws, &local_work_size, 0, NULL, NULL);
+
 	check_clSetKernelArg(k_sols, 0, &buf_ht[0]);
 	check_clSetKernelArg(k_sols, 1, &buf_ht[1]);
 	check_clSetKernelArg(k_sols, 2, &buf_ht[2]);
@@ -1061,16 +1033,15 @@ uint32_t solve_equihash(cl_device_id dev_id, cl_context ctx, cl_command_queue qu
 	check_clSetKernelArg(k_sols, 6, &buf_ht[6]);
 	check_clSetKernelArg(k_sols, 7, &buf_ht[7]);
 	check_clSetKernelArg(k_sols, 8, &buf_ht[8]);
-	check_clSetKernelArg(k_sols, 9, &buf_sols);
-	check_clSetKernelArg(k_sols, 10, &rowCounters[0]);
-	global_ws = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * LOCAL_WORK_SIZE_SOLS;
-	if (global_ws > NR_ROWS * THREADS_PER_ROW_SOLS)
-		global_ws = NR_ROWS * THREADS_PER_ROW_SOLS;
+	check_clSetKernelArg(k_sols, 9, &buf_potential_sols);
+	check_clSetKernelArg(k_sols, 10, &buf_sols);
 	local_work_size = LOCAL_WORK_SIZE_SOLS;
-	struct timeval start_time;
-	gettimeofday(&start_time, NULL);
+	global_ws = MAX_POTENTIAL_SOLS * local_work_size;
 	check_clEnqueueNDRangeKernel(queue, k_sols, 1, NULL,
 		&global_ws, &local_work_size, 0, NULL, NULL);
+
+	struct timeval start_time;
+	gettimeofday(&start_time, NULL);
 	clFlush(queue);
 	sol_found = verify_sols(queue, buf_sols, nonce_ptr, header,
 		fixed_nonce_bytes, target, job_id, shares, &start_time);
@@ -1248,8 +1219,8 @@ DWORD mining_mode_thread(LPVOID *args)
 	size_t		fixed_nonce_bytes;
 	cl_int      status;
 	cl_program program;
-	cl_kernel k_init_ht, k_rounds[PARAM_K], k_sols;
-	cl_mem              buf_ht[9], buf_sols, buf_dbg, rowCounters[2], buf_blake_st;
+	cl_kernel k_init_ht, k_rounds[PARAM_K], k_potential_sols, k_sols;
+	cl_mem              buf_ht[9], buf_potential_sols, buf_sols, buf_dbg, rowCounters[2], buf_blake_st;
 	void                *dbg = NULL;
 
 	if (binary) {
@@ -1296,6 +1267,9 @@ DWORD mining_mode_thread(LPVOID *args)
 		if (status != CL_SUCCESS || !k_rounds[round])
 			fatal("clCreateKernel (%d)\n", status);
 	}
+	k_potential_sols = clCreateKernel(program, "kernel_potential_sols", &status);
+	if (status != CL_SUCCESS || !k_potential_sols)
+		fatal("clCreateKernel (%d)\n", status);
 	k_sols = clCreateKernel(program, "kernel_sols", &status);
 	if (status != CL_SUCCESS || !k_sols)
 		fatal("clCreateKernel (%d)\n", status);
@@ -1315,6 +1289,7 @@ DWORD mining_mode_thread(LPVOID *args)
 	buf_ht[7] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
 	buf_ht[8] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
 	buf_sols = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, sizeof(sols_t), NULL);
+	buf_potential_sols = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, sizeof(potential_sols_t), NULL);
 	rowCounters[0] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, RC_SIZE, NULL);
 	rowCounters[1] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, RC_SIZE, NULL);
 	buf_blake_st = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_ONLY, 64, NULL);
@@ -1330,8 +1305,8 @@ DWORD mining_mode_thread(LPVOID *args)
 		LeaveCriticalSection(&cs);
 
 		uint32_t shares;
-		uint32_t num_sols = solve_equihash(ARGS->dev_id, ARGS->ctx, ARGS->queue, k_init_ht, k_rounds, k_sols, buf_ht,
-			buf_sols, buf_dbg, ARGS->dbg_size, header, ZCASH_BLOCK_HEADER_LEN, 1,
+		uint32_t num_sols = solve_equihash(ARGS->dev_id, ARGS->ctx, ARGS->queue, k_init_ht, k_rounds, k_potential_sols, k_sols, buf_ht,
+			buf_potential_sols, buf_sols, buf_dbg, ARGS->dbg_size, header, ZCASH_BLOCK_HEADER_LEN, 1,
 			fixed_nonce_bytes, target, job_id, &shares, rowCounters, buf_blake_st);
 
 		EnterCriticalSection(&cs);
@@ -1342,8 +1317,8 @@ DWORD mining_mode_thread(LPVOID *args)
 }
 
 void mining_mode(cl_device_id dev_id, cl_program program, cl_context ctx, cl_command_queue queue,
-	cl_kernel k_init_ht, cl_kernel *k_rounds, cl_kernel k_sols,
-	cl_mem *buf_ht, cl_mem buf_sols, cl_mem buf_dbg, size_t dbg_size,
+	cl_kernel k_init_ht, cl_kernel *k_rounds, cl_kernel k_potential_sols, cl_kernel k_sols,
+	cl_mem *buf_ht, cl_mem buf_potential_sols, cl_mem buf_sols, cl_mem buf_dbg, size_t dbg_size,
 	uint8_t *header, cl_mem *rowCounters, cl_mem buf_blake_st)
 {
 	char		line[4096];
@@ -1403,8 +1378,8 @@ void mining_mode(cl_device_id dev_id, cl_program program, cl_context ctx, cl_com
 
 		if (num_mining_mode_threads <= 1) {
 			uint32_t shares;
-			uint32_t num_sols = solve_equihash(dev_id, ctx, queue, k_init_ht, k_rounds, k_sols, buf_ht,
-				buf_sols, buf_dbg, dbg_size, header, ZCASH_BLOCK_HEADER_LEN, 1,
+			uint32_t num_sols = solve_equihash(dev_id, ctx, queue, k_init_ht, k_rounds, k_potential_sols, k_sols, buf_ht,
+				buf_potential_sols, buf_sols, buf_dbg, dbg_size, header, ZCASH_BLOCK_HEADER_LEN, 1,
 				fixed_nonce_bytes, target, job_id, &shares, rowCounters, buf_blake_st);
 			total += num_sols;
 			total_shares += shares;
@@ -1472,9 +1447,9 @@ void mining_mode(cl_device_id dev_id, cl_program program, cl_context ctx, cl_com
 
 void run_opencl(uint8_t *header, size_t header_len, cl_device_id *dev_id, cl_context ctx,
 	cl_command_queue queue, cl_program program, cl_kernel k_init_ht, cl_kernel *k_rounds,
-	cl_kernel k_sols)
+	cl_kernel k_potential_sols, cl_kernel k_sols)
 {
-	cl_mem              buf_ht[9], buf_sols, buf_dbg, rowCounters[2], buf_blake_st;
+	cl_mem              buf_ht[9], buf_potential_sols, buf_sols, buf_dbg, rowCounters[2], buf_blake_st;
 	void                *dbg = NULL;
 #ifdef ENABLE_DEBUG
 	size_t              dbg_size = NR_ROWS * THREADS_PER_ROW * sizeof(debug_t);
@@ -1503,6 +1478,7 @@ void run_opencl(uint8_t *header, size_t header_len, cl_device_id *dev_id, cl_con
 		buf_ht[7] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
 		buf_ht[8] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
 		buf_sols = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, sizeof(sols_t), NULL);
+		buf_potential_sols = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, sizeof(potential_sols_t), NULL);
 		rowCounters[0] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, RC_SIZE, NULL);
 		rowCounters[1] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, RC_SIZE, NULL);
 		buf_blake_st = check_clCreateBuffer(ctx, CL_MEM_READ_ONLY, 64, NULL);
@@ -1510,15 +1486,15 @@ void run_opencl(uint8_t *header, size_t header_len, cl_device_id *dev_id, cl_con
 	}
 #endif
 	if (mining)
-		mining_mode(*dev_id, program, ctx, queue, k_init_ht, k_rounds, k_sols, buf_ht,
-			buf_sols, buf_dbg, dbg_size, header, rowCounters, buf_blake_st);
+		mining_mode(*dev_id, program, ctx, queue, k_init_ht, k_rounds, k_potential_sols, k_sols, buf_ht,
+			buf_potential_sols, buf_sols, buf_dbg, dbg_size, header, rowCounters, buf_blake_st);
 	fprintf(stderr, "Running...\n");
 	total = 0;
 	uint64_t t0 = now();
 	// Solve Equihash for a few nonces
 	for (nonce = 0; nonce < nr_nonces; nonce++)
-		total += solve_equihash(*dev_id, ctx, queue, k_init_ht, k_rounds, k_sols, buf_ht,
-			buf_sols, buf_dbg, dbg_size, header, header_len, !!nonce,
+		total += solve_equihash(*dev_id, ctx, queue, k_init_ht, k_rounds, k_potential_sols, k_sols, buf_ht,
+			buf_potential_sols, buf_sols, buf_dbg, dbg_size, header, header_len, !!nonce,
 			0, NULL, NULL, NULL, rowCounters, buf_blake_st);
 	uint64_t t1 = now();
 	fprintf(stderr, "Total %" PRId64 " solutions in %.1f ms (%.1f Sol/s)\n",
@@ -1667,7 +1643,7 @@ void init_and_run_opencl(uint8_t *header, size_t header_len)
 	source_len = strlen(source);
 	cl_program program;
 	cl_kernel k_init_ht;
-	cl_kernel k_sols;
+	cl_kernel k_potential_sols, k_sols;
 #ifdef WIN32
 	if (!mining || num_mining_mode_threads <= 1) {
 #endif
@@ -1706,6 +1682,9 @@ void init_and_run_opencl(uint8_t *header, size_t header_len)
 			if (status != CL_SUCCESS || !k_rounds[round])
 				fatal("clCreateKernel (%d)\n", status);
 		}
+		k_potential_sols = clCreateKernel(program, "kernel_potential_sols", &status);
+		if (status != CL_SUCCESS || !k_potential_sols)
+			fatal("clCreateKernel (%d)\n", status);
 		k_sols = clCreateKernel(program, "kernel_sols", &status);
 		if (status != CL_SUCCESS || !k_sols)
 			fatal("clCreateKernel (%d)\n", status);
@@ -1713,7 +1692,7 @@ void init_and_run_opencl(uint8_t *header, size_t header_len)
 	}
 #endif
 	// Run
-	run_opencl(header, header_len, &dev_id, context, queue, program, k_init_ht, k_rounds, k_sols);
+	run_opencl(header, header_len, &dev_id, context, queue, program, k_init_ht, k_rounds, k_potential_sols, k_sols);
 	// Release resources
 	assert(CL_SUCCESS == 0);
 	status = CL_SUCCESS;
