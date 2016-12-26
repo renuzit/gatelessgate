@@ -898,7 +898,8 @@ void kernel_sols(__global char *ht0,
 					inputs_b[i * 2 + 1] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_a[i]), DECODE_SLOT1(inputs_a[i]));
 					inputs_b[i * 2] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_a[i]), DECODE_SLOT0(inputs_a[i]));
 				}
-			} else {
+			}
+			else {
 				for (uint i = get_local_id(0); i < (1 << (8 - round)); i += get_local_size(0)) {
 					inputs_a[i * 2 + 1] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_b[i]), DECODE_SLOT1(inputs_b[i]));
 					inputs_a[i * 2] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_b[i]), DECODE_SLOT0(inputs_b[i]));
@@ -906,7 +907,7 @@ void kernel_sols(__global char *ht0,
 			}
 			barrier(CLK_LOCAL_MEM_FENCE);
 		}
-		barrier(CLK_LOCAL_MEM_FENCE);
+		//barrier(CLK_LOCAL_MEM_FENCE);
 
 		int	dup_to_watch = inputs_a[256 * 2 - 1];
 		for (uint j = 3 + get_local_id(0); j < 256 * 2 - 2; j += get_local_size(0))
@@ -915,13 +916,16 @@ void kernel_sols(__global char *ht0,
 		barrier(CLK_LOCAL_MEM_FENCE);
 
 		// solution appears valid, copy it to sols
-		if (get_local_id(0) == 0 && !dup_counter) {
-			uint sol_i = atom_inc(&sols->nr);
-			if (sol_i >= MAX_SOLS)
-				return;
-			for (uint i = 0; i < (1 << PARAM_K); i++)
+		__local uint sol_i;
+		if (get_local_id(0) == 0 && !dup_counter)
+			sol_i = atom_inc(&sols->nr);
+		barrier(CLK_LOCAL_MEM_FENCE);
+		if (sol_i < MAX_SOLS && !dup_counter) {
+			for (uint i = get_local_id(0); i < (1 << PARAM_K); i += get_local_size(0))
 				sols->values[sol_i][i] = inputs_a[i];
-			sols->valid[sol_i] = 1;
+			if (get_local_id(0) == 0)
+				sols->valid[sol_i] = 1;
 		}
+		barrier(CLK_LOCAL_MEM_FENCE);
 	}
 }
