@@ -1399,8 +1399,8 @@ void mining_mode(cl_device_id dev_id, cl_program program, cl_context ctx, cl_com
 }
 #else
 void mining_mode(cl_device_id dev_id, cl_program program, cl_context ctx, cl_command_queue queue,
-	cl_kernel k_init_ht, cl_kernel *k_rounds, cl_kernel k_sols,
-	cl_mem *buf_ht, cl_mem buf_sols, cl_mem buf_dbg, size_t dbg_size,
+	cl_kernel k_init_ht, cl_kernel *k_rounds, cl_kernel k_potential_sols, cl_kernel k_sols,
+	cl_mem *buf_ht, cl_mem buf_potential_sols, cl_mem buf_sols, cl_mem buf_dbg, size_t dbg_size,
 	uint8_t *header, cl_mem *rowCounters, cl_mem buf_blake_st)
 {
 	char		line[4096];
@@ -1431,8 +1431,8 @@ void mining_mode(cl_device_id dev_id, cl_program program, cl_context ctx, cl_com
 				header, ZCASH_BLOCK_HEADER_LEN,
 				&fixed_nonce_bytes);
 		}
-		total += solve_equihash(dev_id, ctx, queue, k_init_ht, k_rounds, k_sols, buf_ht,
-			buf_sols, buf_dbg, dbg_size, header, ZCASH_BLOCK_HEADER_LEN, 1,
+		total += solve_equihash(dev_id, ctx, queue, k_init_ht, k_rounds, k_potential_sols, k_sols, buf_ht,
+			buf_potential_sols, buf_sols, buf_dbg, dbg_size, header, ZCASH_BLOCK_HEADER_LEN, 1,
 			fixed_nonce_bytes, target, job_id, &shares, rowCounters, buf_blake_st);
 		total_shares += shares;
 		if ((t1 = now()) > t0 + status_period)
