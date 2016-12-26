@@ -23,7 +23,6 @@ CFLAGS = -O2 -std=gnu99 -pedantic -Wextra -Wall \
     -Wno-deprecated-declarations \
     -Wno-overlength-strings
 LDFLAGS = -rdynamic -L${LIBOPENCL}
-LDLIBS = -lOpenCL
 OBJ = main.o blake.o sha256.o
 INCLUDES = blake.h param.h _kernel.h sha256.h
 
