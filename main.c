@@ -464,14 +464,14 @@ void examine_ht(unsigned round, cl_command_queue queue, cl_mem *hash_table_buffe
 		return;
 	if (NR_ROWS_LOG >= 15) {
 		for (uint i = 0; i < PARAM_K; ++i) {
-			hash_tables[i] = (uint8_t *)malloc(HT_SIZE);
+			hash_tables[i] = (uint8_t *)malloc(HASH_TABLE_SIZE(round));
 			if (!hash_tables[i])
 				fatal("malloc: %s\n", strerror(errno));
 			check_clEnqueueReadBuffer(queue,
 				hash_table_buffers[i],
 				CL_TRUE,        // cl_bool	blocking_read
 				0,		      // size_t	offset
-				HT_SIZE,        // size_t	size
+				HASH_TABLE_SIZE(round),        // size_t	size
 				hash_tables[i], // void		*ptr
 				0,		// cl_uint	num_events_in_wait_list
 				NULL,	// cl_event	*event_wait_list
@@ -507,7 +507,7 @@ void examine_ht(unsigned round, cl_command_queue queue, cl_mem *hash_table_buffe
 
 		if (0 && NR_ROWS_LOG >= 15) {
 			for (uint32_t slot_index = 0; slot_index < NR_SLOTS(round); ++slot_index) {
-				uint32_t *slot = hash_tables[round] + (row * NR_SLOTS(round) + slot_index) * (ADJUSTED_SLOT_LEN(round) / 4);
+				uint32_t *slot = hash_tables[round] + (row * NR_SLOTS(round) + slot_index) * (SLOT_LEN(round) / 4);
 				uint32_t i = slot[0];
 				if (round) {
 					uint32_t prev_row = DECODE_ROW(i);
@@ -517,8 +517,8 @@ void examine_ht(unsigned round, cl_command_queue queue, cl_mem *hash_table_buffe
 						printf("Invalid reference (i: 0x%08x).\n", i);
 					}
 					else {
-						uint32_t *prev_slot0 = hash_tables[round - 1] + (prev_row * NR_SLOTS(round - 1) + prev_slot0_index) * (ADJUSTED_SLOT_LEN(round - 1) / 4);
-						uint32_t *prev_slot1 = hash_tables[round - 1] + (prev_row * NR_SLOTS(round - 1) + prev_slot1_index) * (ADJUSTED_SLOT_LEN(round - 1) / 4);
+						uint32_t *prev_slot0 = hash_tables[round - 1] + (prev_row * NR_SLOTS(round - 1) + prev_slot0_index) * (SLOT_LEN(round - 1) / 4);
+						uint32_t *prev_slot1 = hash_tables[round - 1] + (prev_row * NR_SLOTS(round - 1) + prev_slot1_index) * (SLOT_LEN(round - 1) / 4);
 						if (0)// TODO
 							printf("Invalid reference (row: %u, i: 0x%08x, slot0: 0x%08x 0x%08x, slot1: 0x%08x 0x%08x).\n",
 							(unsigned int)row,
@@ -1333,15 +1333,15 @@ DWORD mining_mode_thread(LPVOID *args)
 		fatal("malloc: %s\n", strerror(errno));
 	buf_dbg = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE |
 		CL_MEM_COPY_HOST_PTR, ARGS->dbg_size, dbg);
-	buf_ht[0] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-	buf_ht[1] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-	buf_ht[2] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-	buf_ht[3] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-	buf_ht[4] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-	buf_ht[5] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-	buf_ht[6] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-	buf_ht[7] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-	buf_ht[8] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
+	buf_ht[0] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(0), NULL);
+	buf_ht[1] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(1), NULL);
+	buf_ht[2] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(2), NULL);
+	buf_ht[3] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(3), NULL);
+	buf_ht[4] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(4), NULL);
+	buf_ht[5] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(5), NULL);
+	buf_ht[6] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(6), NULL);
+	buf_ht[7] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(7), NULL);
+	buf_ht[8] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(8), NULL);
 	buf_sols = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, sizeof(sols_t), NULL);
 	buf_potential_sols = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, sizeof(potential_sols_t), NULL);
 	rowCounters[0] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, RC_SIZE, NULL);
@@ -1513,7 +1513,16 @@ void run_opencl(uint8_t *header, size_t header_len, cl_device_id *dev_id, cl_con
 	uint64_t		nonce;
 	uint64_t		total;
 	if (!mining || verbose)
-		fprintf(stderr, "Hash tables will use %.1f MB\n", 9.0 * HT_SIZE / 1e6);
+		fprintf(stderr, "Hash tables will use %.1f MB\n", 
+			    (  HASH_TABLE_SIZE(0)
+				 + HASH_TABLE_SIZE(1)
+				 + HASH_TABLE_SIZE(2)
+				 + HASH_TABLE_SIZE(3)
+				 + HASH_TABLE_SIZE(4)
+				 + HASH_TABLE_SIZE(5)
+				 + HASH_TABLE_SIZE(6)
+				 + HASH_TABLE_SIZE(7)
+				 + HASH_TABLE_SIZE(8)) / 1e6);
 #ifdef WIN32
 	if (!mining || num_mining_mode_threads <= 1) {
 #endif
@@ -1522,15 +1531,15 @@ void run_opencl(uint8_t *header, size_t header_len, cl_device_id *dev_id, cl_con
 			fatal("malloc: %s\n", strerror(errno));
 		buf_dbg = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE |
 			CL_MEM_COPY_HOST_PTR, dbg_size, dbg);
-		buf_ht[0] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-		buf_ht[1] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-		buf_ht[2] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-		buf_ht[3] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-		buf_ht[4] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-		buf_ht[5] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-		buf_ht[6] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-		buf_ht[7] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
-		buf_ht[8] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HT_SIZE, NULL);
+		buf_ht[0] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(0), NULL);
+		buf_ht[1] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(1), NULL);
+		buf_ht[2] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(2), NULL);
+		buf_ht[3] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(3), NULL);
+		buf_ht[4] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(4), NULL);
+		buf_ht[5] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(5), NULL);
+		buf_ht[6] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(6), NULL);
+		buf_ht[7] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(7), NULL);
+		buf_ht[8] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(8), NULL);
 		buf_sols = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, sizeof(sols_t), NULL);
 		buf_potential_sols = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, sizeof(potential_sols_t), NULL);
 		rowCounters[0] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, RC_SIZE, NULL);

@@ -109,7 +109,7 @@ void kernel_init_ht(__global char *ht, __global uint *rowCounters)
 
 __global char *get_slot_ptr(__global char *ht, uint round, uint row, uint slot)
 {
-	return ht + (row * NR_SLOTS(round) + slot) * ADJUSTED_SLOT_LEN(round);
+	return ht + (row * NR_SLOTS(round) + slot) * SLOT_LEN(round);
 }
 
 __global uint *get_xi_ptr(__global char *ht, uint round, uint row, uint slot)

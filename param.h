@@ -134,9 +134,9 @@
 #define NR_INPUTS              (1 << PREFIX)
 #define NR_ROWS                         (1 << NR_ROWS_LOG)
 // Length of 1 element (slot) in byte
-#define SLOT_LEN                        32
+#define MAX_SLOT_LEN                        32
 // Total size of hash table
-#define HT_SIZE				(NR_ROWS * MAX_NR_SLOTS * SLOT_LEN)
+#define HASH_TABLE_SIZE(round) (NR_ROWS * MAX_NR_SLOTS * SLOT_LEN(round))
 // Length of Zcash block header, nonce (part of header)
 #define ZCASH_BLOCK_HEADER_LEN		140
 // Offset of nTime in header
@@ -278,9 +278,9 @@ typedef struct	potential_sols_s
 #define MAX_NUM_MINING_MODE_THREADS 16
 
 #if THREADS_PER_WRITE == 1
-#define ADJUSTED_SLOT_LEN(round) (((round) <= 5) ? SLOT_LEN : SLOT_LEN - 16)
+#define SLOT_LEN(round) (((round) <= 5) ? MAX_SLOT_LEN : MAX_SLOT_LEN - 16)
 #else
-#define ADJUSTED_SLOT_LEN(round) SLOT_LEN
+#define SLOT_LEN(round) MAX_SLOT_LEN
 #endif
 
 #define NEXT_PRIME_NO(n) \
