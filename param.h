@@ -43,7 +43,7 @@
 #else
 
 #define NR_ROWS_LOG                    12
-#define LOCAL_WORK_SIZE                256
+#define LOCAL_WORK_SIZE(round)         256
 #define LOCAL_WORK_SIZE_POTENTIAL_SOLS 256
 
 /*
@@ -93,32 +93,32 @@
 
 // You should not touch these parameters unless you know what you are doing.
 #if NR_ROWS_LOG == 12
-#define MAX_NR_SLOTS             684
-#define NR_SLOTS(round)          (((round) <= 6) ? (MAX_NR_SLOTS * 87 / 100) : (MAX_NR_SLOTS))
+#define NR_SLOTS_BASE             684
+#define NR_SLOTS(round)          (((round) <= 6) ? (NR_SLOTS_BASE * 87 / 100) : (NR_SLOTS_BASE))
 #define LDS_COLL_SIZE(round)     (NR_SLOTS(round) * 90 / 100)
 #define EXTRA_BITS_FOR_BINS_SOLS 0
 
 #elif NR_ROWS_LOG == 13
-#define MAX_NR_SLOTS             360
-#define NR_SLOTS(round)          (((round) <= 6) ? (MAX_NR_SLOTS * 87 / 100) : (MAX_NR_SLOTS))
+#define NR_SLOTS_BASE             360
+#define NR_SLOTS(round)          (((round) <= 6) ? (NR_SLOTS_BASE * 87 / 100) : (NR_SLOTS_BASE))
 #define LDS_COLL_SIZE(round)     (NR_SLOTS(round) * 100 / 100)
 #define EXTRA_BITS_FOR_BINS_SOLS 0
 
 #elif NR_ROWS_LOG == 14
-#define MAX_NR_SLOTS             200
-#define NR_SLOTS(round)          (((round) <= 6) ? (MAX_NR_SLOTS * 87 / 100) : (MAX_NR_SLOTS))
+#define NR_SLOTS_BASE             200
+#define NR_SLOTS(round)          (((round) <= 6) ? (NR_SLOTS_BASE * 87 / 100) : (NR_SLOTS_BASE))
 #define LDS_COLL_SIZE(round)     (NR_SLOTS(round) * 140 / 100)
 #define EXTRA_BITS_FOR_BINS_SOLS 0
 
 #elif NR_ROWS_LOG == 15
-#define MAX_NR_SLOTS             126
-#define NR_SLOTS(round)          (((round) <= 6) ? (MAX_NR_SLOTS * 87 / 100) : (MAX_NR_SLOTS))
+#define NR_SLOTS_BASE             126
+#define NR_SLOTS(round)          (((round) <= 6) ? (NR_SLOTS_BASE * 87 / 100) : (NR_SLOTS_BASE))
 #define LDS_COLL_SIZE(round)     (NR_SLOTS(round) * 150 / 100)
 #define EXTRA_BITS_FOR_BINS_SOLS 0
 
 #elif NR_ROWS_LOG == 16
-#define MAX_NR_SLOTS             61
-#define NR_SLOTS(round)          (((round) <= 6) ? (MAX_NR_SLOTS * 87 / 100) : (MAX_NR_SLOTS))
+#define NR_SLOTS_BASE             61
+#define NR_SLOTS(round)          (((round) <= 6) ? (NR_SLOTS_BASE * 87 / 100) : (NR_SLOTS_BASE))
 #define LDS_COLL_SIZE(round)     (NR_SLOTS(round) * 2500 / 100)
 #define EXTRA_BITS_FOR_BINS_SOLS 0
 
@@ -136,7 +136,7 @@
 // Length of 1 element (slot) in byte
 #define MAX_SLOT_LEN                        32
 // Total size of hash table
-#define HASH_TABLE_SIZE(round) (NR_ROWS * MAX_NR_SLOTS * SLOT_LEN(round))
+#define HASH_TABLE_SIZE(round) (NR_ROWS * NR_SLOTS_BASE * SLOT_LEN(round))
 // Length of Zcash block header, nonce (part of header)
 #define ZCASH_BLOCK_HEADER_LEN		140
 // Offset of nTime in header
@@ -164,32 +164,32 @@
 // Length of SHA256 target
 #define SHA256_TARGET_LEN               (256 / 8)
 
-#if (MAX_NR_SLOTS < 3)
+#if (NR_SLOTS_BASE < 3)
 #define BITS_PER_ROW 2
 #define ROWS_PER_UINT 16
 #define ROW_MASK 0x03
-#elif (MAX_NR_SLOTS < 7)
+#elif (NR_SLOTS_BASE < 7)
 #define BITS_PER_ROW 3
 #define ROWS_PER_UINT 10
 #define ROW_MASK 0x07
-#elif (MAX_NR_SLOTS < 15)
+#elif (NR_SLOTS_BASE < 15)
 #define BITS_PER_ROW 4
 #define ROWS_PER_UINT 8
 #define ROW_MASK 0x0F
-#elif (MAX_NR_SLOTS < 31)
+#elif (NR_SLOTS_BASE < 31)
 #define BITS_PER_ROW 5
 #define ROWS_PER_UINT 6
 #define ROW_MASK 0x1F
-#elif (MAX_NR_SLOTS < 63)
+#elif (NR_SLOTS_BASE < 63)
 #define BITS_PER_ROW 6
 #define ROWS_PER_UINT 5
 #define ROW_MASK 0x3F
-#elif (MAX_NR_SLOTS < 255)
+#elif (NR_SLOTS_BASE < 255)
 #define BITS_PER_ROW 8
 #define ROWS_PER_UINT 4
 #define ROW_MASK 0xFF
 #elif 0
-//#elif (MAX_NR_SLOTS < 1023)
+//#elif (NR_SLOTS_BASE < 1023)
 #define BITS_PER_ROW 10
 #define ROWS_PER_UINT 3
 #define ROW_MASK 0x3FF
@@ -221,7 +221,7 @@ typedef struct	potential_sols_s
 	uint	values[MAX_POTENTIAL_SOLS][2];
 } potential_sols_t;
 
-#if NR_ROWS_LOG <= 12 && MAX_NR_SLOTS <= (1 << 10)
+#if NR_ROWS_LOG <= 12 && NR_SLOTS_BASE <= (1 << 10)
 
 #define ENCODE_INPUTS(row, slot0, slot1) \
     ((row << 20) | ((slot1 & 0x3ff) << 10) | (slot0 & 0x3ff))
@@ -229,7 +229,7 @@ typedef struct	potential_sols_s
 #define DECODE_SLOT1(REF) ((REF >> 10) & 0x3ff)
 #define DECODE_SLOT0(REF) (REF & 0x3ff)
 
-#elif NR_ROWS_LOG <= 14 && MAX_NR_SLOTS <= (1 << 9)
+#elif NR_ROWS_LOG <= 14 && NR_SLOTS_BASE <= (1 << 9)
 
 #define ENCODE_INPUTS(row, slot0, slot1) \
     ((row << 18) | ((slot1 & 0x1ff) << 9) | (slot0 & 0x1ff))
@@ -237,7 +237,7 @@ typedef struct	potential_sols_s
 #define DECODE_SLOT1(REF) ((REF >> 9) & 0x1ff)
 #define DECODE_SLOT0(REF) (REF & 0x1ff)
 
-#elif NR_ROWS_LOG <= 16 && MAX_NR_SLOTS <= (1 << 8)
+#elif NR_ROWS_LOG <= 16 && NR_SLOTS_BASE <= (1 << 8)
 
 #define ENCODE_INPUTS(row, slot0, slot1) \
     ((row << 16) | ((slot1 & 0xff) << 8) | (slot0 & 0xff))
@@ -245,7 +245,7 @@ typedef struct	potential_sols_s
 #define DECODE_SLOT1(REF) ((REF >> 8) & 0xff)
 #define DECODE_SLOT0(REF) (REF & 0xff)
 
-#elif NR_ROWS_LOG <= 18 && MAX_NR_SLOTS <= (1 << 7)
+#elif NR_ROWS_LOG <= 18 && NR_SLOTS_BASE <= (1 << 7)
 
 #define ENCODE_INPUTS(row, slot0, slot1) \
     ((row << 14) | ((slot1 & 0x7f) << 7) | (slot0 & 0x7f))
@@ -253,7 +253,7 @@ typedef struct	potential_sols_s
 #define DECODE_SLOT1(REF) ((REF >> 7) & 0x7f)
 #define DECODE_SLOT0(REF) (REF & 0x7f)
 
-#elif NR_ROWS_LOG == 19 && MAX_NR_SLOTS <= (1 << 6)
+#elif NR_ROWS_LOG == 19 && NR_SLOTS_BASE <= (1 << 6)
 
 #define ENCODE_INPUTS(row, slot0, slot1) \
     ((row << 13) | ((slot1 & 0x3f) << 6) | (slot0 & 0x3f)) /* 1 spare bit */
@@ -261,7 +261,7 @@ typedef struct	potential_sols_s
 #define DECODE_SLOT1(REF) ((REF >> 6) & 0x3f)
 #define DECODE_SLOT0(REF) (REF & 0x3f)
 
-#elif NR_ROWS_LOG == 20 && MAX_NR_SLOTS <= (1 << 6)
+#elif NR_ROWS_LOG == 20 && NR_SLOTS_BASE <= (1 << 6)
 
 #define ENCODE_INPUTS(row, slot0, slot1) \
     ((row << 12) | ((slot1 & 0x3f) << 6) | (slot0 & 0x3f))
@@ -473,25 +473,21 @@ typedef struct	potential_sols_s
 	((n) <= 32768) ? 32768 : \
                      (n))
 
-#if MAX_NR_SLOTS < 255
+#if NR_SLOTS_BASE < 255
 #define BIN_INDEX_TYPE uchar
 #define BIN_INDEXES_IN_UINT 4
 #define BIN_INDEX_MASK 0xff
 #define BITS_IN_BIN_INDEX 8
-#elif MAX_NR_SLOTS < 1024
+#elif NR_SLOTS_BASE < 1024
 #define BIN_INDEX_TYPE ushort
 #define BIN_INDEXES_IN_UINT 3
 #define BIN_INDEX_MASK 0x3ff
 #define BITS_IN_BIN_INDEX 10
-#elif MAX_NR_SLOTS < 65535
+#elif NR_SLOTS_BASE < 65535
 #define BIN_INDEX_TYPE ushort
 #define BIN_INDEXES_IN_UINT 2
 #define BIN_INDEX_MASK 0xffff
 #define BITS_IN_BIN_INDEX 16
 #else
-#error "Unsupported MAX_NR_SLOTS"
+#error "Unsupported NR_SLOTS_BASE"
 #endif
-
-// Don't change these.
-#define THREADS_PER_ROW          LOCAL_WORK_SIZE
-#define THREADS_PER_ROW_SOLS     LOCAL_WORK_SIZE_SOLS
