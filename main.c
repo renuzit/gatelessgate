@@ -1851,13 +1851,6 @@ void usage(const char *progname)
 		, progname);
 }
 
-void tests(void)
-{
-	// if NR_ROWS_LOG is smaller, there is not enough space to store all bits
-	// of Xi in a 32-byte slot
-	assert(NR_ROWS_LOG >= 12);
-}
-
 int main(int argc, char **argv)
 {
 	uint8_t             header[ZCASH_BLOCK_HEADER_LEN] = { 0, };
@@ -1910,7 +1903,6 @@ int main(int argc, char **argv)
 			fatal("Try '%s --help'\n", argv[0]);
 			break;
 		}
-	tests();
 	if (mining)
 		puts("Gateless Gate mining mode ready"), fflush(stdout);
 	if (!mining) {
