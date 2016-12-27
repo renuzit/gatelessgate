@@ -39,10 +39,12 @@
 #define NR_ROWS_LOG(round)             12
 #define MAX_NR_ROWS_LOG                12
 
-#define THREADS_PER_WRITE(round)       1
+#define THREADS_PER_WRITE(round)       ((round) <= 5 ? 1 : 1)
 #define SLOT_LEN(round)                (((round) >= 8) ? MAX_SLOT_LEN - 24 : \
                                         ((round) >= 6) ? MAX_SLOT_LEN - 16 : \
                                                          MAX_SLOT_LEN)
+#define OPTIM_16BYTE_WRITES
+#define OPTIM_8BYTE_WRITES
 
 #define LOCAL_WORK_SIZE(round)         ((NR_ROWS_LOG((round) - 1) <= 14) ? 256 : \
                                         (NR_ROWS_LOG((round) - 1) <= 15) ? 128 : \
@@ -53,13 +55,15 @@
 
 #else
 
-#define NR_ROWS_LOG(round)             ((round) <= 4 ? 14 : 12)
-#define MAX_NR_ROWS_LOG                14
+#define NR_ROWS_LOG(round)             ((round) <= 4 ? 13 : 12)
+#define MAX_NR_ROWS_LOG                13
 
 #define THREADS_PER_WRITE(round)       ((round) <= 5 ? 2 : 1)
 #define SLOT_LEN(round)                (((round) >= 8) ? MAX_SLOT_LEN - 24 : \
                                         ((round) >= 6) ? MAX_SLOT_LEN - 16 : \
                                                          MAX_SLOT_LEN)
+#define OPTIM_16BYTE_WRITES
+#define OPTIM_8BYTE_WRITES
 
 #define LOCAL_WORK_SIZE(round)         ((NR_ROWS_LOG((round) - 1) <= 14) ? 256 : \
                                         (NR_ROWS_LOG((round) - 1) <= 15) ? 128 : \
