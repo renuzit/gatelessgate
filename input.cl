@@ -75,7 +75,7 @@ typedef __global slot_t *global_pointer_to_slot_t;
 __kernel
 void kernel_init_ht(__global char *ht, __global uint *rowCounters)
 {
-	if (get_global_id(0) < RC_SIZE / 4)
+	if (get_global_id(0) < ROW_COUNTERS_SIZE / 4)
 		rowCounters[get_global_id(0)] = 0;
 }
 
@@ -122,52 +122,52 @@ __global uint *get_ref_ptr(__global char *ht, uint round, uint row, uint slot)
 	return get_xi_ptr(ht, round, row, slot) + UINTS_IN_XI(round);
 }
 
-void get_row_counters_index(uint *rowIdx, uint *rowOffset, uint row)
+void get_row_counters_index(uint round, uint *rowIdx, uint *rowOffset, uint row)
 {
-	*rowIdx = row / ROWS_PER_UINT;
-	*rowOffset = BITS_PER_ROW * (row % ROWS_PER_UINT);
+	*rowIdx = row / ROWS_PER_UINT(round);
+	*rowOffset = BITS_PER_ROW(round) * (row % ROWS_PER_UINT(round));
 }
 
 uint get_row(uint round, uint xi0)
 {
-	uint           row;
-#if NR_ROWS_LOG == 12
-	if (!(round % 2))
-		row = (xi0 & 0xfff);
-	else
-		row = ((xi0 & 0x0f0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
-#elif NR_ROWS_LOG == 13
-	if (!(round % 2))
-		row = (xi0 & 0x1fff);
-	else
-		row = ((xi0 & 0x1f0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
-#elif NR_ROWS_LOG == 14
-	if (!(round % 2))
-		row = (xi0 & 0x3fff);
-	else
-		row = ((xi0 & 0x3f0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
-#elif NR_ROWS_LOG == 15
-	if (!(round % 2))
-		row = (xi0 & 0x7fff);
-	else
-		row = ((xi0 & 0x7f0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
-#elif NR_ROWS_LOG == 16
-	if (!(round % 2))
-		row = (xi0 & 0xffff);
-	else
-		row = ((xi0 & 0xff0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
-#else
-#error "unsupported NR_ROWS_LOG"
-#endif
+	uint           row = 0;
+
+	if (NR_ROWS_LOG(round) == 12) {
+		if (!(round % 2))
+			row = (xi0 & 0xfff);
+		else
+			row = ((xi0 & 0x0f0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
+	} else if (NR_ROWS_LOG(round) == 13) {
+		if (!(round % 2))
+			row = (xi0 & 0x1fff);
+		else
+			row = ((xi0 & 0x1f0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
+	} else if (NR_ROWS_LOG(round) == 14) {
+		if (!(round % 2))
+			row = (xi0 & 0x3fff);
+		else
+			row = ((xi0 & 0x3f0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
+	} else if (NR_ROWS_LOG(round) == 15) {
+		if (!(round % 2))
+			row = (xi0 & 0x7fff);
+		else
+			row = ((xi0 & 0x7f0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
+	} else if (NR_ROWS_LOG(round) == 16) {
+		if (!(round % 2))
+			row = (xi0 & 0xffff);
+		else
+			row = ((xi0 & 0xff0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
+	}
+
 	return row;
 }
 
 uint inc_row_counter(uint round, __global uint *rowCounters, uint row)
 {
 	uint rowIdx, rowOffset;
-	get_row_counters_index(&rowIdx, &rowOffset, row);
+	get_row_counters_index(round, &rowIdx, &rowOffset, row);
 	uint nr_slots = atom_add(rowCounters + rowIdx, 1 << rowOffset);
-	nr_slots = (nr_slots >> rowOffset) & ROW_MASK;
+	nr_slots = (nr_slots >> rowOffset) & ROW_MASK(round);
 	if (nr_slots >= NR_SLOTS(round)) {
 		// avoid overflows
 		atom_sub(rowCounters + rowIdx, 1 << rowOffset);
@@ -437,25 +437,21 @@ void kernel_round0(__constant ulong *blake_state_const, __global char *ht,
 // single-thread reads, parallel writes
 uint xor_and_store(uint round, __global char *ht_dst, uint row,
 				   uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
-				   __global uint *rowCounters
-#if THREADS_PER_WRITE != 1
-	, __local slot_t *slot_write_cache,
-	  __local global_pointer_to_slot_t *slot_ptrs
-#endif
-) {
+				   __global uint *rowCounters,
+	               __local slot_t *slot_write_cache,
+	               __local global_pointer_to_slot_t *slot_ptrs) {
 	uint ret = 0;
 	uint xi0, xi1, xi2, xi3, xi4, xi5;
-	uint thread_index = get_local_id(0) % THREADS_PER_WRITE;
+	uint thread_index = get_local_id(0) % THREADS_PER_WRITE(round);
 
 #if NR_ROWS_LOG < 8 && NR_ROWS_LOG > 20
 #error "unsupported NR_ROWS_LOG"
 #endif
+
 	slot_t slot;
 	__global slot_t *p = 0;
-#if THREADS_PER_WRITE != 1
-	slot_ptrs[get_local_id(0)] = 0;
-	barrier(CLK_LOCAL_MEM_FENCE);
-#endif
+    if (THREADS_PER_WRITE(round) > 1)
+		slot_ptrs[get_local_id(0)] = (__global slot_t *)get_slot_ptr(ht_dst, round, NR_ROWS(round) - 1, NR_SLOTS(round) - 1); // dummy
 
 	if (ai && bi) {
 		xi0 = *ai;
@@ -489,59 +485,49 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 			uint new_slot_index = inc_row_counter(round, rowCounters, new_row);
 			if (new_slot_index >= NR_SLOTS(round)) {
 				ret = 1;
+			} else if (THREADS_PER_WRITE(round) == 1) {
+				slot.slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
+				slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
+				slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
+				slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
+				slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
+				slot.slot.xi[5] = ((xi5 >> 8));
+				slot.slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(round - 1, row, slot_a, slot_b);
+				p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
 			} else {
-#if THREADS_PER_WRITE == 1
-				p
-#else
-				slot_ptrs[get_local_id(0)]
-#endif
-				    = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
+				slot_write_cache[get_local_id(0)].slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
+				slot_write_cache[get_local_id(0)].slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
+				slot_write_cache[get_local_id(0)].slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
+				slot_write_cache[get_local_id(0)].slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
+				slot_write_cache[get_local_id(0)].slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
+				slot_write_cache[get_local_id(0)].slot.xi[5] = ((xi5 >> 8));
+				slot_write_cache[get_local_id(0)].slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(round - 1, row, slot_a, slot_b);
+				slot_ptrs[get_local_id(0)] = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
 			}
 		}
 	}
 
-#if THREADS_PER_WRITE == 1
-	if (p) {
-		slot.slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
-		slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
-		slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
-		slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
-		slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
-		slot.slot.xi[5] = ((xi5 >> 8));
-		slot.slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(row, slot_a, slot_b);
+	barrier(CLK_LOCAL_MEM_FENCE);
+	if (THREADS_PER_WRITE(round) == 1 && p) {
 		if (round <= 5)
 			*(__global uint8 *)p = slot.ui8;
-		else
+		else if (round <= 7)
 			*(__global uint4 *)p = slot.ui4[0];
-	}
-#else
-	barrier(CLK_LOCAL_MEM_FENCE);
-	if (slot_ptrs[get_local_id(0)]) {
-		slot_write_cache[get_local_id(0)].slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
-		slot_write_cache[get_local_id(0)].slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
-		slot_write_cache[get_local_id(0)].slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
-		slot_write_cache[get_local_id(0)].slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
-		slot_write_cache[get_local_id(0)].slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
-		slot_write_cache[get_local_id(0)].slot.xi[5] = ((xi5 >> 8));
-		slot_write_cache[get_local_id(0)].slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(row, slot_a, slot_b);
-	}
-	barrier(CLK_LOCAL_MEM_FENCE);
-	uint local_id_base = get_local_id(0) - get_local_id(0) % THREADS_PER_WRITE;
-	for (uint write_index = local_id_base; write_index < local_id_base + THREADS_PER_WRITE; ++write_index) {
-		if (slot_ptrs[write_index]) {
-#if THREADS_PER_WRITE == 2 
-			* ((__global uint4 *)slot_ptrs[write_index] + thread_index) = slot_write_cache[write_index].ui4[thread_index];
-#elif THREADS_PER_WRITE == 4
-			* ((__global uint2 *)slot_ptrs[write_index] + thread_index) = slot_write_cache[write_index].ui2[thread_index];
-#elif THREADS_PER_WRITE == 8
-			* ((__global uint *)slot_ptrs[write_index] + thread_index) = slot_write_cache[write_index].ui[thread_index];
-#else
-#error "unsupported THREADS_PER_WRITE"
-#endif
+		else
+			*(__global uint2 *)p = slot.ui2[0];
+	} else if (THREADS_PER_WRITE(round) > 1) {
+		uint local_id_base = get_local_id(0) - get_local_id(0) % THREADS_PER_WRITE(round);
+		for (uint write_index = local_id_base; write_index < local_id_base + THREADS_PER_WRITE(round)	; ++write_index) {
+			if (THREADS_PER_WRITE(round) == 2) {
+				*((__global uint4 *)slot_ptrs[write_index] + thread_index) = slot_write_cache[write_index].ui4[thread_index];
+			} else if (THREADS_PER_WRITE(round) == 4) {
+				*((__global uint2 *)slot_ptrs[write_index] + thread_index) = slot_write_cache[write_index].ui2[thread_index];
+			} else if (THREADS_PER_WRITE(round) == 8) {
+				*((__global uint *)slot_ptrs[write_index] + thread_index) = slot_write_cache[write_index].ui[thread_index];
+			}
 		}
 	}
 	barrier(CLK_LOCAL_MEM_FENCE);
-#endif
 	return ret;
 }
 
@@ -560,43 +546,37 @@ void equihash_round(uint round,
 					__global uint *rowCountersSrc,
 					__global uint *rowCountersDst,
 					__local uint *bin_first_slots,
-					__local BIN_INDEX_TYPE *bin_next_slots)
+					__local BIN_INDEX_TYPE *bin_next_slots,
+	                __local slot_t *slot_write_cache,
+                    __local global_pointer_to_slot_t *slot_ptrs)
 {	
 	__global char *p;
 	uint     i, j;
 	uint     dropped_coll = 0;
 	uint     dropped_stor = 0;
 	__local uint  *a, *b;
+
 	// the mask is also computed to read data from the previous round
 #define BIN_MASK(round)        ((((round) + 1) % 2) ? 0xf000 : 0xf0000)
 #define BIN_MASK_OFFSET(round) ((((round) + 1) % 2) ? 3 * 4 : 4 * 4)
-#if NR_ROWS_LOG == 12
-#define BIN_MASK2(round)        ((((round) + 1) % 2) ? 0x00f0 : 0xf000)
-#define BIN_MASK2_OFFSET(round) ((((round) + 1) % 2) ? 0 : 8)
-#elif NR_ROWS_LOG == 13
-#define BIN_MASK2(round)        ((((round) + 1) % 2) ? 0x00e0 : 0xe000)
-#define BIN_MASK2_OFFSET(round) ((((round) + 1) % 2) ? 1 : 9)
-#elif NR_ROWS_LOG == 14
-#define BIN_MASK2(round)        ((((round) + 1) % 2) ? 0x00c0 : 0xc000)
-#define BIN_MASK2_OFFSET(round) ((((round) + 1) % 2) ? 2 : 10)
-#elif NR_ROWS_LOG == 15
-#define BIN_MASK2(round)        ((((round) + 1) % 2) ? 0x0080 : 0x8000)
-#define BIN_MASK2_OFFSET(round) ((((round) + 1) % 2) ? 3 : 11)
-#elif NR_ROWS_LOG == 16
-#define BIN_MASK2(round)        0
-#define BIN_MASK2_OFFSET(round) 0
-#else
-#error "unsupported NR_ROWS_LOG"
-#endif  
-#define NR_BINS_LOG (20 - NR_ROWS_LOG)
-#define NR_BINS (1 << NR_BINS_LOG)
-#if THREADS_PER_WRITE != 1
-	__local slot_t slot_write_cache[NEXT_PRIME_NO(get_local_size(0))];
-	__local global_pointer_to_slot_t slot_ptrs[NEXT_PRIME_NO(get_local_size(0))];
-#endif
+
+#define BIN_MASK2(round) ((NR_ROWS_LOG(round) == 12) ? ((((round) + 1) % 2) ? 0x00f0 : 0xf000) : \
+                          (NR_ROWS_LOG(round) == 13) ? ((((round) + 1) % 2) ? 0x00e0 : 0xe000) : \
+                          (NR_ROWS_LOG(round) == 14) ? ((((round) + 1) % 2) ? 0x00c0 : 0xc000) : \
+                          (NR_ROWS_LOG(round) == 15) ? ((((round) + 1) % 2) ? 0x0080 : 0x8000) : \
+                                                       0)
+#define BIN_MASK2_OFFSET(round) ((NR_ROWS_LOG(round) == 12) ? ((((round) + 1) % 2) ? 0 : 8) : \
+                                 (NR_ROWS_LOG(round) == 13) ? ((((round) + 1) % 2) ? 1 : 9) : \
+                                 (NR_ROWS_LOG(round) == 14) ? ((((round) + 1) % 2) ? 2 : 10) : \
+                                 (NR_ROWS_LOG(round) == 15) ? ((((round) + 1) % 2) ? 3 : 11) : \
+                                                              0)
+
+#define NR_BINS_LOG(round) (20 - NR_ROWS_LOG(round))
+#define NR_BINS(round) (1 << NR_BINS_LOG(round))
+
 	__local uint nr_slots_shared;
 
-	uint rows_per_work_item = (NR_ROWS + get_num_groups(0) - 1) / (get_num_groups(0));
+	uint rows_per_work_item = (NR_ROWS(round - 1) + get_num_groups(0) - 1) / (get_num_groups(0));
 	uint rows_per_chunk = get_num_groups(0);
 
 	for (uint chunk = 0; chunk < rows_per_work_item; chunk++) {
@@ -605,19 +585,19 @@ void equihash_round(uint round,
 
 		if (!get_local_id(0)) 
 			*nr_collisions = 0;
-		for (i = get_local_id(0); i < NR_BINS; i += get_local_size(0))
+		for (i = get_local_id(0); i < NR_BINS(round - 1); i += get_local_size(0))
 			bin_first_slots[i] = NR_SLOTS(round - 1);
 		for (i = get_local_id(0); i < NR_SLOTS(round - 1); i += get_local_size(0))
 			bin_next_slots[i] = NR_SLOTS(round - 1);
-		if (assigned_row_index < NR_ROWS && get_local_id(0) == 0) {
+		if (assigned_row_index < NR_ROWS(round - 1) && get_local_id(0) == 0) {
 			uint rowIdx, rowOffset;
-			get_row_counters_index(&rowIdx, &rowOffset, assigned_row_index);
-			nr_slots = (rowCountersSrc[rowIdx] >> rowOffset) & ROW_MASK;
+			get_row_counters_index(round - 1, &rowIdx, &rowOffset, assigned_row_index);
+			nr_slots = (rowCountersSrc[rowIdx] >> rowOffset) & ROW_MASK(round - 1);
 			nr_slots = min(nr_slots, (uint)NR_SLOTS(round - 1)); // handle possible overflow in last round
 			nr_slots_shared = nr_slots;
 		}
 		barrier(CLK_LOCAL_MEM_FENCE);
-		if (assigned_row_index < NR_ROWS && get_local_id(0)) {
+		if (assigned_row_index < NR_ROWS(round - 1) && get_local_id(0)) {
 			nr_slots = nr_slots_shared;
 		}
 
@@ -627,7 +607,7 @@ void equihash_round(uint round,
 		// Make sure all the work items in the work group enter the loop.
 		uint i_max = nr_slots + (get_local_size(0) - nr_slots % get_local_size(0)) - 1;
 		for (i = get_local_id(0); i <= i_max; i += get_local_size(0)) {
-			if (assigned_row_index < NR_ROWS && i < nr_slots) {
+			if (assigned_row_index < NR_ROWS(round - 1) && i < nr_slots) {
 				uint xi0;
 #ifdef NVIDIA
 				uint2 slot_data[3];
@@ -665,7 +645,7 @@ void equihash_round(uint round,
 		uint max_slot_a_index = NR_SLOTS(round - 1) + (get_local_size(0) - NR_SLOTS(round - 1) % get_local_size(0)) - 1;
 		barrier(CLK_LOCAL_MEM_FENCE);
 		for (uint slot_a_index = get_local_id(0); slot_a_index <= max_slot_a_index; slot_a_index += get_local_size(0)) {
-			int valid_slot_a_index = assigned_row_index < NR_ROWS && slot_a_index < NR_SLOTS(round - 1);
+			int valid_slot_a_index = assigned_row_index < NR_ROWS(round - 1) && slot_a_index < NR_SLOTS(round - 1);
 			uint slot_b_index = valid_slot_a_index ? bin_next_slots[slot_a_index] : NR_SLOTS(round - 1);
 			while (slot_b_index < NR_SLOTS(round - 1)) {
 				uint coll_index = atom_inc(nr_collisions);
@@ -685,19 +665,15 @@ void equihash_round(uint round,
 			// while (nr_collisions_copy >= get_local_size(0) || (slot_a_index + get_local_size(0) > max_slot_a_index && nr_collisions_copy > 0) {
 				uint collision, i, j;
 				__local uint *a = 0, *b = 0;
-				if (assigned_row_index < NR_ROWS && get_local_id(0) < nr_collisions_copy) {
+				if (assigned_row_index < NR_ROWS(round - 1) && get_local_id(0) < nr_collisions_copy) {
 					collision = collision_array[nr_collisions_copy - 1 - get_local_id(0)];
 					i = (collision >> 12) & 0xfff;
 					j = collision & 0xfff;
 					a = (__local uint *)&slot_cache[i];
 					b = (__local uint *)&slot_cache[j];
 				}
-				dropped_stor += xor_and_store(round, ht_dst, assigned_row_index, i, j, a, b, rowCountersDst
-#if THREADS_PER_WRITE == 1
-				);
-#else
-					, slot_write_cache, slot_ptrs);
-#endif
+				dropped_stor += xor_and_store(round, ht_dst, assigned_row_index, i, j, a, b, rowCountersDst, slot_write_cache, slot_ptrs);
+
 				if (!get_local_id(0))
 					*nr_collisions -= min(*nr_collisions, (uint)get_local_size(0));
 
@@ -728,10 +704,12 @@ void kernel_name(__global char *ht_src, __global char *ht_dst, \
     __local uint    slot_cache[NEXT_PRIME_NO(UINTS_IN_XI(N - 1) * NR_SLOTS(N - 1))]; \
     __local uint    collision_array[NEXT_PRIME_NO(LDS_COLL_SIZE(N - 1))]; \
     __local uint    nr_collisions; \
-	__local uint    bin_first_slots[NEXT_PRIME_NO(NR_BINS)]; \
+	__local uint    bin_first_slots[NEXT_PRIME_NO(NR_BINS(N - 1))]; \
 	__local BIN_INDEX_TYPE    bin_next_slots[NEXT_PRIME_NO(NR_SLOTS(N - 1))]; \
+	__local slot_t slot_write_cache[NEXT_PRIME_NO((THREADS_PER_WRITE(N) > 1) ? LOCAL_WORK_SIZE(N) : 0)]; \
+	__local global_pointer_to_slot_t slot_ptrs[NEXT_PRIME_NO((THREADS_PER_WRITE(N) > 1) ? LOCAL_WORK_SIZE(N) : 0)]; \
 	equihash_round(N, ht_src, ht_dst, debug, slot_cache, collision_array, \
-	    &nr_collisions, rowCountersSrc, rowCountersDst, bin_first_slots, bin_next_slots); \
+	    &nr_collisions, rowCountersSrc, rowCountersDst, bin_first_slots, bin_next_slots, slot_write_cache, slot_ptrs); \
 }
 KERNEL_ROUND(kernel_round1, 1)
 KERNEL_ROUND(kernel_round2, 2)
@@ -757,11 +735,6 @@ void mark_potential_sol(__global potential_sols_t *potential_sols, uint ref0, ui
 ** Scan the hash tables to find Equihash solutions.
 */
 
-// Add more bins for efficient sorting.
-#define NR_BINS_SOLS         (NR_BINS << EXTRA_BITS_FOR_BINS_SOLS)
-#define BIN_MASK_SOLS        (((0x1 << EXTRA_BITS_FOR_BINS_SOLS) - 1) << 12)
-#define BIN_MASK_SOLS_OFFSET (20 - NR_ROWS_LOG)
-
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_POTENTIAL_SOLS, 1, 1)))
 void kernel_potential_sols(
 	__global char *ht_src,
@@ -776,14 +749,14 @@ void kernel_potential_sols(
 	uint		i, j;
 	__global char	*p;
 	uint		ref_i, ref_j;
-	__local uint    bin_first_slots[NEXT_PRIME_NO(NR_BINS_SOLS)];
+	__local uint    bin_first_slots[NEXT_PRIME_NO(NR_BINS(PARAM_K - 1))];
 	__local BIN_INDEX_TYPE    bin_next_slots[NEXT_PRIME_NO(NR_SLOTS(PARAM_K - 1))];
 
 	if (!get_global_id(0))
 		potential_sols->nr = 0;
 	barrier(CLK_GLOBAL_MEM_FENCE);
 
-	uint rows_per_work_item = (NR_ROWS + get_num_groups(0) - 1) / (get_num_groups(0));
+	uint rows_per_work_item = (NR_ROWS(PARAM_K - 1) + get_num_groups(0) - 1) / (get_num_groups(0));
 	uint rows_per_chunk = get_num_groups(0);
 
 	for (uint chunk = 0; chunk < rows_per_work_item; chunk++) {
@@ -792,21 +765,21 @@ void kernel_potential_sols(
 		__local uint nr_slots_shared;
 		if (!get_local_id(0))
 			semaphoe = 0;
-		for (i = get_local_id(0); i < NR_BINS; i += get_local_size(0))
+		for (i = get_local_id(0); i < NR_BINS(PARAM_K - 1); i += get_local_size(0))
 			bin_first_slots[i] = NR_SLOTS(PARAM_K - 1);
 		for (i = get_local_id(0); i < NR_SLOTS(PARAM_K - 1); i += get_local_size(0))
 			bin_next_slots[i] = NR_SLOTS(PARAM_K - 1);
-		if (assigned_row_index < NR_ROWS) {
+		if (assigned_row_index < NR_ROWS(PARAM_K - 1)) {
 			if (get_local_id(0) == 0) {
 				uint rowIdx, rowOffset;
-				get_row_counters_index(&rowIdx, &rowOffset, assigned_row_index);
-				nr_slots = (rowCountersSrc[rowIdx] >> rowOffset) & ROW_MASK;
+				get_row_counters_index(PARAM_K - 1, &rowIdx, &rowOffset, assigned_row_index);
+				nr_slots = (rowCountersSrc[rowIdx] >> rowOffset) & ROW_MASK(PARAM_K - 1);
 				nr_slots = min(nr_slots, (uint)NR_SLOTS(PARAM_K - 1)); // handle possible overflow in last round
 				nr_slots_shared = nr_slots;
 			}
 		}
 		barrier(CLK_LOCAL_MEM_FENCE);
-		if (assigned_row_index < NR_ROWS) {
+		if (assigned_row_index < NR_ROWS(PARAM_K - 1)) {
 			if (get_local_id(0))
 				nr_slots = nr_slots_shared;
 		}
@@ -814,22 +787,21 @@ void kernel_potential_sols(
 
 		// in the final hash table, we are looking for a match on both the bits
 		// part of the previous PREFIX colliding bits, and the last PREFIX bits.
-		if (assigned_row_index < NR_ROWS) {
+		if (assigned_row_index < NR_ROWS(PARAM_K - 1)) {
 			for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
 				ulong slot_first_8bytes = *(__global ulong *) get_slot_ptr(ht_src, PARAM_K - 1, assigned_row_index, i);
 				uint ref_i = refs[i] = slot_first_8bytes >> 32;
 				uint xi_first_4bytes = data[i] = slot_first_8bytes & 0xffffffff;
 				uint bin_to_use =
-					((xi_first_4bytes & BIN_MASK(PARAM_K - 1)) >> BIN_MASK_OFFSET(PARAM_K - 1))
-					| ((xi_first_4bytes & BIN_MASK2(PARAM_K - 1)) >> BIN_MASK2_OFFSET(PARAM_K - 1))
-					| ((xi_first_4bytes & BIN_MASK_SOLS) >> BIN_MASK_SOLS_OFFSET);
+					  ((xi_first_4bytes & BIN_MASK(PARAM_K - 1)) >> BIN_MASK_OFFSET(PARAM_K - 1))
+					| ((xi_first_4bytes & BIN_MASK2(PARAM_K - 1)) >> BIN_MASK2_OFFSET(PARAM_K - 1));
 				bin_next_slots[i] = atom_xchg(&bin_first_slots[bin_to_use], i);
 			}
 		}
 
 		barrier(CLK_LOCAL_MEM_FENCE);
 		__local ulong coll;
-		if (assigned_row_index < NR_ROWS) {
+		if (assigned_row_index < NR_ROWS(PARAM_K - 1)) {
 			for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
 				uint data_i = data[i];
 				j = bin_next_slots[i];
@@ -842,7 +814,7 @@ void kernel_potential_sols(
 		}
 
 		barrier(CLK_LOCAL_MEM_FENCE);
-		if (assigned_row_index < NR_ROWS) {
+		if (assigned_row_index < NR_ROWS(PARAM_K - 1)) {
 			if (get_local_id(0) == 0 && semaphoe)
 				mark_potential_sol(potential_sols, coll >> 32, coll & 0xffffffff);
 		}
@@ -887,14 +859,14 @@ void kernel_sols(__global char *ht0,
 		for (int round = 7; round >= 0; --round) {
 			if (round % 2) {
 				for (uint i = get_local_id(0); i < (1 << (8 - round)); i += get_local_size(0)) {
-					inputs_b[i * 2 + 1] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_a[i]), DECODE_SLOT1(inputs_a[i]));
-					inputs_b[i * 2] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_a[i]), DECODE_SLOT0(inputs_a[i]));
+					inputs_b[i * 2 + 1] = *get_ref_ptr(htabs[round], round, DECODE_ROW(round, inputs_a[i]), DECODE_SLOT1(round, inputs_a[i]));
+					inputs_b[i * 2] = *get_ref_ptr(htabs[round], round, DECODE_ROW(round, inputs_a[i]), DECODE_SLOT0(round, inputs_a[i]));
 				}
 			}
 			else {
 				for (uint i = get_local_id(0); i < (1 << (8 - round)); i += get_local_size(0)) {
-					inputs_a[i * 2 + 1] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_b[i]), DECODE_SLOT1(inputs_b[i]));
-					inputs_a[i * 2] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_b[i]), DECODE_SLOT0(inputs_b[i]));
+					inputs_a[i * 2 + 1] = *get_ref_ptr(htabs[round], round, DECODE_ROW(round, inputs_b[i]), DECODE_SLOT1(round, inputs_b[i]));
+					inputs_a[i * 2] = *get_ref_ptr(htabs[round], round, DECODE_ROW(round, inputs_b[i]), DECODE_SLOT0(round, inputs_b[i]));
 				}
 			}
 			barrier(CLK_LOCAL_MEM_FENCE);

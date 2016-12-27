@@ -478,14 +478,14 @@ void examine_ht(unsigned round, cl_command_queue queue, cl_mem *hash_table_buffe
 				NULL);	// cl_event	*event
 		}
 	}
-	row_counters = (uint32_t *)malloc(RC_SIZE);
+	row_counters = (uint32_t *)malloc(ROW_COUNTERS_SIZE);
 	if (!row_counters)
 		fatal("malloc: %s\n", strerror(errno));
 	check_clEnqueueReadBuffer(queue,
 		row_counters_buffer,
 		CL_TRUE,        // cl_bool	blocking_read
 		0,		      // size_t	offset
-		RC_SIZE,        // size_t	size
+		ROW_COUNTERS_SIZE,        // size_t	size
 		row_counters, // void		*ptr
 		0,		// cl_uint	num_events_in_wait_list
 		NULL,	// cl_event	*event_wait_list
@@ -601,7 +601,7 @@ size_t select_work_size_blake(void)
 void init_ht(cl_command_queue queue, cl_kernel k_init_ht, cl_mem buf_ht,
 	cl_mem rowCounters)
 {
-	size_t      global_ws = RC_SIZE / sizeof(cl_uint);
+	size_t      global_ws = ROW_COUNTERS_SIZE / sizeof(cl_uint);
 	size_t      local_ws = 256;
 	cl_int      status;
 
@@ -1053,8 +1053,8 @@ uint32_t solve_equihash(cl_device_id dev_id, cl_context ctx, cl_command_queue qu
 			check_clSetKernelArg(k_rounds[round], 3, &rowCounters[round % 2]);
 			local_work_size = LOCAL_WORK_SIZE(round);
 			global_ws = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * local_work_size;
-			if (global_ws > NR_ROWS * local_work_size)
-				global_ws = NR_ROWS * local_work_size;
+			if (global_ws > NR_ROWS(round - 1) * local_work_size)
+				global_ws = NR_ROWS(round - 1) * local_work_size;
 		}
 		check_clSetKernelArg(k_rounds[round], round == 0 ? 3 : 4, &buf_dbg);
 		check_clEnqueueNDRangeKernel(queue, k_rounds[round], 1, NULL,
@@ -1068,8 +1068,8 @@ uint32_t solve_equihash(cl_device_id dev_id, cl_context ctx, cl_command_queue qu
 	check_clSetKernelArg(k_potential_sols, 2, &rowCounters[0]);
 	local_work_size = LOCAL_WORK_SIZE_POTENTIAL_SOLS;
 	global_ws = GLOBAL_WORK_SIZE_RATIO * nr_compute_units * local_work_size;
-	if (global_ws > NR_ROWS * local_work_size)
-		global_ws = NR_ROWS * local_work_size;
+	if (global_ws > NR_ROWS(PARAM_K - 1) * local_work_size)
+		global_ws = NR_ROWS(PARAM_K - 1) * local_work_size;
 	check_clEnqueueNDRangeKernel(queue, k_potential_sols, 1, NULL,
 		&global_ws, &local_work_size, 0, NULL, NULL);
 
@@ -1344,8 +1344,8 @@ DWORD mining_mode_thread(LPVOID *args)
 	buf_ht[8] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(8), NULL);
 	buf_sols = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, sizeof(sols_t), NULL);
 	buf_potential_sols = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, sizeof(potential_sols_t), NULL);
-	rowCounters[0] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, RC_SIZE, NULL);
-	rowCounters[1] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, RC_SIZE, NULL);
+	rowCounters[0] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, ROW_COUNTERS_SIZE, NULL);
+	rowCounters[1] = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_WRITE, ROW_COUNTERS_SIZE, NULL);
 	buf_blake_st = check_clCreateBuffer(ARGS->ctx, CL_MEM_READ_ONLY, 64, NULL);
 
 	while (1) {
@@ -1542,8 +1542,8 @@ void run_opencl(uint8_t *header, size_t header_len, cl_device_id *dev_id, cl_con
 		buf_ht[8] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(8), NULL);
 		buf_sols = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, sizeof(sols_t), NULL);
 		buf_potential_sols = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, sizeof(potential_sols_t), NULL);
-		rowCounters[0] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, RC_SIZE, NULL);
-		rowCounters[1] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, RC_SIZE, NULL);
+		rowCounters[0] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, ROW_COUNTERS_SIZE, NULL);
+		rowCounters[1] = check_clCreateBuffer(ctx, CL_MEM_READ_WRITE, ROW_COUNTERS_SIZE, NULL);
 		buf_blake_st = check_clCreateBuffer(ctx, CL_MEM_READ_ONLY, 64, NULL);
 #ifdef WIN32
 	}
