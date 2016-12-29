@@ -4,9 +4,9 @@
 - [Download precompiled binaries for Windows and NVIDIA (0.0.2)](https://github.com/zawawawa/gatelessgate/releases/download/v0.0.2/gatelessgate-windows-0.0.2-NVIDIA.zip)
 - [Download the source code for Linux (0.0.2)](https://github.com/zawawawa/gatelessgate/archive/v0.0.2.tar.gz)
 
-Gateless Gate is a cross-platform OpenCL Zcash miner. It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://github.com/mbevand/silentarmy) with a significant speed boost. (This miner runs at around 167 sol/s on RX 480 and 128 sol/s on GTX 1060 3GB.) Although the current foci of development are AMD video cards and Windows operating systems, it should be able to run on Linux and/or NVIDIA GPUs.
+Gateless Gate is a cross-platform OpenCL Zcash miner. It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://github.com/mbevand/silentarmy) with a significant speed boost. (This miner runs at around 188 sol/s on RX 480 and 165 sol/s on GTX 1060 3GB.) Although the current foci of development are Windows operating systems, it should be able to run on Linux without problems.
 
-On Windows, all you have to do for mining is to run `list.bat` to get device ID's and edit and run `gatelessgate.bat`. MAKE SURE TO SPECIFY CORRECT DEVICE IDS WITH THE `--use` OPTION! See the documentation of the original SILENTARMY below for details. You may get the following error if you have missing DLL's on your system: `The application was unable to start correctly (0xc000007b)` In this case, you need to delete `vcruntime140.dll` in the package and install [Visual C++ 2015 Redistributable](https://www.microsoft.com/en-us/download/details.aspx?id=48145) manually.
+On Windows, all you have to do for mining is to download the appropriate binary, run `list.bat` to get device ID's and edit and run `gatelessgate.bat`. MAKE SURE TO SPECIFY CORRECT DEVICE IDS WITH THE `--use` OPTION! See the documentation of the original SILENTARMY below for details. You may get the following error if you have missing DLL's on your system: `The application was unable to start correctly (0xc000007b)` In this case, you need to delete `vcruntime140.dll` in the package and install [Visual C++ 2015 Redistributable](https://www.microsoft.com/en-us/download/details.aspx?id=48145) manually.
 
 On Linux, you should be able to build the miner with the Makefile in the repository. You need to specify the `-DNVIDIA` build option for NVIDIA video cards. See the documentation of the original SILENTARMY below for details. Please note that fglrx drivers are no longer supported.
 
@@ -16,10 +16,6 @@ Last but not least, mrb, nerdralph, eXtremal, and Genoil, thank you all so much 
 truly the cream of the FOSS movement.
 
 zawawa @ bitcointalk.org
-
-# SILENTARMY Standalone Version for Windows x86_64
-
-[Download precompiled binaries (v5-win64standalone-r12)](https://github.com/zawawawa/silentarmy/releases/tag/v5-win64standalone-r12) (Stable)
 
 # SILENTARMY
 
