@@ -98,9 +98,6 @@ typedef uint8_t		uchar;
 typedef uint32_t	uint;
 #include "param.h"
 
-#define MIN(A, B)	(((A) < (B)) ? (A) : (B))
-#define MAX(A, B)	(((A) > (B)) ? (A) : (B))
-
 int             verbose = 0;
 uint32_t	show_encoded = 0;
 uint64_t	nr_nonces = 1;

@@ -175,38 +175,13 @@ uint inc_row_counter(uint round, __global uint *rowCounters, uint row)
 	return nr_slots;
 }
 
-uint ht_store(uint round, __global char *ht, uint i,
-			  uint xi0, uint xi1, uint xi2, uint xi3, uint xi4, uint xi5, uint xi6, __global uint *rowCounters)
-{
-	uint row = get_row(round, xi0);
-	uint nr_slots = inc_row_counter(round, rowCounters, row);
-	if (nr_slots >= NR_SLOTS(round))
-		return 1;
-	__global char *p = get_slot_ptr(ht, round, row, nr_slots);
-	slot_t slot;
-	slot.slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
-	slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
-	slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
-	slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
-	slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
-	slot.slot.xi[5] = ((xi6 << 24) | (xi5 >> 8));
-	slot.slot.xi[UINTS_IN_XI(round)] = i;
-	if (round <= 5) {
-		*(__global uint8 *)p = slot.ui8;
-	} else {
-		*(__global uint4 *)p = slot.ui4[0];
-	}
-	return 0;
-}
-
-
 
 
 /////////////
 // ROUND 1 //
 /////////////
 
-__constant ulong blake_iv_const[] =
+__constant ulong blake_iv[] =
 {
 	0x6a09e667f3bcc908, 0xbb67ae8584caa73b,
 	0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
@@ -215,11 +190,11 @@ __constant ulong blake_iv_const[] =
 };
 
 #define mix(va, vb, vc, vd, x, y) \
-    va = (va + vb + x); \
+    va = (va + vb + (x)); \
 vd = rotate((vd ^ va), (ulong)64 - 32); \
 vc = (vc + vd); \
 vb = rotate((vb ^ vc), (ulong)64 - 24); \
-va = (va + vb + y); \
+va = (va + vb + (y)); \
 vd = rotate((vd ^ va), (ulong)64 - 16); \
 vc = (vc + vd); \
 vb = rotate((vb ^ vc), (ulong)64 - 63);
@@ -232,191 +207,227 @@ vb = rotate((vb ^ vc), (ulong)64 - 63);
 ** Memory (LDS) Optimization 2-10" in:
 ** http://developer.amd.com/tools-and-sdks/opencl-zone/amd-accelerated-parallel-processing-app-sdk/opencl-optimization-guide/
 */
-__kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_ROUND0, 1, 1)))
-void kernel_round0(__constant ulong *blake_state_const, __global char *ht,
-				   __global uint *rowCounters, __global uint *debug)
-{
-	__local ulong blake_state[64];
-	__local ulong blake_iv[8];
-	uint                tid = get_global_id(0);
-	ulong               v[16];
-	uint                inputs_per_thread = (NR_INPUTS + get_global_size(0) - 1) / get_global_size(0);
-	uint                input = tid * inputs_per_thread;
-	uint                input_end = (tid + 1) * inputs_per_thread;
-	uint                dropped = 0;
-	if (get_local_id(0) < 64)
-		blake_state[get_local_id(0)] = blake_state_const[get_local_id(0)];
-	if (get_local_id(0) < 8)
-		blake_iv[get_local_id(0)] = blake_iv_const[get_local_id(0)];
-	barrier(CLK_LOCAL_MEM_FENCE);
-	while (input < input_end && input < NR_INPUTS) {
-		// shift "i" to occupy the high 32 bits of the second ulong word in the
-		// message block
-		ulong word1 = (ulong)input << 32;
-		// init vector v
-		v[0] = blake_state[0];
-		v[1] = blake_state[1];
-		v[2] = blake_state[2];
-		v[3] = blake_state[3];
-		v[4] = blake_state[4];
-		v[5] = blake_state[5];
-		v[6] = blake_state[6];
-		v[7] = blake_state[7];
-		v[8] = blake_iv[0];
-		v[9] = blake_iv[1];
-		v[10] = blake_iv[2];
-		v[11] = blake_iv[3];
-		v[12] = blake_iv[4];
-		v[13] = blake_iv[5];
-		v[14] = blake_iv[6];
-		v[15] = blake_iv[7];
-		// mix in length of data
-		v[12] ^= ZCASH_BLOCK_HEADER_LEN + 4 /* length of "i" */;
-		// last block
-		v[14] ^= (ulong)-1;
 
-		// round 1
-		mix(v[0], v[4], v[8], v[12], 0, word1);
-		mix(v[1], v[5], v[9], v[13], 0, 0);
-		mix(v[2], v[6], v[10], v[14], 0, 0);
-		mix(v[3], v[7], v[11], v[15], 0, 0);
-		mix(v[0], v[5], v[10], v[15], 0, 0);
-		mix(v[1], v[6], v[11], v[12], 0, 0);
-		mix(v[2], v[7], v[8], v[13], 0, 0);
-		mix(v[3], v[4], v[9], v[14], 0, 0);
-		// round 2
-		mix(v[0], v[4], v[8], v[12], 0, 0);
-		mix(v[1], v[5], v[9], v[13], 0, 0);
-		mix(v[2], v[6], v[10], v[14], 0, 0);
-		mix(v[3], v[7], v[11], v[15], 0, 0);
-		mix(v[0], v[5], v[10], v[15], word1, 0);
-		mix(v[1], v[6], v[11], v[12], 0, 0);
-		mix(v[2], v[7], v[8], v[13], 0, 0);
-		mix(v[3], v[4], v[9], v[14], 0, 0);
-		// round 3
-		mix(v[0], v[4], v[8], v[12], 0, 0);
-		mix(v[1], v[5], v[9], v[13], 0, 0);
-		mix(v[2], v[6], v[10], v[14], 0, 0);
-		mix(v[3], v[7], v[11], v[15], 0, 0);
-		mix(v[0], v[5], v[10], v[15], 0, 0);
-		mix(v[1], v[6], v[11], v[12], 0, 0);
-		mix(v[2], v[7], v[8], v[13], 0, word1);
-		mix(v[3], v[4], v[9], v[14], 0, 0);
-		// round 4
-		mix(v[0], v[4], v[8], v[12], 0, 0);
-		mix(v[1], v[5], v[9], v[13], 0, word1);
-		mix(v[2], v[6], v[10], v[14], 0, 0);
-		mix(v[3], v[7], v[11], v[15], 0, 0);
-		mix(v[0], v[5], v[10], v[15], 0, 0);
-		mix(v[1], v[6], v[11], v[12], 0, 0);
-		mix(v[2], v[7], v[8], v[13], 0, 0);
-		mix(v[3], v[4], v[9], v[14], 0, 0);
-		// round 5
-		mix(v[0], v[4], v[8], v[12], 0, 0);
-		mix(v[1], v[5], v[9], v[13], 0, 0);
-		mix(v[2], v[6], v[10], v[14], 0, 0);
-		mix(v[3], v[7], v[11], v[15], 0, 0);
-		mix(v[0], v[5], v[10], v[15], 0, word1);
-		mix(v[1], v[6], v[11], v[12], 0, 0);
-		mix(v[2], v[7], v[8], v[13], 0, 0);
-		mix(v[3], v[4], v[9], v[14], 0, 0);
-		// round 6
-		mix(v[0], v[4], v[8], v[12], 0, 0);
-		mix(v[1], v[5], v[9], v[13], 0, 0);
-		mix(v[2], v[6], v[10], v[14], 0, 0);
-		mix(v[3], v[7], v[11], v[15], 0, 0);
-		mix(v[0], v[5], v[10], v[15], 0, 0);
-		mix(v[1], v[6], v[11], v[12], 0, 0);
-		mix(v[2], v[7], v[8], v[13], 0, 0);
-		mix(v[3], v[4], v[9], v[14], word1, 0);
-		// round 7
-		mix(v[0], v[4], v[8], v[12], 0, 0);
-		mix(v[1], v[5], v[9], v[13], word1, 0);
-		mix(v[2], v[6], v[10], v[14], 0, 0);
-		mix(v[3], v[7], v[11], v[15], 0, 0);
-		mix(v[0], v[5], v[10], v[15], 0, 0);
-		mix(v[1], v[6], v[11], v[12], 0, 0);
-		mix(v[2], v[7], v[8], v[13], 0, 0);
-		mix(v[3], v[4], v[9], v[14], 0, 0);
-		// round 8
-		mix(v[0], v[4], v[8], v[12], 0, 0);
-		mix(v[1], v[5], v[9], v[13], 0, 0);
-		mix(v[2], v[6], v[10], v[14], 0, word1);
-		mix(v[3], v[7], v[11], v[15], 0, 0);
-		mix(v[0], v[5], v[10], v[15], 0, 0);
-		mix(v[1], v[6], v[11], v[12], 0, 0);
-		mix(v[2], v[7], v[8], v[13], 0, 0);
-		mix(v[3], v[4], v[9], v[14], 0, 0);
-		// round 9
-		mix(v[0], v[4], v[8], v[12], 0, 0);
-		mix(v[1], v[5], v[9], v[13], 0, 0);
-		mix(v[2], v[6], v[10], v[14], 0, 0);
-		mix(v[3], v[7], v[11], v[15], 0, 0);
-		mix(v[0], v[5], v[10], v[15], 0, 0);
-		mix(v[1], v[6], v[11], v[12], 0, 0);
-		mix(v[2], v[7], v[8], v[13], word1, 0);
-		mix(v[3], v[4], v[9], v[14], 0, 0);
-		// round 10
-		mix(v[0], v[4], v[8], v[12], 0, 0);
-		mix(v[1], v[5], v[9], v[13], 0, 0);
-		mix(v[2], v[6], v[10], v[14], 0, 0);
-		mix(v[3], v[7], v[11], v[15], word1, 0);
-		mix(v[0], v[5], v[10], v[15], 0, 0);
-		mix(v[1], v[6], v[11], v[12], 0, 0);
-		mix(v[2], v[7], v[8], v[13], 0, 0);
-		mix(v[3], v[4], v[9], v[14], 0, 0);
-		// round 11
-		mix(v[0], v[4], v[8], v[12], 0, word1);
-		mix(v[1], v[5], v[9], v[13], 0, 0);
-		mix(v[2], v[6], v[10], v[14], 0, 0);
-		mix(v[3], v[7], v[11], v[15], 0, 0);
-		mix(v[0], v[5], v[10], v[15], 0, 0);
-		mix(v[1], v[6], v[11], v[12], 0, 0);
-		mix(v[2], v[7], v[8], v[13], 0, 0);
-		mix(v[3], v[4], v[9], v[14], 0, 0);
-		// round 12
-		mix(v[0], v[4], v[8], v[12], 0, 0);
-		mix(v[1], v[5], v[9], v[13], 0, 0);
-		mix(v[2], v[6], v[10], v[14], 0, 0);
-		mix(v[3], v[7], v[11], v[15], 0, 0);
-		mix(v[0], v[5], v[10], v[15], word1, 0);
-		mix(v[1], v[6], v[11], v[12], 0, 0);
-		mix(v[2], v[7], v[8], v[13], 0, 0);
-		mix(v[3], v[4], v[9], v[14], 0, 0);
-
-		// compress v into the blake state; this produces the 50-byte hash
-		// (two Xi values)
-		ulong h[7];
-		h[0] = blake_state[0] ^ v[0] ^ v[8];
-		h[1] = blake_state[1] ^ v[1] ^ v[9];
-		h[2] = blake_state[2] ^ v[2] ^ v[10];
-		h[3] = blake_state[3] ^ v[3] ^ v[11];
-		h[4] = blake_state[4] ^ v[4] ^ v[12];
-		h[5] = blake_state[5] ^ v[5] ^ v[13];
-		h[6] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
-
-		// store the two Xi values in the hash table
-#if ZCASH_HASH_LEN == 50
-		dropped += ht_store(0, ht, input * 2,
-							h[0] & 0xffffffff, h[0] >> 32,
-							h[1] & 0xffffffff, h[1] >> 32,
-							h[2] & 0xffffffff, h[2] >> 32,
-							h[3] & 0xffffffff,
-							rowCounters);
-		dropped += ht_store(0, ht, input * 2 + 1,
-			((h[3] >> 8) | (h[4] << (64 - 8))) & 0xffffffff,
-							((h[3] >> 8) | (h[4] << (64 - 8))) >> 32,
-							((h[4] >> 8) | (h[5] << (64 - 8))) & 0xffffffff,
-							((h[4] >> 8) | (h[5] << (64 - 8))) >> 32,
-							((h[5] >> 8) | (h[6] << (64 - 8))) & 0xffffffff,
-							((h[5] >> 8) | (h[6] << (64 - 8))) >> 32,
-							(h[6] >> 8) & 0xffffffff,
-							rowCounters);
-#else
+#if ZCASH_HASH_LEN != 50
 #error "unsupported ZCASH_HASH_LEN"
 #endif
 
-		input++;
+__kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_ROUND0, 1, 1)))
+void kernel_round0(__constant ulong *blake_state, __global char *ht,
+				   __global uint *rowCounters, __global uint *debug)
+{
+	uint                tid = get_global_id(0);
+#ifdef AMD
+	volatile ulong      v[16];
+	volatile uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
+    slot_t slot;
+#else
+	ulong               v[16];
+	uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
+	slot_t slot;
+#endif
+	ulong               h[7];
+	uint                inputs_per_thread = (NR_INPUTS + get_global_size(0) - 1) / get_global_size(0);
+	uint                dropped = 0;
+	
+	for (uint chunk = 0; chunk < inputs_per_thread; ++chunk) {
+		uint input = tid + get_global_size(0) * chunk;
+		
+		if (input < NR_INPUTS) {
+			// shift "i" to occupy the high 32 bits of the second ulong word in the
+			// message block
+			ulong word1 = (ulong)input << 32;
+			// init vector v
+			v[0] = blake_state[0];
+			v[1] = blake_state[1];
+			v[2] = blake_state[2];
+			v[3] = blake_state[3];
+			v[4] = blake_state[4];
+			v[5] = blake_state[5];
+			v[6] = blake_state[6];
+			v[7] = blake_state[7];
+			v[8] = blake_iv[0];
+			v[9] = blake_iv[1];
+			v[10] = blake_iv[2];
+			v[11] = blake_iv[3];
+			v[12] = blake_iv[4];
+			v[13] = blake_iv[5];
+			v[14] = blake_iv[6];
+			v[15] = blake_iv[7];
+			// mix in length of data
+			v[12] ^= ZCASH_BLOCK_HEADER_LEN + 4 /* length of "i" */;
+			// last block
+			v[14] ^= (ulong)-1;
+
+#ifdef AMD
+#pragma unroll 1
+			for (uint blake_round = 1; blake_round <= 9; ++blake_round) {
+#else
+#pragma unroll 9
+			for (uint blake_round = 1; blake_round <= 9; ++blake_round) {
+#endif
+				mix(v[0], v[4], v[8],  v[12], 0, (blake_round == 1) ? word1 : 0);
+				mix(v[1], v[5], v[9],  v[13], (blake_round == 7) ? word1 : 0, (blake_round == 4) ? word1 : 0);
+				mix(v[2], v[6], v[10], v[14], 0, (blake_round == 8) ? word1 : 0);
+				mix(v[3], v[7], v[11], v[15], 0, 0);
+				mix(v[0], v[5], v[10], v[15], (blake_round == 2) ? word1 : 0, (blake_round == 5) ? word1 : 0);
+				mix(v[1], v[6], v[11], v[12], 0, 0);
+				mix(v[2], v[7], v[8],  v[13], (blake_round == 9) ? word1 : 0, (blake_round == 3) ? word1 : 0);
+				mix(v[3], v[4], v[9],  v[14], (blake_round == 6) ? word1 : 0, 0);
+			}
+			// round 10
+			mix(v[0], v[4], v[8], v[12], 0, 0);
+			mix(v[1], v[5], v[9], v[13], 0, 0);
+			mix(v[2], v[6], v[10], v[14], 0, 0);
+			mix(v[3], v[7], v[11], v[15], word1, 0);
+			mix(v[0], v[5], v[10], v[15], 0, 0);
+			mix(v[1], v[6], v[11], v[12], 0, 0);
+			mix(v[2], v[7], v[8], v[13], 0, 0);
+			mix(v[3], v[4], v[9], v[14], 0, 0);
+			// round 11
+			mix(v[0], v[4], v[8], v[12], 0, word1);
+			mix(v[1], v[5], v[9], v[13], 0, 0);
+			mix(v[2], v[6], v[10], v[14], 0, 0);
+			mix(v[3], v[7], v[11], v[15], 0, 0);
+			mix(v[0], v[5], v[10], v[15], 0, 0);
+			mix(v[1], v[6], v[11], v[12], 0, 0);
+			mix(v[2], v[7], v[8], v[13], 0, 0);
+			mix(v[3], v[4], v[9], v[14], 0, 0);
+			// round 12
+			mix(v[0], v[4], v[8], v[12], 0, 0);
+			mix(v[1], v[5], v[9], v[13], 0, 0);
+			mix(v[2], v[6], v[10], v[14], 0, 0);
+			mix(v[3], v[7], v[11], v[15], 0, 0);
+			mix(v[0], v[5], v[10], v[15], word1, 0);
+			mix(v[1], v[6], v[11], v[12], 0, 0);
+			mix(v[2], v[7], v[8], v[13], 0, 0);
+			mix(v[3], v[4], v[9], v[14], 0, 0);
+
+			// compress v into the blake state; this produces the 50-byte hash
+			// (two Xi values)
+			h[0] = blake_state[0] ^ v[0] ^ v[8];
+			h[1] = blake_state[1] ^ v[1] ^ v[9];
+			h[2] = blake_state[2] ^ v[2] ^ v[10];
+			h[3] = blake_state[3] ^ v[3] ^ v[11];
+			h[4] = blake_state[4] ^ v[4] ^ v[12];
+			h[5] = blake_state[5] ^ v[5] ^ v[13];
+			h[6] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
+		}
+
+		barrier(CLK_LOCAL_MEM_FENCE);
+
+		if (input < NR_INPUTS && THREADS_PER_WRITE(0) == 1) {
+			// store the two Xi values in the hash table
+#pragma unroll 1
+			for (uint index = 0; index < 2; ++index) {
+				if (!index) {
+					xi0 = h[0] & 0xffffffff; xi1 = h[0] >> 32;
+					xi2 = h[1] & 0xffffffff; xi3 = h[1] >> 32;
+					xi4 = h[2] & 0xffffffff; xi5 = h[2] >> 32;
+					xi6 = h[3] & 0xffffffff;
+				} else {
+					xi0 = ((h[3] >> 8) | (h[4] << (64 - 8))) & 0xffffffff; xi1 = ((h[3] >> 8) | (h[4] << (64 - 8))) >> 32;
+					xi2 = ((h[4] >> 8) | (h[5] << (64 - 8))) & 0xffffffff; xi3 = ((h[4] >> 8) | (h[5] << (64 - 8))) >> 32;
+					xi4 = ((h[5] >> 8) | (h[6] << (64 - 8))) & 0xffffffff; xi5 = ((h[5] >> 8) | (h[6] << (64 - 8))) >> 32;
+					xi6 = (h[6] >> 8) & 0xffffffff;
+				}
+
+				uint row = get_row(0, xi0);
+				uint nr_slots = inc_row_counter(0, rowCounters, row);
+				if (nr_slots >= NR_SLOTS(0)) {
+					++dropped;
+				} else {
+					slot.slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
+					slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
+					slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
+					slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
+					slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
+					slot.slot.xi[5] = ((xi6 << 24) | (xi5 >> 8));
+					slot.slot.xi[UINTS_IN_XI(0)] = input * 2 + index;
+					__global char *p = get_slot_ptr(ht, 0, row, nr_slots);
+					*(__global uint8 *)p = slot.ui8;
+				}
+			}
+		} else if (THREADS_PER_WRITE(0) > 1) {
+			__local slot_t slot_array[LOCAL_WORK_SIZE_ROUND0];
+			__local global_pointer_to_slot_t slot_ptrs[LOCAL_WORK_SIZE_ROUND0];
+			
+			slot_ptrs[get_local_id(0)] = (__global slot_t *)get_slot_ptr(ht, 0, NR_ROWS(0) - 1, NR_SLOTS(0) - 1);
+			
+			barrier(CLK_LOCAL_MEM_FENCE);
+
+			if (input < NR_INPUTS) {
+				// store the two Xi values in the hash table
+				xi0 = h[0] & 0xffffffff; xi1 = h[0] >> 32;
+				xi2 = h[1] & 0xffffffff; xi3 = h[1] >> 32;
+				xi4 = h[2] & 0xffffffff; xi5 = h[2] >> 32;
+				xi6 = h[3] & 0xffffffff;
+
+				uint row = get_row(0, xi0);
+				uint nr_slots = inc_row_counter(0, rowCounters, row);
+				if (nr_slots >= NR_SLOTS(0)) {
+					++dropped;
+				} else {
+					slot_array[get_local_id(0)].slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
+					slot_array[get_local_id(0)].slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
+					slot_array[get_local_id(0)].slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
+					slot_array[get_local_id(0)].slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
+					slot_array[get_local_id(0)].slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
+					slot_array[get_local_id(0)].slot.xi[5] = ((xi6 << 24) | (xi5 >> 8));
+					slot_array[get_local_id(0)].slot.xi[UINTS_IN_XI(0)] = input * 2;
+					slot_ptrs[get_local_id(0)] = (__global slot_t *)get_slot_ptr(ht, 0, row, nr_slots);
+				}
+			}
+
+			barrier(CLK_LOCAL_MEM_FENCE);
+
+			uint write_thread_index = get_local_id(0) % THREADS_PER_WRITE(0);
+			uint local_id_base = get_local_id(0) - write_thread_index;
+
+			for (uint write_index = 0; write_index < THREADS_PER_WRITE(0); ++write_index)
+				if (THREADS_PER_WRITE(0) == 2)
+					*((__global uint4 *)slot_ptrs[local_id_base + write_index] + write_thread_index)
+					= slot_array[local_id_base + write_index].ui4[write_thread_index];
+
+			barrier(CLK_LOCAL_MEM_FENCE);
+
+			slot_ptrs[get_local_id(0)] = (__global slot_t *)get_slot_ptr(ht, 0, NR_ROWS(0) - 1, NR_SLOTS(0) - 1);
+
+			barrier(CLK_LOCAL_MEM_FENCE);
+
+			if (input < NR_INPUTS) {
+				xi0 = ((h[3] >> 8) | (h[4] << (64 - 8))) & 0xffffffff; xi1 = ((h[3] >> 8) | (h[4] << (64 - 8))) >> 32;
+				xi2 = ((h[4] >> 8) | (h[5] << (64 - 8))) & 0xffffffff; xi3 = ((h[4] >> 8) | (h[5] << (64 - 8))) >> 32;
+				xi4 = ((h[5] >> 8) | (h[6] << (64 - 8))) & 0xffffffff; xi5 = ((h[5] >> 8) | (h[6] << (64 - 8))) >> 32;
+				xi6 = (h[6] >> 8) & 0xffffffff;
+
+				uint row = get_row(0, xi0);
+				uint nr_slots = inc_row_counter(0, rowCounters, row);
+				if (nr_slots >= NR_SLOTS(0)) {
+					++dropped;
+				} else {
+					slot_array[get_local_id(0)].slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
+					slot_array[get_local_id(0)].slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
+					slot_array[get_local_id(0)].slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
+					slot_array[get_local_id(0)].slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
+					slot_array[get_local_id(0)].slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
+					slot_array[get_local_id(0)].slot.xi[5] = ((xi6 << 24) | (xi5 >> 8));
+					slot_array[get_local_id(0)].slot.xi[UINTS_IN_XI(0)] = input * 2 + 1;
+					slot_ptrs[get_local_id(0)] = (__global slot_t *)get_slot_ptr(ht, 0, row, nr_slots);
+				}
+			}
+
+			barrier(CLK_LOCAL_MEM_FENCE);
+
+			for (uint write_index = 0; write_index < THREADS_PER_WRITE(0); ++write_index)
+				if (THREADS_PER_WRITE(0) == 2)
+					*((__global uint4 *)slot_ptrs[local_id_base + write_index] + write_thread_index)
+					= slot_array[local_id_base + write_index].ui4[write_thread_index];
+
+			barrier(CLK_LOCAL_MEM_FENCE);
+		}
+
+		barrier(CLK_LOCAL_MEM_FENCE);
 	}
 #ifdef ENABLE_DEBUG
 	debug[tid * 2] = 0;
@@ -435,7 +446,7 @@ void kernel_round0(__constant ulong *blake_state_const, __global char *ht,
 ** Return 0 if successfully stored, or 1 if the row overflowed.
 */
 
-uint xor_and_store(uint round, __global char *ht_dst, uint row,
+uint xor_and_store(uint round, __global char *ht_src, __global char *ht_dst, uint row,
 	uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
 	__global uint *rowCounters) {
 	uint ret = 0;
@@ -452,20 +463,46 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 	slot_t slot;
 	__global slot_t *p = 0;
 
-	if (ai && bi) {
-		xi0 = *ai;
-		xi1 = *(ai += NR_SLOTS(round - 1));
-		if (round <= 7) xi2 = *(ai += NR_SLOTS(round - 1));
-		if (round <= 6) xi3 = *(ai += NR_SLOTS(round - 1));
-		if (round <= 4) xi4 = *(ai += NR_SLOTS(round - 1));
-		if (round <= 2) xi5 = *(ai += NR_SLOTS(round - 1));
+	if (slot_a < NR_SLOTS(round - 1) && slot_b < NR_SLOTS(round - 1)) {
+#ifdef OPTIM_SHRINKED_SLOT_CACHE
+		if (slot_a < SLOT_CACHE_SIZE(round - 1)) {
+#endif
+			xi0 = *ai;
+			xi1 = *(ai += SLOT_CACHE_SIZE(round - 1));
+			if (round <= 7) xi2 = *(ai += SLOT_CACHE_SIZE(round - 1));
+			if (round <= 6) xi3 = *(ai += SLOT_CACHE_SIZE(round - 1));
+			if (round <= 4) xi4 = *(ai += SLOT_CACHE_SIZE(round - 1));
+			if (round <= 2) xi5 = *(ai += SLOT_CACHE_SIZE(round - 1));
+#ifdef OPTIM_SHRINKED_SLOT_CACHE
+		} else {
+			xi0 = *(get_xi_ptr(ht_src, round - 1, row, slot_a) + 0);
+			xi1 = *(get_xi_ptr(ht_src, round - 1, row, slot_a) + 1);
+			if (round <= 7) xi2 = *(get_xi_ptr(ht_src, round - 1, row, slot_a) + 2);
+			if (round <= 6) xi3 = *(get_xi_ptr(ht_src, round - 1, row, slot_a) + 3);
+			if (round <= 4) xi4 = *(get_xi_ptr(ht_src, round - 1, row, slot_a) + 4);
+			if (round <= 2) xi5 = *(get_xi_ptr(ht_src, round - 1, row, slot_a) + 5);
+		}
+#endif
 
-		xi0 ^= *bi;
-		xi1 ^= *(bi += NR_SLOTS(round - 1));
-		if (round <= 7) xi2 ^= *(bi += NR_SLOTS(round - 1));
-		if (round <= 6) xi3 ^= *(bi += NR_SLOTS(round - 1));
-		if (round <= 4) xi4 ^= *(bi += NR_SLOTS(round - 1));
-		if (round <= 2) xi5 ^= *(bi += NR_SLOTS(round - 1));
+#ifdef OPTIM_SHRINKED_SLOT_CACHE
+		if (slot_b < SLOT_CACHE_SIZE(round - 1)) {
+#endif
+			xi0 ^= *bi;
+			xi1 ^= *(bi += SLOT_CACHE_SIZE(round - 1));
+			if (round <= 7) xi2 ^= *(bi += SLOT_CACHE_SIZE(round - 1));
+			if (round <= 6) xi3 ^= *(bi += SLOT_CACHE_SIZE(round - 1));
+			if (round <= 4) xi4 ^= *(bi += SLOT_CACHE_SIZE(round - 1));
+			if (round <= 2) xi5 ^= *(bi += SLOT_CACHE_SIZE(round - 1));
+#ifdef OPTIM_SHRINKED_SLOT_CACHE
+		} else {
+			xi0 = *(get_xi_ptr(ht_src, round - 1, row, slot_b) + 0);
+			xi1 = *(get_xi_ptr(ht_src, round - 1, row, slot_b) + 1);
+			if (round <= 7) xi2 = *(get_xi_ptr(ht_src, round - 1, row, slot_b) + 2);
+			if (round <= 6) xi3 = *(get_xi_ptr(ht_src, round - 1, row, slot_b) + 3);
+			if (round <= 4) xi4 = *(get_xi_ptr(ht_src, round - 1, row, slot_b) + 4);
+			if (round <= 2) xi5 = *(get_xi_ptr(ht_src, round - 1, row, slot_b) + 5);
+		}
+#endif
 
 		if (!(round & 0x1)) {
 			// skip padding bytes
@@ -476,14 +513,13 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 			slot.slot.xi[2] = xi3;
 			slot.slot.xi[3] = xi4;
 			slot.slot.xi[4] = xi5;
-		}
-		else {
+		} else {
 			slot.slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
-			slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
-			slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
-			slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
-			slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
-			slot.slot.xi[5] = ((xi5 >> 8));
+			if (round <= 7) slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
+			if (round <= 6) slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
+			if (round <= 5) slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
+			if (round <= 3) slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
+			if (round <= 1) slot.slot.xi[5] = ((xi5 >> 8));
 		}
 		slot.slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(round - 1, row, slot_a, slot_b);
 
@@ -521,10 +557,10 @@ uint xor_and_store(uint round, __global char *ht_dst, uint row,
 	return ret;
 }
 
-uint parallel_xor_and_store(uint round, __global char *ht_dst, uint row,
+uint parallel_xor_and_store(uint round, __global char *ht_src, __global char *ht_dst, uint row,
 	uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
 	__global uint *rowCounters,
-	__local global_pointer_to_slot_t *slot_ptrs) {
+	__local SLOT_INDEX_TYPE *new_slot_indexes) {
 	uint ret = 0;
 	uint xi0, xi1, xi2, xi3, xi4, xi5;
 	uint write_index = get_local_id(0) / THREADS_PER_WRITE(round);
@@ -537,25 +573,53 @@ uint parallel_xor_and_store(uint round, __global char *ht_dst, uint row,
 #endif
 
 	slot_t slot;
+	uint new_slot_index;
+	uint new_row;
 
 	if (!write_thread_index)
-		slot_ptrs[write_index] = 0;
+		new_slot_indexes[write_index] = NR_SLOTS(round);
 	barrier(CLK_LOCAL_MEM_FENCE);
 
-	if (ai && bi) {
-		xi0 = *ai;
-		xi1 = *(ai += NR_SLOTS(round - 1));
-		if (round <= 7) xi2 = *(ai += NR_SLOTS(round - 1));
-		if (round <= 6) xi3 = *(ai += NR_SLOTS(round - 1));
-		if (round <= 4) xi4 = *(ai += NR_SLOTS(round - 1));
-		if (round <= 2) xi5 = *(ai += NR_SLOTS(round - 1));
+	if (slot_a < NR_SLOTS(round - 1) && slot_b < NR_SLOTS(round - 1)) {
+#ifdef OPTIM_SHRINKED_SLOT_CACHE
+		if (slot_a < SLOT_CACHE_SIZE(round - 1)) {
+#endif
+			xi0 = *ai;
+			xi1 = *(ai += NR_SLOTS(round - 1));
+			if (round <= 7) xi2 = *(ai += NR_SLOTS(round - 1));
+			if (round <= 6) xi3 = *(ai += NR_SLOTS(round - 1));
+			if (round <= 4) xi4 = *(ai += NR_SLOTS(round - 1));
+			if (round <= 2) xi5 = *(ai += NR_SLOTS(round - 1));
+#ifdef OPTIM_SHRINKED_SLOT_CACHE
+		} else {
+			xi0 = *(get_xi_ptr(ht_src, round - 1, row, slot_a) + 0);
+			xi1 = *(get_xi_ptr(ht_src, round - 1, row, slot_a) + 1);
+			if (round <= 7) xi2 = *(get_xi_ptr(ht_src, round - 1, row, slot_a) + 2);
+			if (round <= 6) xi3 = *(get_xi_ptr(ht_src, round - 1, row, slot_a) + 3);
+			if (round <= 4) xi4 = *(get_xi_ptr(ht_src, round - 1, row, slot_a) + 4);
+			if (round <= 2) xi5 = *(get_xi_ptr(ht_src, round - 1, row, slot_a) + 5);
+		}
+#endif
 
-		xi0 ^= *bi;
-		xi1 ^= *(bi += NR_SLOTS(round - 1));
-		if (round <= 7) xi2 ^= *(bi += NR_SLOTS(round - 1));
-		if (round <= 6) xi3 ^= *(bi += NR_SLOTS(round - 1));
-		if (round <= 4) xi4 ^= *(bi += NR_SLOTS(round - 1));
-		if (round <= 2) xi5 ^= *(bi += NR_SLOTS(round - 1));
+#ifdef OPTIM_SHRINKED_SLOT_CACHE
+		if (slot_b < SLOT_CACHE_SIZE(round - 1)) {
+#endif
+			xi0 ^= *bi;
+			xi1 ^= *(bi += NR_SLOTS(round - 1));
+			if (round <= 7) xi2 ^= *(bi += NR_SLOTS(round - 1));
+			if (round <= 6) xi3 ^= *(bi += NR_SLOTS(round - 1));
+			if (round <= 4) xi4 ^= *(bi += NR_SLOTS(round - 1));
+			if (round <= 2) xi5 ^= *(bi += NR_SLOTS(round - 1));
+#ifdef OPTIM_SHRINKED_SLOT_CACHE
+		} else {
+			xi0 = *(get_xi_ptr(ht_src, round - 1, row, slot_b) + 0);
+			xi1 = *(get_xi_ptr(ht_src, round - 1, row, slot_b) + 1);
+			if (round <= 7) xi2 = *(get_xi_ptr(ht_src, round - 1, row, slot_b) + 2);
+			if (round <= 6) xi3 = *(get_xi_ptr(ht_src, round - 1, row, slot_b) + 3);
+			if (round <= 4) xi4 = *(get_xi_ptr(ht_src, round - 1, row, slot_b) + 4);
+			if (round <= 2) xi5 = *(get_xi_ptr(ht_src, round - 1, row, slot_b) + 5);
+		}
+#endif
 
 		if (!(round & 0x1)) {
 			// skip padding bytes
@@ -575,27 +639,30 @@ uint parallel_xor_and_store(uint round, __global char *ht_dst, uint row,
 			slot.slot.xi[5] = ((xi5 >> 8));
 		}
 		slot.slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(round - 1, row, slot_a, slot_b);
+		new_row = get_row(round, xi0);
 
 		// invalid solutions (which start happenning in round 5) have duplicate
 		// inputs and xor to zero, so discard them
 		if ((xi0 || xi1) && !write_thread_index) {
-			uint new_row = get_row(round, xi0);
-			uint new_slot_index = inc_row_counter(round, rowCounters, new_row);
-			if (new_slot_index >= NR_SLOTS(round)) {
+			new_slot_index = inc_row_counter(round, rowCounters, new_row);
+			if (new_slot_index >= NR_SLOTS(round))
 				ret = 1;
-			} else {
-				slot_ptrs[write_index] = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
-			}
+			new_slot_indexes[write_index] = new_slot_index;
 		}
 	}
 
 	barrier(CLK_LOCAL_MEM_FENCE);
-	__global slot_t *p = slot_ptrs[write_index];
-	if (THREADS_PER_WRITE(round) == 2 && p) {
+	if (write_thread_index)
+		new_slot_index = new_slot_indexes[write_index];
+	barrier(CLK_LOCAL_MEM_FENCE);
+	if (THREADS_PER_WRITE(round) == 2 && new_slot_index < NR_SLOTS(round)) {
+		__global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
 		*(((__global uint4 *)p) + write_thread_index) = slot.ui4[write_thread_index];
-	} else if (THREADS_PER_WRITE(round) == 4 && p) {
+	} else if (THREADS_PER_WRITE(round) == 4 && new_slot_index < NR_SLOTS(round)) {
+		__global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
 		*(((__global uint2 *)p) + write_thread_index) = slot.ui2[write_thread_index];
-	} else if (THREADS_PER_WRITE(round) == 8 && p) {
+	} else if (THREADS_PER_WRITE(round) == 8 && new_slot_index < NR_SLOTS(round)) {
+		__global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
 		*(((__global uint *)p) + write_thread_index) = slot.ui[write_thread_index];
 	}
 	barrier(CLK_LOCAL_MEM_FENCE);
@@ -617,8 +684,8 @@ void equihash_round(uint round,
 					__global uint *rowCountersSrc,
 					__global uint *rowCountersDst,
 					__local uint *bin_first_slots,
-					__local BIN_INDEX_TYPE *bin_next_slots,
-                    __local global_pointer_to_slot_t *slot_ptrs)
+					__local SLOT_INDEX_TYPE *bin_next_slots,
+                    __local SLOT_INDEX_TYPE *new_slot_indexes)
 {	
 	__global char *p;
 	uint     i, j;
@@ -681,23 +748,39 @@ void equihash_round(uint round,
 				uint xi0;
 #ifdef NVIDIA
 				uint2 slot_data[3];
-				for (j = 0; j < UINTS_IN_XI(round - 1) / 2; ++j)
-					slot_data[j] = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, i) + j);
-				if (UINTS_IN_XI(round - 1) % 2) {
-					j = UINTS_IN_XI(round - 1) - 1;
-					slot_data[j / 2].s0 = *((__global uint *)get_slot_ptr(ht_src, round - 1, assigned_row_index, i) + j);
-				}
+#ifdef OPTIM_SHRINKED_SLOT_CACHE
+				if (i < SLOT_CACHE_SIZE(round - 1)) {
+#endif
+					for (j = 0; j < UINTS_IN_XI(round - 1) / 2; ++j)
+						slot_data[j] = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, i) + j);
+					if (UINTS_IN_XI(round - 1) % 2) {
+						j = UINTS_IN_XI(round - 1) - 1;
+						slot_data[j / 2].s0 = *((__global uint *)get_slot_ptr(ht_src, round - 1, assigned_row_index, i) + j);
+					}
 
-				for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-					slot_cache[j * NR_SLOTS(round - 1) + i] = (j % 2) ? slot_data[j / 2].s1 : slot_data[j / 2].s0;
+					for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
+						slot_cache[j * SLOT_CACHE_SIZE(round - 1) + i] = (j % 2) ? slot_data[j / 2].s1 : slot_data[j / 2].s0;
+#ifdef OPTIM_SHRINKED_SLOT_CACHE
+				} else {
+					slot_data[0] = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, i) + 0);
+				}
+#endif
 				xi0 = slot_data[0].s0;
 #else
-				uint xi[6];
-				for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-					xi[j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, assigned_row_index, i) + j);
-				for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-					slot_cache[j * NR_SLOTS(round - 1) + i] = xi[j];
-				xi0 = xi[0];
+#ifdef OPTIM_SHRINKED_SLOT_CACHE
+				if (i < SLOT_CACHE_SIZE(round - 1)) {
+#endif
+					uint xi[6];
+					for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
+						xi[j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, assigned_row_index, i) + j);
+					for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
+						slot_cache[j * SLOT_CACHE_SIZE(round - 1) + i] = xi[j];
+					xi0 = xi[0];
+#ifdef OPTIM_SHRINKED_SLOT_CACHE
+				} else {
+					xi0 = *((__global uint *)get_xi_ptr(ht_src, round - 1, assigned_row_index, i) + 0);
+				}
+#endif
 #endif
 				uint bin_to_use =
 					  ((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
@@ -708,7 +791,6 @@ void equihash_round(uint round,
 		}
 
 		barrier(CLK_LOCAL_MEM_FENCE);
-		// in order to reduce the size of collision_array[].
 		if (!get_local_id(0)) {
 			*nr_collisions = 0;
 		}
@@ -741,14 +823,19 @@ void equihash_round(uint round,
 					collision = collision_array[nr_collisions_copy - 1 - write_index];
 					i = (collision >> 12) & 0xfff;
 					j = collision & 0xfff;
+#ifdef OPTIM_SHRINKED_SLOT_CACHE
+					a = (i < SLOT_CACHE_SIZE(round - 1)) ? (__local uint *)&slot_cache[i] : 0;
+					b = (j < SLOT_CACHE_SIZE(round - 1)) ? (__local uint *)&slot_cache[j] : 0;
+#else
 					a = (__local uint *)&slot_cache[i];
 					b = (__local uint *)&slot_cache[j];
+#endif
 				}
 				barrier(CLK_LOCAL_MEM_FENCE);
 				if (THREADS_PER_WRITE(round) > 1) {
-					dropped_stor += parallel_xor_and_store(round, ht_dst, assigned_row_index, i, j, a, b, rowCountersDst, slot_ptrs);
+					dropped_stor += parallel_xor_and_store(round, ht_src, ht_dst, assigned_row_index, i, j, a, b, rowCountersDst, new_slot_indexes);
 				} else {
-					dropped_stor += xor_and_store(round, ht_dst, assigned_row_index, i, j, a, b, rowCountersDst);
+					dropped_stor += xor_and_store(round, ht_src, ht_dst, assigned_row_index, i, j, a, b, rowCountersDst);
 				}
 
 				if (!get_local_id(0))
@@ -772,20 +859,21 @@ void equihash_round(uint round,
 /*
 ** This defines kernel_round1, kernel_round2, ..., kernel_round8.
 */
+
 #define KERNEL_ROUND(kernel_name, N) \
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE(N), 1, 1))) \
 void kernel_name(__global char *ht_src, __global char *ht_dst, \
 	__global uint *rowCountersSrc, __global uint *rowCountersDst, \
        	__global uint *debug) \
 { \
-    __local uint    slot_cache[NEXT_PRIME_NO(UINTS_IN_XI(N - 1) * NR_SLOTS(N - 1))]; \
+    __local uint    slot_cache[NEXT_PRIME_NO(UINTS_IN_XI(N - 1) * SLOT_CACHE_SIZE(N - 1))]; \
     __local uint    collision_array[NEXT_PRIME_NO(LDS_COLL_SIZE(N - 1))]; \
     __local uint    nr_collisions; \
 	__local uint    bin_first_slots[NEXT_PRIME_NO(NR_BINS(N - 1))]; \
-	__local BIN_INDEX_TYPE    bin_next_slots[NEXT_PRIME_NO(NR_SLOTS(N - 1))]; \
-	__local global_pointer_to_slot_t slot_ptrs[NEXT_PRIME_NO((THREADS_PER_WRITE(N) > 1) ? LOCAL_WORK_SIZE(N) / THREADS_PER_WRITE(N) : 0)]; \
+	__local SLOT_INDEX_TYPE bin_next_slots[NEXT_PRIME_NO(NR_SLOTS((N) - 1))]; \
+	__local SLOT_INDEX_TYPE new_slot_indexes[NEXT_PRIME_NO((THREADS_PER_WRITE(N) > 1) ? LOCAL_WORK_SIZE(N) / THREADS_PER_WRITE(N) : 0)]; \
 	equihash_round(N, ht_src, ht_dst, debug, slot_cache, collision_array, \
-	    &nr_collisions, rowCountersSrc, rowCountersDst, bin_first_slots, bin_next_slots, slot_ptrs); \
+	    &nr_collisions, rowCountersSrc, rowCountersDst, bin_first_slots, bin_next_slots, new_slot_indexes); \
 }
 KERNEL_ROUND(kernel_round1, 1)
 KERNEL_ROUND(kernel_round2, 2)
@@ -826,7 +914,7 @@ void kernel_potential_sols(
 	__global char	*p;
 	uint		ref_i, ref_j;
 	__local uint    bin_first_slots[NEXT_PRIME_NO(NR_BINS(PARAM_K - 1))];
-	__local BIN_INDEX_TYPE    bin_next_slots[NEXT_PRIME_NO(NR_SLOTS(PARAM_K - 1))];
+	__local SLOT_INDEX_TYPE    bin_next_slots[NEXT_PRIME_NO(NR_SLOTS(PARAM_K - 1))];
 
 	if (!get_global_id(0))
 		potential_sols->nr = 0;

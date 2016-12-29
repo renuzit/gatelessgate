@@ -39,7 +39,12 @@
 #define NR_ROWS_LOG(round)             12
 #define MAX_NR_ROWS_LOG                12
 
-#define THREADS_PER_WRITE(round)       ((round) <= 5 ? 1 : 1)
+//#define OPTIM_SHRINKED_SLOT_CACHE
+#define SLOT_CACHE_SIZE(round)         (NR_SLOTS(round) * 100 / 100)
+
+#define THREADS_PER_WRITE(round)       ((round) == 0 ? 1 : \
+                                        (round) <= 5 ? 1 : \
+                                                       1)
 #define SLOT_LEN(round)                (((round) >= 8) ? MAX_SLOT_LEN - 24 : \
                                         ((round) >= 6) ? MAX_SLOT_LEN - 16 : \
                                                          MAX_SLOT_LEN)
@@ -58,7 +63,12 @@
 #define NR_ROWS_LOG(round)             ((round) <= 4 ? 13 : 12)
 #define MAX_NR_ROWS_LOG                13
 
-#define THREADS_PER_WRITE(round)       ((round) <= 5 ? 2 : 1)
+//#define OPTIM_SHRINKED_SLOT_CACHE
+#define SLOT_CACHE_SIZE(round)         (NR_SLOTS(round) * 100 / 100)
+
+#define THREADS_PER_WRITE(round)       ((round) == 0 ? 1 : \
+                                        (round) <= 5 ? 2 : \
+                                                       1)
 #define SLOT_LEN(round)                (((round) >= 8) ? MAX_SLOT_LEN - 24 : \
                                         ((round) >= 6) ? MAX_SLOT_LEN - 16 : \
                                                          MAX_SLOT_LEN)
@@ -87,7 +97,7 @@
 #define LOCAL_WORK_SIZE_ROUND0         WAVEFRONT_SIZE
 #define LOCAL_WORK_SIZE_SOLS           WAVEFRONT_SIZE
 
-#define OPENCL_BUILD_OPTIONS_AMD       "-I.. -I. -O5 -DAMD"
+#define OPENCL_BUILD_OPTIONS_AMD       "-I.. -I. -O1 -DAMD"
 #define OPENCL_BUILD_OPTIONS_NVIDIA    "-I.. -I. -DNVIDIA -cl-nv-maxrregcount=63"
 #define OPENCL_BUILD_OPTIONS           "-I.. -I."
 
@@ -149,10 +159,7 @@
 #define SHA256_TARGET_LEN               (256 / 8)
 
 #define BITS_PER_ROW(round)  ((NR_SLOTS(round) < 3)   ? 2 : \
-                              (NR_SLOTS(round) < 7)   ? 3 : \
 	                          (NR_SLOTS(round) < 15)  ? 4 : \
-	                          (NR_SLOTS(round) < 31)  ? 5 : \
-	                          (NR_SLOTS(round) < 63)  ? 6 : \
 	                          (NR_SLOTS(round) < 255) ? 8 : \
                                                         16)
 #define ROWS_PER_UINT(round) (32 / BITS_PER_ROW(round))
@@ -395,9 +402,12 @@ typedef struct	potential_sols_s
                      (n))
 
 #if MAX_NR_SLOTS < 255
-#define BIN_INDEX_TYPE uchar
+#define SLOT_INDEX_TYPE uchar
 #elif MAX_NR_SLOTS < 65535
-#define BIN_INDEX_TYPE ushort
+#define SLOT_INDEX_TYPE ushort
 #else
 #error "unsupported MAX_NR_SLOTS"
 #endif
+
+#define MIN(A, B)	(((A) < (B)) ? (A) : (B))
+#define MAX(A, B)	(((A) > (B)) ? (A) : (B))
