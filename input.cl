@@ -23,6 +23,9 @@
 #endif
 
 #pragma OPENCL EXTENSION cl_khr_global_int32_base_atomics : enable
+#ifdef AMD
+#pragma OPENCL EXTENSION cl_amd_vec3 : enable
+#endif
 
 
 
@@ -53,6 +56,10 @@ typedef union {
 	uint4 ui4[2];
 	uint2 ui2[4];
 	uint  ui[8];
+#ifdef AMD
+	uint3 ui3[2];
+	ulong3 ul3;
+#endif
 } slot_t;
 
 typedef __global slot_t *global_pointer_to_slot_t;
@@ -67,6 +74,16 @@ typedef __global slot_t *global_pointer_to_slot_t;
                             ((round) == 6) ? 3 : \
                             ((round) == 7) ? 2 : \
                                              1)
+
+#if MAX_NR_SLOTS < 255
+#define SLOT_INDEX_TYPE uchar
+#elif MAX_NR_SLOTS < 65535
+#define SLOT_INDEX_TYPE ushort
+#else
+#error "unsupported MAX_NR_SLOTS"
+#endif
+
+
 
 /*
 ** Reset counters in a hash table.
@@ -124,8 +141,18 @@ __global uint *get_ref_ptr(__global char *ht, uint round, uint row, uint slot)
 
 void get_row_counters_index(uint round, uint *rowIdx, uint *rowOffset, uint row)
 {
-	*rowIdx = row / ROWS_PER_UINT(round);
-	*rowOffset = BITS_PER_ROW(round) * (row % ROWS_PER_UINT(round));
+	if (ROWS_PER_UINT(round) == 3) {
+		uint r = (0x55555555 * row + (row >> 1) - (row >> 3)) >> 30;
+		*rowIdx = (row - r) * 0xAAAAAAAB;
+		*rowOffset = BITS_PER_ROW(round) * r;
+	} else if (ROWS_PER_UINT(round) == 6) {
+		uint r = (0x55555555 * row + (row >> 1) - (row >> 3)) >> 29;
+		*rowIdx = (row - r) * 0xAAAAAAAB * 2;
+		*rowOffset = BITS_PER_ROW(round) * r;
+	} else {
+		*rowIdx = row / ROWS_PER_UINT(round);
+		*rowOffset = BITS_PER_ROW(round) * (row % ROWS_PER_UINT(round));
+	}
 }
 
 uint get_row(uint round, uint xi0)
@@ -422,7 +449,7 @@ void kernel_round0(__constant ulong *blake_state, __global char *ht,
 			for (uint write_index = 0; write_index < THREADS_PER_WRITE(0); ++write_index)
 				if (THREADS_PER_WRITE(0) == 2)
 					*((__global uint4 *)slot_ptrs[local_id_base + write_index] + write_thread_index)
-					= slot_array[local_id_base + write_index].ui4[write_thread_index];
+						= slot_array[local_id_base + write_index].ui4[write_thread_index];
 
 			barrier(CLK_LOCAL_MEM_FENCE);
 		}
@@ -538,21 +565,27 @@ uint xor_and_store(uint round, __global char *ht_src, __global char *ht_dst, uin
 	}
 
 	if (p) {
-#ifdef OPTIM_16BYTE_WRITES
-		if (round <= 5)
-			*(__global uint8 *)p = slot.ui8;
 #ifdef OPTIM_8BYTE_WRITES
-		else if (round <= 7)
-			*(__global uint4 *)p = slot.ui4[0];
-		else
+		if (round >= 8)
 			*(__global uint2 *)p = slot.ui2[0];
-#else
 		else
+#endif
+#ifdef OPTIM_12BYTE_WRITES
+		if (round >= 7)
+			*(__global uint3 *)p = slot.ui3[0];
+		else
+#endif
+#ifdef OPTIM_16BYTE_WRITES
+		if (round >= 6)
 			*(__global uint4 *)p = slot.ui4[0];
+		else
 #endif
-#else
-		*(__global uint8 *)p = slot.ui8;
+#ifdef OPTIM_24BYTE_WRITES
+		if (round >= 2)
+			*(__global ulong3 *)p = slot.ul3;
+		else
 #endif
+			*(__global uint8 *)p = slot.ui8;
 	}
 	return ret;
 }

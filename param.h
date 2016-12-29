@@ -37,7 +37,10 @@
 #ifdef NVIDIA
 
 #define NR_ROWS_LOG(round)             12
+#define MIN_NR_ROWS_LOG                12
 #define MAX_NR_ROWS_LOG                12
+
+//#define OPTIM_COMPRESSED_ROW_COUNTERS
 
 //#define OPTIM_SHRINKED_SLOT_CACHE
 #define SLOT_CACHE_SIZE(round)         (NR_SLOTS(round) * 100 / 100)
@@ -61,7 +64,10 @@
 #else
 
 #define NR_ROWS_LOG(round)             ((round) <= 4 ? 13 : 12)
+#define MIN_NR_ROWS_LOG                12
 #define MAX_NR_ROWS_LOG                13
+
+//#define OPTIM_COMPRESSED_ROW_COUNTERS
 
 //#define OPTIM_SHRINKED_SLOT_CACHE
 #define SLOT_CACHE_SIZE(round)         (NR_SLOTS(round) * 100 / 100)
@@ -72,6 +78,10 @@
 #define SLOT_LEN(round)                (((round) >= 8) ? MAX_SLOT_LEN - 24 : \
                                         ((round) >= 6) ? MAX_SLOT_LEN - 16 : \
                                                          MAX_SLOT_LEN)
+#ifdef AMD
+#define OPTIM_24BYTE_WRITES
+//#define OPTIM_12BYTE_WRITES
+#endif
 #define OPTIM_16BYTE_WRITES
 #define OPTIM_8BYTE_WRITES
 
@@ -104,20 +114,22 @@
 
 
 // You should not touch these parameters unless you know what you are doing.
-#define MAX_NR_SLOTS 684
-#define NR_SLOTS_BASE(round)     ((NR_ROWS_LOG(round) == 12) ? 684 : \
-                                  (NR_ROWS_LOG(round) == 13) ? 360 : \
-	                              (NR_ROWS_LOG(round) == 14) ? 200 : \
-	                              (NR_ROWS_LOG(round) == 15) ? 126 : \
-                                  (NR_ROWS_LOG(round) == 16) ?  61 : \
-	                                                            61)
+#define NR_ROWS_LOG_TO_NR_SLOTS_BASE(n) (((n) == 12) ? 684 : \
+                                         ((n) == 13) ? 360 : \
+	                                     ((n) == 14) ? 200 : \
+	                                     ((n) == 15) ? 126 : \
+                                         ((n) == 16) ?  61 : \
+	                                                    61)
+
+#define NR_SLOTS_BASE(round)            NR_ROWS_LOG_TO_NR_SLOTS_BASE(NR_ROWS_LOG(round))
+#define MAX_NR_SLOTS                    NR_ROWS_LOG_TO_NR_SLOTS_BASE(MIN_NR_ROWS_LOG)
 #define NR_SLOTS(round)          (((round) <= 6) ? (NR_SLOTS_BASE(round) * 87 / 100) : (NR_SLOTS_BASE(round)))
 #define LDS_COLL_SIZE(round)     ((NR_ROWS_LOG(round) == 12) ? (NR_SLOTS(round) * 90 / 100) : \
                                   (NR_ROWS_LOG(round) == 13) ? (NR_SLOTS(round) * 100 / 100) : \
 	                              (NR_ROWS_LOG(round) == 14) ? (NR_SLOTS(round) * 140 / 100) : \
 	                              (NR_ROWS_LOG(round) == 15) ? (NR_SLOTS(round) * 150 / 100) : \
-                                  (NR_ROWS_LOG(round) == 16) ? (NR_SLOTS(round) * 2500 / 100) : \
-	                                                           (NR_SLOTS(round) * 2500 / 100))
+                                  (NR_ROWS_LOG(round) == 16) ? (NR_SLOTS(round) * 250 / 100) : \
+	                                                           (NR_SLOTS(round) * 250 / 100))
 
 
 
@@ -158,10 +170,21 @@
 // Length of SHA256 target
 #define SHA256_TARGET_LEN               (256 / 8)
 
+#ifdef OPTIM_COMPRESSED_ROW_COUNTERS
+#define BITS_PER_ROW(round)  ((NR_SLOTS(round) < 3)    ? 2 : \
+	                          (NR_SLOTS(round) < 7)    ? 3 : \
+	                          (NR_SLOTS(round) < 15)   ? 4 : \
+	                          (NR_SLOTS(round) < 31)   ? 5 : \
+	                          (NR_SLOTS(round) < 63)   ? 6 : \
+	                          (NR_SLOTS(round) < 255)  ? 8 : \
+	                          (NR_SLOTS(round) < 1023) ? 10 : \
+                                                         16)
+#else
 #define BITS_PER_ROW(round)  ((NR_SLOTS(round) < 3)   ? 2 : \
 	                          (NR_SLOTS(round) < 15)  ? 4 : \
 	                          (NR_SLOTS(round) < 255) ? 8 : \
                                                         16)
+#endif
 #define ROWS_PER_UINT(round) (32 / BITS_PER_ROW(round))
 #define ROW_MASK(round)      ((1 << BITS_PER_ROW(round)) - 1)
 
@@ -400,14 +423,6 @@ typedef struct	potential_sols_s
 	((n) <= 16384) ? 16384 : \
 	((n) <= 32768) ? 32768 : \
                      (n))
-
-#if MAX_NR_SLOTS < 255
-#define SLOT_INDEX_TYPE uchar
-#elif MAX_NR_SLOTS < 65535
-#define SLOT_INDEX_TYPE ushort
-#else
-#error "unsupported MAX_NR_SLOTS"
-#endif
 
 #define MIN(A, B)	(((A) < (B)) ? (A) : (B))
 #define MAX(A, B)	(((A) > (B)) ? (A) : (B))
