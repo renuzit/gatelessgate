@@ -40,10 +40,11 @@
 #define MIN_NR_ROWS_LOG                12
 #define MAX_NR_ROWS_LOG                12
 
-//#define OPTIM_COMPRESSED_ROW_COUNTERS
+#define NR_SUBROUNDS(round)              1
+#define MAX_NR_SUBROUNDS                 1
+#define SLOT_CACHE_SIZE(round, subround) NR_SLOTS((round) - 1)
 
-//#define OPTIM_SHRINKED_SLOT_CACHE
-#define SLOT_CACHE_SIZE(round)         (NR_SLOTS(round) * 100 / 100)
+//#define OPTIM_COMPRESSED_ROW_COUNTERS
 
 #define THREADS_PER_WRITE(round)       ((round) == 0 ? 1 : \
                                         (round) <= 5 ? 1 : \
@@ -60,6 +61,7 @@
 #define LOCAL_WORK_SIZE_POTENTIAL_SOLS ((NR_ROWS_LOG(PARAM_K - 1) <= 12) ? 256 : \
 										(NR_ROWS_LOG(PARAM_K - 1) <= 15) ? 128 : \
 	                                                                        64)
+#define MAX_LOCAL_WORK_SIZE            256
 
 #else
 
@@ -67,10 +69,15 @@
 #define MIN_NR_ROWS_LOG                12
 #define MAX_NR_ROWS_LOG                13
 
+#define NR_SUBROUNDS(round)            ((round) == 1 ? 1 : \
+                                        (round) == 2 ? 1 : \
+                                                       1)
+#define MAX_NR_SUBROUNDS                 2
+#define SLOT_CACHE_SIZE(round, subround) (((round) == 1 && (subround) == 0) ? (NR_SLOTS((round) - 1) *  100 / 100) : \
+                                          ((round) == 2 && (subround) == 0) ? (NR_SLOTS((round) - 1) *  100 / 100) : \
+                                                                               NR_SLOTS((round) - 1))
+ 
 //#define OPTIM_COMPRESSED_ROW_COUNTERS
-
-//#define OPTIM_SHRINKED_SLOT_CACHE
-#define SLOT_CACHE_SIZE(round)         (NR_SLOTS(round) * 100 / 100)
 
 #define THREADS_PER_WRITE(round)       ((round) == 0 ? 1 : \
                                         (round) <= 5 ? 2 : \
@@ -91,6 +98,7 @@
 #define LOCAL_WORK_SIZE_POTENTIAL_SOLS ((NR_ROWS_LOG(PARAM_K - 1) <= 12) ? 256 : \
 										(NR_ROWS_LOG(PARAM_K - 1) <= 15) ? 128 : \
 	                                                                        64)
+#define MAX_LOCAL_WORK_SIZE            256
 
 #endif
 
@@ -98,16 +106,18 @@
 #define GLOBAL_WORK_SIZE_RATIO         768
 #define ROUND0_INPUTS_PER_WORK_ITEM    1
 #define WAVEFRONT_SIZE 32
+#define ADJUSTED_LDS_ARRAY_SIZE(n)     NEXT_PRIME_NO(n)
 #else
 #define GLOBAL_WORK_SIZE_RATIO         512
 #define ROUND0_INPUTS_PER_WORK_ITEM    4
 #define WAVEFRONT_SIZE 64
+#define ADJUSTED_LDS_ARRAY_SIZE(n)     (n)
 #endif
 
 #define LOCAL_WORK_SIZE_ROUND0         WAVEFRONT_SIZE
 #define LOCAL_WORK_SIZE_SOLS           WAVEFRONT_SIZE
 
-#define OPENCL_BUILD_OPTIONS_AMD       "-I.. -I. -O1 -DAMD"
+#define OPENCL_BUILD_OPTIONS_AMD       "-I.. -I. -O3 -DAMD"
 #define OPENCL_BUILD_OPTIONS_NVIDIA    "-I.. -I. -DNVIDIA -cl-nv-maxrregcount=63"
 #define OPENCL_BUILD_OPTIONS           "-I.. -I."
 
@@ -170,6 +180,8 @@
 // Length of SHA256 target
 #define SHA256_TARGET_LEN               (256 / 8)
 
+
+
 #ifdef OPTIM_COMPRESSED_ROW_COUNTERS
 #define BITS_PER_ROW(round)  ((NR_SLOTS(round) < 3)    ? 2 : \
 	                          (NR_SLOTS(round) < 7)    ? 3 : \
@@ -191,10 +203,25 @@
 #define MIN_ROWS_PER_UINT 2
 #define ROW_COUNTERS_SIZE ((MAX_NR_ROWS * 4 + MIN_ROWS_PER_UINT - 1) / MIN_ROWS_PER_UINT)
 
-/*
-** Return the offset of Xi in bytes from the beginning of the slot.
-*/
-#define xi_offset_for_round(round)	0
+
+
+#define BITS_PER_SLOT_INDEX(round)  ((NR_SLOTS(round) < 3)    ? 2 : \
+                                     (NR_SLOTS(round) < 7)    ? 3 : \
+                                     (NR_SLOTS(round) < 15)   ? 4 : \
+                                     (NR_SLOTS(round) < 31)   ? 5 : \
+                                     (NR_SLOTS(round) < 63)   ? 6 : \
+                                     (NR_SLOTS(round) < 255)  ? 8 : \
+                                     (NR_SLOTS(round) < 1023) ? 10 : \
+                                                                16)
+#define SLOT_INDEXES_PER_UINT(round) (32 / BITS_PER_SLOT_INDEX(round))
+#define SLOT_INDEX_MASK(round)       ((1 << BITS_PER_SLOT_INDEX(round)) - 1)
+#define SLOT_INDEX_ARRAY_SIZE(round, n) (((n) + SLOT_INDEXES_PER_UINT(round) - 1) / SLOT_INDEXES_PER_UINT(round))
+
+
+typedef struct {
+	uint nr_rows[MAX_NR_SUBROUNDS];
+	uint rows[MAX_NR_SUBROUNDS][MAX_NR_ROWS];
+} subround_t;
 
 // An (uncompressed) solution stores (1 << PARAM_K) 32-bit values
 #define SOL_SIZE			((1 << PARAM_K) * 4)
