@@ -207,28 +207,10 @@ uint inc_row_counter(uint round, __global uint *rowCounters, uint row)
 */
 
 __kernel
-void kernel_init_ht(uint round, __global char *ht, __global uint *rowCountersSrc, __global uint *rowCountersDst, __global subround_t *subround)
+void kernel_init_ht(uint round, __global char *ht, __global uint *rowCountersSrc, __global uint *rowCountersDst)
 {
 	if (get_global_id(0) < ROW_COUNTERS_SIZE / 4)
 		rowCountersDst[get_global_id(0)] = 0;
-
-	if (NR_SUBROUNDS(round) > 1) {
-		if (get_global_id(0) == 0)
-			for (uint i = 0; i < NR_SUBROUNDS(round); ++i)
-				subround->nr_rows[i] = 0;
-		barrier(CLK_GLOBAL_MEM_FENCE);
-
-		if (round >= 1 && get_global_id(0) < NR_ROWS(round - 1)) {
-			uint row_index = get_global_id(0);
-			for (uint i = 0; i < NR_SUBROUNDS(round); ++i) {
-				uint nr_slots = get_nr_slots(round - 1, rowCountersSrc, row_index);
-				if ((i == 0 || SLOT_CACHE_SIZE(round, i - 1) < nr_slots) && nr_slots <= SLOT_CACHE_SIZE(round, i)) {
-					subround->rows[i][atomic_inc(&(subround->nr_rows[i]))] = row_index;
-					break;
-				}
-			}
-		}
-	}
 }
 
 
@@ -508,15 +490,11 @@ void kernel_round0(__constant ulong *blake_state, __global char *ht,
 ** Return 0 if successfully stored, or 1 if the row overflowed.
 */
 
-uint xor_and_store(uint round, uint subround, __global char *ht_src, __global char *ht_dst, uint row,
+uint xor_and_store(uint round, __global char *ht_src, __global char *ht_dst, uint row,
 	uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
 	__global uint *rowCounters) {
 	uint ret = 0;
 	uint xi0, xi1, xi2, xi3, xi4, xi5;
-	uint write_index = get_local_id(0) / THREADS_PER_WRITE(round);
-	uint write_thread_index = get_local_id(0) % THREADS_PER_WRITE(round);
-	//uint write_index = get_local_id(0) % (get_local_size(0) / THREADS_PER_WRITE(round));
-	//uint write_thread_index = get_local_id(0) / (get_local_size(0) / THREADS_PER_WRITE(round));
 
 #if NR_ROWS_LOG < 8 && NR_ROWS_LOG > 20
 #error "unsupported NR_ROWS_LOG"
@@ -527,18 +505,18 @@ uint xor_and_store(uint round, uint subround, __global char *ht_src, __global ch
 
 	if (slot_a < NR_SLOTS(round - 1) && slot_b < NR_SLOTS(round - 1)) {
 		xi0 = *ai;
-		xi1 = *(ai += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 7) xi2 = *(ai += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 6) xi3 = *(ai += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 4) xi4 = *(ai += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 2) xi5 = *(ai += SLOT_CACHE_SIZE(round, subround));
+		xi1 = *(ai += SLOT_CACHE_SIZE(round));
+		if (round <= 7) xi2 = *(ai += SLOT_CACHE_SIZE(round));
+		if (round <= 6) xi3 = *(ai += SLOT_CACHE_SIZE(round));
+		if (round <= 4) xi4 = *(ai += SLOT_CACHE_SIZE(round));
+		if (round <= 2) xi5 = *(ai += SLOT_CACHE_SIZE(round));
 
 		xi0 ^= *bi;
-		xi1 ^= *(bi += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 7) xi2 ^= *(bi += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 6) xi3 ^= *(bi += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 4) xi4 ^= *(bi += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 2) xi5 ^= *(bi += SLOT_CACHE_SIZE(round, subround));
+		xi1 ^= *(bi += SLOT_CACHE_SIZE(round));
+		if (round <= 7) xi2 ^= *(bi += SLOT_CACHE_SIZE(round));
+		if (round <= 6) xi3 ^= *(bi += SLOT_CACHE_SIZE(round));
+		if (round <= 4) xi4 ^= *(bi += SLOT_CACHE_SIZE(round));
+		if (round <= 2) xi5 ^= *(bi += SLOT_CACHE_SIZE(round));
 
 		if (!(round & 0x1)) {
 			// skip padding bytes
@@ -599,7 +577,7 @@ uint xor_and_store(uint round, uint subround, __global char *ht_src, __global ch
 	return ret;
 }
 
-uint parallel_xor_and_store(uint round, uint subround, __global char *ht_src, __global char *ht_dst, uint row,
+uint parallel_xor_and_store(uint round, __global char *ht_src, __global char *ht_dst, uint row,
 	uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
 	__global uint *rowCounters,
 	__local SLOT_INDEX_TYPE *new_slot_indexes) {
@@ -624,18 +602,18 @@ uint parallel_xor_and_store(uint round, uint subround, __global char *ht_src, __
 
 	if (slot_a < NR_SLOTS(round - 1) && slot_b < NR_SLOTS(round - 1)) {
 		xi0 = *ai;
-		xi1 = *(ai += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 7) xi2 = *(ai += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 6) xi3 = *(ai += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 4) xi4 = *(ai += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 2) xi5 = *(ai += SLOT_CACHE_SIZE(round, subround));
+		xi1 = *(ai += SLOT_CACHE_SIZE(round));
+		if (round <= 7) xi2 = *(ai += SLOT_CACHE_SIZE(round));
+		if (round <= 6) xi3 = *(ai += SLOT_CACHE_SIZE(round));
+		if (round <= 4) xi4 = *(ai += SLOT_CACHE_SIZE(round));
+		if (round <= 2) xi5 = *(ai += SLOT_CACHE_SIZE(round));
 
 		xi0 ^= *bi;
-		xi1 ^= *(bi += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 7) xi2 ^= *(bi += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 6) xi3 ^= *(bi += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 4) xi4 ^= *(bi += SLOT_CACHE_SIZE(round, subround));
-		if (round <= 2) xi5 ^= *(bi += SLOT_CACHE_SIZE(round, subround));
+		xi1 ^= *(bi += SLOT_CACHE_SIZE(round));
+		if (round <= 7) xi2 ^= *(bi += SLOT_CACHE_SIZE(round));
+		if (round <= 6) xi3 ^= *(bi += SLOT_CACHE_SIZE(round));
+		if (round <= 4) xi4 ^= *(bi += SLOT_CACHE_SIZE(round));
+		if (round <= 2) xi5 ^= *(bi += SLOT_CACHE_SIZE(round));
 
 		if (!(round & 0x1)) {
 			// skip padding bytes
@@ -671,6 +649,11 @@ uint parallel_xor_and_store(uint round, uint subround, __global char *ht_src, __
 	if (write_thread_index)
 		new_slot_index = new_slot_indexes[write_index];
 	barrier(CLK_LOCAL_MEM_FENCE);
+	if (new_slot_index < NR_SLOTS(round)) {
+		__global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
+		*(((__global uint4 *)p) + write_thread_index) = slot.ui4[write_thread_index];
+	}
+#if 0
 	if (THREADS_PER_WRITE(round) == 2 && new_slot_index < NR_SLOTS(round)) {
 		__global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
 		*(((__global uint4 *)p) + write_thread_index) = slot.ui4[write_thread_index];
@@ -681,6 +664,7 @@ uint parallel_xor_and_store(uint round, uint subround, __global char *ht_src, __
 		__global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
 		*(((__global uint *)p) + write_thread_index) = slot.ui[write_thread_index];
 	}
+#endif
 	barrier(CLK_LOCAL_MEM_FENCE);
 	return ret;
 }
@@ -691,25 +675,24 @@ uint parallel_xor_and_store(uint round, uint subround, __global char *ht_src, __
 */
 
 void equihash_round(uint round,
-	                uint subround,
 					__global char *ht_src,
 					__global char *ht_dst,
 					__global uint *debug,
 					__local uint  *slot_cache,
-					__local uint *collision_array,
+					__local SLOT_INDEX_TYPE *collision_array_a,
+					__local SLOT_INDEX_TYPE *collision_array_b,
 					__local uint *nr_collisions,
 					__global uint *rowCountersSrc,
 					__global uint *rowCountersDst,
-	                __global subround_t *subround_info,
 					__local uint *bin_first_slots,
 					__local SLOT_INDEX_TYPE *bin_next_slots,
                     __local SLOT_INDEX_TYPE *new_slot_indexes)
 {
-	__global char *p;
 	uint     i, j;
+#ifdef ENABLE_DEBUG
 	uint     dropped_coll = 0;
 	uint     dropped_stor = 0;
-	__local uint  *a, *b;
+#endif
 
 	// the mask is also computed to read data from the previous round
 #define BIN_MASK(round)        ((((round) + 1) % 2) ? 0xf000 : 0xf0000)
@@ -729,121 +712,130 @@ void equihash_round(uint round,
 #define NR_BINS_LOG(round) (20 - NR_ROWS_LOG(round))
 #define NR_BINS(round) (1 << NR_BINS_LOG(round))
 
-	__local uint nr_slots_shared;
+
 
 	uint nr_slots = 0;
 	uint assigned_row_index = get_group_id(0);
 
 	if (assigned_row_index >= NR_ROWS(round - 1))
 		return;
-	if (NR_SUBROUNDS(round) > 1) {
-		if (assigned_row_index >= subround_info->nr_rows[subround])
-			return;
-		assigned_row_index = subround_info->rows[subround][assigned_row_index];
-	}
 
-	if (!get_local_id(0)) 
+	if (!get_local_id(0))
 		*nr_collisions = 0;
 	for (i = get_local_id(0); i < NR_BINS(round - 1); i += get_local_size(0))
 		bin_first_slots[i] = NR_SLOTS(round - 1);
 	for (i = get_local_id(0); i < NR_SLOTS(round - 1); i += get_local_size(0))
 		bin_next_slots[i] = NR_SLOTS(round - 1);
-	if (assigned_row_index < NR_ROWS(round - 1) && get_local_id(0) == 0)
+	__local uint nr_slots_shared;
+	if (get_local_id(0) == 0)
 		nr_slots_shared = nr_slots = get_nr_slots(round, rowCountersSrc, assigned_row_index);
 	barrier(CLK_LOCAL_MEM_FENCE);
-	if (assigned_row_index < NR_ROWS(round - 1) && get_local_id(0)) {
+	if (get_local_id(0))
 		nr_slots = nr_slots_shared;
-	}
 
 	barrier(CLK_LOCAL_MEM_FENCE);
 
-	// Perform a radix sort as slots get loaded into LDS.
-	// Make sure all the work items in the work group enter the loop.
-	uint i_max = nr_slots + (get_local_size(0) - nr_slots % get_local_size(0)) - 1;
-	for (i = get_local_id(0); i <= i_max; i += get_local_size(0)) {
-		if (assigned_row_index < NR_ROWS(round - 1) && i < nr_slots) {
-			uint xi0;
+	for (uint phase = 0; phase < 1; ++phase) {
+
+		// Perform a radix sort as slots get loaded into LDS.
+		// Make sure all the work items in the work group enter the loop.
+		uint i_max;
+		i_max = nr_slots;
+		i_max = i_max + (get_local_size(0) - i_max % get_local_size(0)) - 1;
+		for (i = get_local_id(0); i <= i_max; i += get_local_size(0)) {
+			if (i < MIN(nr_slots, SLOT_CACHE_SIZE(round))) {
+				uint slot_index = i;
+				uint slot_cache_index = i;
 #ifdef NVIDIA
-			uint2 slot_data[3];
-			for (j = 0; j < UINTS_IN_XI(round - 1) / 2; ++j)
-				slot_data[j] = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, i) + j);
-			if (UINTS_IN_XI(round - 1) % 2) {
-				j = UINTS_IN_XI(round - 1) - 1;
-				slot_data[j / 2].s0 = *((__global uint *)get_slot_ptr(ht_src, round - 1, assigned_row_index, i) + j);
-			}
+				uint2 slot_data0, slot_data1, slot_data2;
+				if (UINTS_IN_XI(round - 1) >= 1) slot_data0 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
+				if (UINTS_IN_XI(round - 1) >= 3) slot_data1 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 1);
+				if (UINTS_IN_XI(round - 1) >= 5) slot_data2 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 2);
 
-			for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-				slot_cache[j * SLOT_CACHE_SIZE(round, subround) + i] = (j % 2) ? slot_data[j / 2].s1 : slot_data[j / 2].s0;
-			xi0 = slot_data[0].s0;
+				if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data0.s0;
+				if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data0.s1;
+				if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data1.s0;
+				if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data1.s1;
+				if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data2.s0;
+				if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data2.s1;
+				uint xi0 = slot_data0.s0;
 #else
-			uint xi[6];
-			for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-				xi[j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, assigned_row_index, i) + j);
-			for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-				slot_cache[j * SLOT_CACHE_SIZE(round, subround) + i] = xi[j];
-			xi0 = xi[0];
+				uint xi[6];
+				for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
+					xi[j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, assigned_row_index, slot_index) + j);
+				for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
+					slot_cache[j * SLOT_CACHE_SIZE(round) + slot_cache_index] = xi[j];
+				uint xi0 = xi[0];
 #endif
-			uint bin_to_use =
-					((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
-				| ((xi0 & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
-			bin_next_slots[i] = atom_xchg(&bin_first_slots[bin_to_use], i);
-		}
-		barrier(CLK_LOCAL_MEM_FENCE);
-	}
-
-	barrier(CLK_LOCAL_MEM_FENCE);
-	if (!get_local_id(0)) {
-		*nr_collisions = 0;
-	}
-	uint max_slot_a_index = NR_SLOTS(round - 1) + (get_local_size(0) - NR_SLOTS(round - 1) % get_local_size(0)) - 1;
-	barrier(CLK_LOCAL_MEM_FENCE);
-	for (uint slot_a_index = get_local_id(0); slot_a_index <= max_slot_a_index; slot_a_index += get_local_size(0)) {
-		int valid_slot_a_index = assigned_row_index < NR_ROWS(round - 1) && slot_a_index < NR_SLOTS(round - 1);
-		uint slot_b_index = valid_slot_a_index ? bin_next_slots[slot_a_index] : NR_SLOTS(round - 1);
-		while (slot_b_index < NR_SLOTS(round - 1)) {
-			uint coll_index = atom_inc(nr_collisions);
-			if (coll_index >= LDS_COLL_SIZE(round - 1)) {
-				atom_dec(nr_collisions);
-				++dropped_coll;
-			} else {
-				collision_array[coll_index] = (slot_a_index << 12) | slot_b_index;
-			}
-			slot_b_index = bin_next_slots[slot_b_index];
-		}
-		barrier(CLK_LOCAL_MEM_FENCE);
-
-		uint nr_collisions_copy = *nr_collisions;
-		barrier(CLK_LOCAL_MEM_FENCE);
-		while (nr_collisions_copy > 0) {
-		// while (nr_collisions_copy >= get_local_size(0) || (slot_a_index + get_local_size(0) > max_slot_a_index && nr_collisions_copy > 0) {
-			uint collision, i, j;
-			__local uint *a = 0, *b = 0;
-			// uint write_index = get_local_id(0) % (get_local_size(0) / THREADS_PER_WRITE(round));
-			uint write_index = get_local_id(0) / THREADS_PER_WRITE(round);
-			if (assigned_row_index < NR_ROWS(round - 1) && write_index < nr_collisions_copy) {
-				collision = collision_array[nr_collisions_copy - 1 - write_index];
-				i = (collision >> 12) & 0xfff;
-				j = collision & 0xfff;
-				a = (__local uint *)&slot_cache[i];
-				b = (__local uint *)&slot_cache[j];
+				uint bin_to_use =
+					  ((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
+					| ((xi0 & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
+				bin_next_slots[i] = atom_xchg(&bin_first_slots[bin_to_use], i);
 			}
 			barrier(CLK_LOCAL_MEM_FENCE);
-			if (THREADS_PER_WRITE(round) > 1) {
-				dropped_stor += parallel_xor_and_store(round, subround, ht_src, ht_dst, assigned_row_index, i, j, a, b, rowCountersDst, new_slot_indexes);
-			} else {
-				dropped_stor += xor_and_store(round, subround, ht_src, ht_dst, assigned_row_index, i, j, a, b, rowCountersDst);
+		}
+
+		barrier(CLK_LOCAL_MEM_FENCE);
+		if (!get_local_id(0))
+			*nr_collisions = 0;
+		uint max_slot_a_index = NR_SLOTS(round - 1) + (get_local_size(0) - NR_SLOTS(round - 1) % get_local_size(0)) - 1;
+		barrier(CLK_LOCAL_MEM_FENCE);
+		for (uint slot_a_index = get_local_id(0); slot_a_index <= max_slot_a_index; slot_a_index += get_local_size(0)) {
+			uint slot_b_index = (slot_a_index < NR_SLOTS(round - 1)) ? bin_next_slots[slot_a_index] : NR_SLOTS(round - 1);
+			while (slot_b_index < NR_SLOTS(round - 1)) {
+				uint coll_index = atom_inc(nr_collisions);
+				if (coll_index < LDS_COLL_SIZE(round - 1)) {
+					collision_array_a[coll_index] = slot_a_index;
+					collision_array_b[coll_index] = slot_b_index;
+				} else {
+					atom_dec(nr_collisions);
+#ifdef ENABLE_DEBUG
+					++dropped_coll;
+#endif
+				}
+				slot_b_index = bin_next_slots[slot_b_index];
 			}
 
-			if (!get_local_id(0))
-				*nr_collisions -= min(*nr_collisions, (uint)get_local_size(0) / THREADS_PER_WRITE(round));
-
 			barrier(CLK_LOCAL_MEM_FENCE);
-			nr_collisions_copy = *nr_collisions;
+
+			uint nr_collisions_copy = *nr_collisions;
+			barrier(CLK_LOCAL_MEM_FENCE);
+			while (nr_collisions_copy > 0) {
+				uint collision, slot_index_a = NR_SLOTS(round - 1), slot_index_b = NR_SLOTS(round - 1);
+				__local uint *slot_cache_a, *slot_cache_b;
+				// uint write_index = get_local_id(0) % (get_local_size(0) / THREADS_PER_WRITE(round));
+				uint write_index = get_local_id(0) / THREADS_PER_WRITE(round);
+				if (write_index < nr_collisions_copy) {
+					slot_index_a = collision_array_a[nr_collisions_copy - 1 - write_index];
+					slot_index_b = collision_array_b[nr_collisions_copy - 1 - write_index];
+					slot_cache_a = (__local uint *)&slot_cache[slot_index_a];
+					slot_cache_b = (__local uint *)&slot_cache[slot_index_b];
+				}
+				barrier(CLK_LOCAL_MEM_FENCE);
+				if (THREADS_PER_WRITE(round) > 1) {
+#ifdef ENABLE_DEBUG
+					dropped_stor += 
+#endif
+						parallel_xor_and_store(round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst, new_slot_indexes);
+				} else {
+#ifdef ENABLE_DEBUG
+					dropped_stor +=
+#endif
+						xor_and_store(round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+				}
+
+				if (!get_local_id(0))
+					*nr_collisions -= min(*nr_collisions, (uint)get_local_size(0) / THREADS_PER_WRITE(round));
+
+				barrier(CLK_LOCAL_MEM_FENCE);
+				nr_collisions_copy = *nr_collisions;
+				barrier(CLK_LOCAL_MEM_FENCE);
+			}
 			barrier(CLK_LOCAL_MEM_FENCE);
 		}
-		barrier(CLK_LOCAL_MEM_FENCE);
 	}
-	barrier(CLK_LOCAL_MEM_FENCE);
+
+
 
 #ifdef ENABLE_DEBUG
 	debug[get_global_id(0) * 2] = dropped_coll;
@@ -855,40 +847,31 @@ void equihash_round(uint round,
 ** This defines kernel_round1, kernel_round2, ..., kernel_round8.
 */
 
-#define KERNEL_ROUND(kernel_name, N, M) \
+#define KERNEL_ROUND(kernel_name, N) \
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE(N), 1, 1))) \
 void kernel_name(__global char *ht_src, __global char *ht_dst, \
 	__global uint *rowCountersSrc, __global uint *rowCountersDst, \
-    __global subround_t *subround, \
        	__global uint *debug) \
 { \
-    __local uint    slot_cache[ADJUSTED_LDS_ARRAY_SIZE(UINTS_IN_XI(N - 1) * SLOT_CACHE_SIZE((N), (M)))]; \
-    __local uint    collision_array[ADJUSTED_LDS_ARRAY_SIZE(LDS_COLL_SIZE(N - 1))]; \
+    __local uint    slot_cache[ADJUSTED_LDS_ARRAY_SIZE(UINTS_IN_XI(N - 1) * SLOT_CACHE_SIZE(N))]; \
+    __local SLOT_INDEX_TYPE collision_array_a[ADJUSTED_LDS_ARRAY_SIZE(LDS_COLL_SIZE(N - 1))]; \
+    __local SLOT_INDEX_TYPE collision_array_b[ADJUSTED_LDS_ARRAY_SIZE(LDS_COLL_SIZE(N - 1))]; \
     __local uint    nr_collisions; \
 	__local uint    bin_first_slots[ADJUSTED_LDS_ARRAY_SIZE(NR_BINS(N - 1))]; \
 	__local SLOT_INDEX_TYPE bin_next_slots[ADJUSTED_LDS_ARRAY_SIZE(NR_SLOTS((N) - 1))]; \
 	__local SLOT_INDEX_TYPE new_slot_indexes[ADJUSTED_LDS_ARRAY_SIZE((THREADS_PER_WRITE(N) > 1) ? LOCAL_WORK_SIZE(N) / THREADS_PER_WRITE(N) : 0)]; \
-	equihash_round((N), (M), ht_src, ht_dst, debug, slot_cache, collision_array, \
-	    &nr_collisions, rowCountersSrc, rowCountersDst, subround, bin_first_slots, bin_next_slots, new_slot_indexes); \
+	equihash_round((N), ht_src, ht_dst, debug, slot_cache, collision_array_a, collision_array_b, \
+	    &nr_collisions, rowCountersSrc, rowCountersDst, bin_first_slots, bin_next_slots, new_slot_indexes); \
 }
 
-KERNEL_ROUND(kernel_round1a, 1, 0)
-KERNEL_ROUND(kernel_round2a, 2, 0)
-KERNEL_ROUND(kernel_round3a, 3, 0)
-KERNEL_ROUND(kernel_round4a, 4, 0)
-KERNEL_ROUND(kernel_round5a, 5, 0)
-KERNEL_ROUND(kernel_round6a, 6, 0)
-KERNEL_ROUND(kernel_round7a, 7, 0)
-KERNEL_ROUND(kernel_round8a, 8, 0)
-
-KERNEL_ROUND(kernel_round1b, 1, 1)
-KERNEL_ROUND(kernel_round2b, 2, 1)
-KERNEL_ROUND(kernel_round3b, 3, 1)
-KERNEL_ROUND(kernel_round4b, 4, 1)
-KERNEL_ROUND(kernel_round5b, 5, 1)
-KERNEL_ROUND(kernel_round6b, 6, 1)
-KERNEL_ROUND(kernel_round7b, 7, 1)
-KERNEL_ROUND(kernel_round8b, 8, 1)
+KERNEL_ROUND(kernel_round1, 1)
+KERNEL_ROUND(kernel_round2, 2)
+KERNEL_ROUND(kernel_round3, 3)
+KERNEL_ROUND(kernel_round4, 4)
+KERNEL_ROUND(kernel_round5, 5)
+KERNEL_ROUND(kernel_round6, 6)
+KERNEL_ROUND(kernel_round7, 7)
+KERNEL_ROUND(kernel_round8, 8)
 
 
 

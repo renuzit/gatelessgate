@@ -40,9 +40,9 @@
 #define MIN_NR_ROWS_LOG                12
 #define MAX_NR_ROWS_LOG                12
 
-#define NR_SUBROUNDS(round)              1
-#define MAX_NR_SUBROUNDS                 1
-#define SLOT_CACHE_SIZE(round, subround) NR_SLOTS((round) - 1)
+#define SLOT_CACHE_SIZE(round)         ((round) == 3 ? (NR_SLOTS((round) - 1) *  100 / 100) : \
+                                        (round) == 4 ? (NR_SLOTS((round) - 1) *  100 / 100) : \
+                                                        NR_SLOTS((round) - 1))
 
 //#define OPTIM_COMPRESSED_ROW_COUNTERS
 
@@ -58,7 +58,7 @@
 #define LOCAL_WORK_SIZE(round)         ((NR_ROWS_LOG((round) - 1) <= 14) ? 256 : \
                                         (NR_ROWS_LOG((round) - 1) <= 15) ? 128 : \
 											                                64)
-#define LOCAL_WORK_SIZE_POTENTIAL_SOLS ((NR_ROWS_LOG(PARAM_K - 1) <= 12) ? 256 : \
+#define LOCAL_WORK_SIZE_POTENTIAL_SOLS ((NR_ROWS_LOG(PARAM_K - 1) <= 12) ? 128 : \
 										(NR_ROWS_LOG(PARAM_K - 1) <= 15) ? 128 : \
 	                                                                        64)
 #define MAX_LOCAL_WORK_SIZE            256
@@ -69,13 +69,7 @@
 #define MIN_NR_ROWS_LOG                12
 #define MAX_NR_ROWS_LOG                13
 
-#define NR_SUBROUNDS(round)            ((round) == 1 ? 1 : \
-                                        (round) == 2 ? 1 : \
-                                                       1)
-#define MAX_NR_SUBROUNDS                 2
-#define SLOT_CACHE_SIZE(round, subround) (((round) == 1 && (subround) == 0) ? (NR_SLOTS((round) - 1) *  100 / 100) : \
-                                          ((round) == 2 && (subround) == 0) ? (NR_SLOTS((round) - 1) *  100 / 100) : \
-                                                                               NR_SLOTS((round) - 1))
+#define SLOT_CACHE_SIZE(round)         NR_SLOTS((round) - 1)
  
 //#define OPTIM_COMPRESSED_ROW_COUNTERS
 
@@ -117,7 +111,7 @@
 #define LOCAL_WORK_SIZE_ROUND0         WAVEFRONT_SIZE
 #define LOCAL_WORK_SIZE_SOLS           WAVEFRONT_SIZE
 
-#define OPENCL_BUILD_OPTIONS_AMD       "-I.. -I. -O3 -DAMD"
+#define OPENCL_BUILD_OPTIONS_AMD       "-I.. -I. -DAMD -O3"
 #define OPENCL_BUILD_OPTIONS_NVIDIA    "-I.. -I. -DNVIDIA -cl-nv-maxrregcount=63"
 #define OPENCL_BUILD_OPTIONS           "-I.. -I."
 
@@ -217,11 +211,6 @@
 #define SLOT_INDEX_MASK(round)       ((1 << BITS_PER_SLOT_INDEX(round)) - 1)
 #define SLOT_INDEX_ARRAY_SIZE(round, n) (((n) + SLOT_INDEXES_PER_UINT(round) - 1) / SLOT_INDEXES_PER_UINT(round))
 
-
-typedef struct {
-	uint nr_rows[MAX_NR_SUBROUNDS];
-	uint rows[MAX_NR_SUBROUNDS][MAX_NR_ROWS];
-} subround_t;
 
 // An (uncompressed) solution stores (1 << PARAM_K) 32-bit values
 #define SOL_SIZE			((1 << PARAM_K) * 4)
