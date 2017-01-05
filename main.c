@@ -1715,10 +1715,24 @@ void init_and_run_opencl(uint8_t *header, size_t header_len)
 #ifdef WIN32
 	if (!mining || num_mining_mode_threads <= 1) {
 #endif
+#ifdef WIN32
+		if (binary) {
+			program = clCreateProgramWithBinary(context, 1, &(dev_id),
+				&binary_len, (const char **)&binary, NULL, &status);
+			if (status != CL_SUCCESS || !program)
+				fatal("clCreateProgramWithBinary (%d)\n", status);
+		} else {
+			program = clCreateProgramWithSource(context, 1, (const char **)&source,
+				&source_len, &status);
+			if (status != CL_SUCCESS || !program)
+				fatal("clCreateProgramWithSource (%d)\n", status);
+		}
+#else
 		program = clCreateProgramWithSource(context, 1, (const char **)&source,
 			&source_len, &status);
 		if (status != CL_SUCCESS || !program)
 			fatal("clCreateProgramWithSource (%d)\n", status);
+#endif
 		/* Build program. */
 		if (!mining || verbose)
 			fprintf(stderr, "Building program\n");
