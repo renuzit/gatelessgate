@@ -1064,7 +1064,7 @@ uint32_t solve_equihash(cl_device_id dev_id, cl_context ctx, cl_command_queue qu
 		check_clSetKernelArg(k_rounds[k_rounds_index], 3, &rowCounters[round % 2]);
 		check_clSetKernelArg(k_rounds[k_rounds_index], 4, &buf_dbg);
 		local_work_size = LOCAL_WORK_SIZE(round);
-		global_ws = NR_ROWS(round - 1) * local_work_size;
+		global_ws = local_work_size * nr_compute_units; // NR_ROWS(round - 1) * local_work_size;
 		check_clEnqueueNDRangeKernel(queue, k_rounds[k_rounds_index], 1, NULL, &global_ws, &local_work_size, 0, NULL, NULL);
 
 		examine_ht(round, queue, buf_ht, rowCounters[round % 2]);
