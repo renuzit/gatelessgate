@@ -615,7 +615,7 @@ void equihash_round(uint round,
 #define NR_BINS(round) (1 << NR_BINS_LOG(round))
 
 	uint chunks_per_work_group = (NR_ROWS(round - 1) + get_num_groups(0) - 1) / get_num_groups(0);
-	uint rows_per_chunk = ((NR_ROWS(round - 1) + chunks_per_work_group - 1) / chunks_per_work_group);
+	uint rows_per_chunk = ((NR_ROWS(round - 1) + chunks_per_work_group = 1) / chunks_per_work_group);
 	for (uint chunk = 0; chunk < chunks_per_work_group; ++chunk) {
 
 		uint nr_slots = 0;
