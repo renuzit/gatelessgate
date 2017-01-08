@@ -614,120 +614,118 @@ void equihash_round(uint round,
 #define NR_BINS_LOG(round) (20 - NR_ROWS_LOG(round))
 #define NR_BINS(round) (1 << NR_BINS_LOG(round))
 
-	uint chunks_per_work_group = (NR_ROWS(round - 1) + get_num_groups(0) - 1) / get_num_groups(0);
-	uint rows_per_chunk = ((NR_ROWS(round - 1) + chunks_per_work_group = 1) / chunks_per_work_group);
-	for (uint chunk = 0; chunk < chunks_per_work_group; ++chunk) {
 
-		uint nr_slots = 0;
-		uint assigned_row_index = get_group_id(0) + rows_per_chunk * chunk;
 
-		if (assigned_row_index >= NR_ROWS(round - 1))
-			return;
+	uint nr_slots = 0;
+	uint assigned_row_index = get_group_id(0);
 
-		for (i = get_local_id(0); i < NR_BINS(round - 1); i += get_local_size(0))
-			bin_first_slots[i] = NR_SLOTS(round - 1);
-		for (i = get_local_id(0); i < NR_SLOTS(round - 1); i += get_local_size(0))
-			bin_next_slots[i] = NR_SLOTS(round - 1);
-		if (get_local_id(0) == 0)
-			*nr_collisions = nr_slots = get_nr_slots(round, rowCountersSrc, assigned_row_index);
-		barrier(CLK_LOCAL_MEM_FENCE);
-		if (get_local_id(0))
-			nr_slots = *nr_collisions;
+	if (assigned_row_index >= NR_ROWS(round - 1))
+		return;
 
-		barrier(CLK_LOCAL_MEM_FENCE);
+	for (i = get_local_id(0); i < NR_BINS(round - 1); i += get_local_size(0))
+		bin_first_slots[i] = NR_SLOTS(round - 1);
+	for (i = get_local_id(0); i < NR_SLOTS(round - 1); i += get_local_size(0))
+		bin_next_slots[i] = NR_SLOTS(round - 1);
+	if (get_local_id(0) == 0)
+		*nr_collisions = nr_slots = get_nr_slots(round, rowCountersSrc, assigned_row_index);
+	barrier(CLK_LOCAL_MEM_FENCE);
+	if (get_local_id(0))
+		nr_slots = *nr_collisions;
 
-		for (uint phase = 0; phase < 1; ++phase) {
+	barrier(CLK_LOCAL_MEM_FENCE);
 
-			// Perform a radix sort as slots get loaded into LDS.
-			// Make sure all the work items in the work group enter the loop.
-			for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
-				uint slot_index = i;
-				uint slot_cache_index = i;
-	#ifdef NVIDIA
-				uint2 slot_data0, slot_data1, slot_data2;
-				if (UINTS_IN_XI(round - 1) >= 1) slot_data0 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
-				if (UINTS_IN_XI(round - 1) >= 3) slot_data1 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 1);
-				if (UINTS_IN_XI(round - 1) >= 5) slot_data2 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 2);
+	for (uint phase = 0; phase < 1; ++phase) {
 
-				if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data0.s0;
-				if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data0.s1;
-				if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data1.s0;
-				if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data1.s1;
-				if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data2.s0;
-				if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data2.s1;
-				uint xi0 = slot_data0.s0;
+		// Perform a radix sort as slots get loaded into LDS.
+		// Make sure all the work items in the work group enter the loop.
+		for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
+			uint slot_index = i;
+			uint slot_cache_index = i;
+#ifdef NVIDIA
+			uint2 slot_data0, slot_data1, slot_data2;
+			if (UINTS_IN_XI(round - 1) >= 1) slot_data0 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
+			if (UINTS_IN_XI(round - 1) >= 3) slot_data1 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 1);
+			if (UINTS_IN_XI(round - 1) >= 5) slot_data2 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 2);
+
+			if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data0.s0;
+			if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data0.s1;
+			if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data1.s0;
+			if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data1.s1;
+			if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data2.s0;
+			if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data2.s1;
+			uint xi0 = slot_data0.s0;
 #else
-				uint xi[6];
-				for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-					xi[j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, assigned_row_index, slot_index) + j);
-				for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-					slot_cache[j * SLOT_CACHE_SIZE(round) + slot_cache_index] = xi[j];
-				uint xi0 = xi[0];
+			uint xi[6];
+			for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
+				xi[j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, assigned_row_index, slot_index) + j);
+			for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
+				slot_cache[j * SLOT_CACHE_SIZE(round) + slot_cache_index] = xi[j];
+			uint xi0 = xi[0];
 #endif
-				uint bin_to_use =
-						((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
-					| ((xi0 & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
-				bin_next_slots[i] = atom_xchg(&bin_first_slots[bin_to_use], i);
+			uint bin_to_use =
+					((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
+				| ((xi0 & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
+			bin_next_slots[i] = atom_xchg(&bin_first_slots[bin_to_use], i);
+		}
+
+		if (!get_local_id(0))
+			*nr_collisions = 0;
+		uint max_slot_a_index = NR_SLOTS(round - 1) + (get_local_size(0) - NR_SLOTS(round - 1) % get_local_size(0)) - 1;
+		barrier(CLK_LOCAL_MEM_FENCE);
+		for (uint slot_a_index = get_local_id(0); slot_a_index <= max_slot_a_index; slot_a_index += get_local_size(0)) {
+			uint slot_b_index = (slot_a_index < NR_SLOTS(round - 1)) ? bin_next_slots[slot_a_index] : NR_SLOTS(round - 1);
+			while (slot_b_index < NR_SLOTS(round - 1)) {
+				uint coll_index = atom_inc(nr_collisions);
+				if (coll_index < LDS_COLL_SIZE(round - 1)) {
+					collision_array_a[coll_index] = slot_a_index;
+					collision_array_b[coll_index] = slot_b_index;
+				} else {
+					atom_dec(nr_collisions);
+#ifdef ENABLE_DEBUG
+					++dropped_coll;
+#endif
+				}
+				slot_b_index = bin_next_slots[slot_b_index];
 			}
 
-			if (!get_local_id(0))
-				*nr_collisions = 0;
-			uint max_slot_a_index = NR_SLOTS(round - 1) + (get_local_size(0) - NR_SLOTS(round - 1) % get_local_size(0)) - 1;
 			barrier(CLK_LOCAL_MEM_FENCE);
-			for (uint slot_a_index = get_local_id(0); slot_a_index <= max_slot_a_index; slot_a_index += get_local_size(0)) {
-				uint slot_b_index = (slot_a_index < NR_SLOTS(round - 1)) ? bin_next_slots[slot_a_index] : NR_SLOTS(round - 1);
-				while (slot_b_index < NR_SLOTS(round - 1)) {
-					uint coll_index = atom_inc(nr_collisions);
-					if (coll_index < LDS_COLL_SIZE(round - 1)) {
-						collision_array_a[coll_index] = slot_a_index;
-						collision_array_b[coll_index] = slot_b_index;
-					} else {
-						atom_dec(nr_collisions);
-#ifdef ENABLE_DEBUG
-						++dropped_coll;
-#endif
-					}
-					slot_b_index = bin_next_slots[slot_b_index];
+
+			uint nr_collisions_copy = *nr_collisions;
+			//barrier(CLK_LOCAL_MEM_FENCE);
+			while (nr_collisions_copy > 0) {
+				uint collision, slot_index_a = NR_SLOTS(round - 1), slot_index_b = NR_SLOTS(round - 1);
+				__local uint *slot_cache_a, *slot_cache_b;
+				uint write_index = get_local_id(0) / THREADS_PER_WRITE(round);
+				if (write_index < nr_collisions_copy) {
+					slot_index_a = collision_array_a[nr_collisions_copy - 1 - write_index];
+					slot_index_b = collision_array_b[nr_collisions_copy - 1 - write_index];
+					slot_cache_a = (__local uint *)&slot_cache[slot_index_a];
+					slot_cache_b = (__local uint *)&slot_cache[slot_index_b];
 				}
+				//barrier(CLK_LOCAL_MEM_FENCE);
+				if (THREADS_PER_WRITE(round) > 1) {
+#ifdef ENABLE_DEBUG
+					dropped_stor += 
+#endif
+						parallel_xor_and_store(round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst, new_slot_indexes);
+				} else {
+#ifdef ENABLE_DEBUG
+					dropped_stor +=
+#endif
+						xor_and_store(round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+				}
+
+				if (!get_local_id(0))
+					*nr_collisions -= min(*nr_collisions, (uint)get_local_size(0) / THREADS_PER_WRITE(round));
 
 				barrier(CLK_LOCAL_MEM_FENCE);
-
-				uint nr_collisions_copy = *nr_collisions;
-				//barrier(CLK_LOCAL_MEM_FENCE);
-				while (nr_collisions_copy > 0) {
-					uint collision, slot_index_a = NR_SLOTS(round - 1), slot_index_b = NR_SLOTS(round - 1);
-					__local uint *slot_cache_a, *slot_cache_b;
-					uint write_index = get_local_id(0) / THREADS_PER_WRITE(round);
-					if (write_index < nr_collisions_copy) {
-						slot_index_a = collision_array_a[nr_collisions_copy - 1 - write_index];
-						slot_index_b = collision_array_b[nr_collisions_copy - 1 - write_index];
-						slot_cache_a = (__local uint *)&slot_cache[slot_index_a];
-						slot_cache_b = (__local uint *)&slot_cache[slot_index_b];
-					}
-					//barrier(CLK_LOCAL_MEM_FENCE);
-					if (THREADS_PER_WRITE(round) > 1) {
-#ifdef ENABLE_DEBUG
-						dropped_stor += 
-#endif
-							parallel_xor_and_store(round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst, new_slot_indexes);
-					} else {
-#ifdef ENABLE_DEBUG
-						dropped_stor +=
-#endif
-							xor_and_store(round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
-					}
-
-					if (!get_local_id(0))
-						*nr_collisions -= min(*nr_collisions, (uint)get_local_size(0) / THREADS_PER_WRITE(round));
-
-					barrier(CLK_LOCAL_MEM_FENCE);
-					nr_collisions_copy = *nr_collisions;
-					barrier(CLK_LOCAL_MEM_FENCE);
-				}
+				nr_collisions_copy = *nr_collisions;
 				barrier(CLK_LOCAL_MEM_FENCE);
 			}
+			barrier(CLK_LOCAL_MEM_FENCE);
 		}
 	}
+
 
 
 #ifdef ENABLE_DEBUG
