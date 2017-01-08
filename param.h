@@ -73,9 +73,7 @@
  
 //#define OPTIM_COMPRESSED_ROW_COUNTERS
 
-#define THREADS_PER_WRITE(round)       ((round) == 0 ? 1 : \
-                                        (round) <= 5 ? 2 : \
-                                                       1)
+#define THREADS_PER_WRITE(round)       ((round) <= 5 ? 2 : 1)
 #define SLOT_LEN(round)                (((round) >= 8) ? MAX_SLOT_LEN - 24 : \
                                         ((round) >= 6) ? MAX_SLOT_LEN - 16 : \
                                                          MAX_SLOT_LEN)
@@ -86,12 +84,8 @@
 #define OPTIM_16BYTE_WRITES
 #define OPTIM_8BYTE_WRITES
 
-#define LOCAL_WORK_SIZE(round)         ((NR_ROWS_LOG((round) - 1) <= 14) ? 256 : \
-                                        (NR_ROWS_LOG((round) - 1) <= 15) ? 128 : \
-											                                64)
-#define LOCAL_WORK_SIZE_POTENTIAL_SOLS ((NR_ROWS_LOG(PARAM_K - 1) <= 12) ? 256 : \
-										(NR_ROWS_LOG(PARAM_K - 1) <= 15) ? 128 : \
-	                                                                        64)
+#define LOCAL_WORK_SIZE(round)         256
+#define LOCAL_WORK_SIZE_POTENTIAL_SOLS 256
 #define MAX_LOCAL_WORK_SIZE            256
 
 #endif
