@@ -691,11 +691,10 @@ void equihash_round(uint round,
 			barrier(CLK_LOCAL_MEM_FENCE);
 
 			uint nr_collisions_copy = *nr_collisions;
-			barrier(CLK_LOCAL_MEM_FENCE);
+			//barrier(CLK_LOCAL_MEM_FENCE);
 			while (nr_collisions_copy > 0) {
 				uint collision, slot_index_a = NR_SLOTS(round - 1), slot_index_b = NR_SLOTS(round - 1);
 				__local uint *slot_cache_a, *slot_cache_b;
-				// uint write_index = get_local_id(0) % (get_local_size(0) / THREADS_PER_WRITE(round));
 				uint write_index = get_local_id(0) / THREADS_PER_WRITE(round);
 				if (write_index < nr_collisions_copy) {
 					slot_index_a = collision_array_a[nr_collisions_copy - 1 - write_index];
@@ -703,7 +702,7 @@ void equihash_round(uint round,
 					slot_cache_a = (__local uint *)&slot_cache[slot_index_a];
 					slot_cache_b = (__local uint *)&slot_cache[slot_index_b];
 				}
-				barrier(CLK_LOCAL_MEM_FENCE);
+				//barrier(CLK_LOCAL_MEM_FENCE);
 				if (THREADS_PER_WRITE(round) > 1) {
 #ifdef ENABLE_DEBUG
 					dropped_stor += 
