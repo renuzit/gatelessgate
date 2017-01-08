@@ -352,9 +352,7 @@ void kernel_round0(__constant ulong *blake_state, __global char *ht,
 			h[6] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
 		}
 
-		barrier(CLK_LOCAL_MEM_FENCE);
-
-		if (input < NR_INPUTS && THREADS_PER_WRITE(0) == 1) {
+		if (input < NR_INPUTS) {
 			// store the two Xi values in the hash table
 #pragma unroll 1
 			for (uint index = 0; index < 2; ++index) {
@@ -389,88 +387,6 @@ void kernel_round0(__constant ulong *blake_state, __global char *ht,
 				}
 			}
 		}
-		else if (THREADS_PER_WRITE(0) > 1) {
-			__local slot_t slot_array[LOCAL_WORK_SIZE_ROUND0];
-			__local global_pointer_to_slot_t slot_ptrs[LOCAL_WORK_SIZE_ROUND0];
-
-			slot_ptrs[get_local_id(0)] = (__global slot_t *)get_slot_ptr(ht, 0, NR_ROWS(0) - 1, NR_SLOTS(0) - 1);
-
-			barrier(CLK_LOCAL_MEM_FENCE);
-
-			if (input < NR_INPUTS) {
-				// store the two Xi values in the hash table
-				xi0 = h[0] & 0xffffffff; xi1 = h[0] >> 32;
-				xi2 = h[1] & 0xffffffff; xi3 = h[1] >> 32;
-				xi4 = h[2] & 0xffffffff; xi5 = h[2] >> 32;
-				xi6 = h[3] & 0xffffffff;
-
-				uint row = get_row(0, xi0);
-				uint nr_slots = inc_row_counter(0, rowCounters, row);
-				if (nr_slots >= NR_SLOTS(0)) {
-					++dropped;
-				}
-				else {
-					slot_array[get_local_id(0)].slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
-					slot_array[get_local_id(0)].slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
-					slot_array[get_local_id(0)].slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
-					slot_array[get_local_id(0)].slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
-					slot_array[get_local_id(0)].slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
-					slot_array[get_local_id(0)].slot.xi[5] = ((xi6 << 24) | (xi5 >> 8));
-					slot_array[get_local_id(0)].slot.xi[UINTS_IN_XI(0)] = input * 2;
-					slot_ptrs[get_local_id(0)] = (__global slot_t *)get_slot_ptr(ht, 0, row, nr_slots);
-				}
-			}
-
-			barrier(CLK_LOCAL_MEM_FENCE);
-
-			uint write_thread_index = get_local_id(0) % THREADS_PER_WRITE(0);
-			uint local_id_base = get_local_id(0) - write_thread_index;
-
-			for (uint write_index = 0; write_index < THREADS_PER_WRITE(0); ++write_index)
-				if (THREADS_PER_WRITE(0) == 2)
-					*((__global uint4 *)slot_ptrs[local_id_base + write_index] + write_thread_index)
-					= slot_array[local_id_base + write_index].ui4[write_thread_index];
-
-			barrier(CLK_LOCAL_MEM_FENCE);
-
-			slot_ptrs[get_local_id(0)] = (__global slot_t *)get_slot_ptr(ht, 0, NR_ROWS(0) - 1, NR_SLOTS(0) - 1);
-
-			barrier(CLK_LOCAL_MEM_FENCE);
-
-			if (input < NR_INPUTS) {
-				xi0 = ((h[3] >> 8) | (h[4] << (64 - 8))) & 0xffffffff; xi1 = ((h[3] >> 8) | (h[4] << (64 - 8))) >> 32;
-				xi2 = ((h[4] >> 8) | (h[5] << (64 - 8))) & 0xffffffff; xi3 = ((h[4] >> 8) | (h[5] << (64 - 8))) >> 32;
-				xi4 = ((h[5] >> 8) | (h[6] << (64 - 8))) & 0xffffffff; xi5 = ((h[5] >> 8) | (h[6] << (64 - 8))) >> 32;
-				xi6 = (h[6] >> 8) & 0xffffffff;
-
-				uint row = get_row(0, xi0);
-				uint nr_slots = inc_row_counter(0, rowCounters, row);
-				if (nr_slots >= NR_SLOTS(0)) {
-					++dropped;
-				}
-				else {
-					slot_array[get_local_id(0)].slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
-					slot_array[get_local_id(0)].slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
-					slot_array[get_local_id(0)].slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
-					slot_array[get_local_id(0)].slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
-					slot_array[get_local_id(0)].slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
-					slot_array[get_local_id(0)].slot.xi[5] = ((xi6 << 24) | (xi5 >> 8));
-					slot_array[get_local_id(0)].slot.xi[UINTS_IN_XI(0)] = input * 2 + 1;
-					slot_ptrs[get_local_id(0)] = (__global slot_t *)get_slot_ptr(ht, 0, row, nr_slots);
-				}
-			}
-
-			barrier(CLK_LOCAL_MEM_FENCE);
-
-			for (uint write_index = 0; write_index < THREADS_PER_WRITE(0); ++write_index)
-				if (THREADS_PER_WRITE(0) == 2)
-					*((__global uint4 *)slot_ptrs[local_id_base + write_index] + write_thread_index)
-					= slot_array[local_id_base + write_index].ui4[write_thread_index];
-
-			barrier(CLK_LOCAL_MEM_FENCE);
-		}
-
-		barrier(CLK_LOCAL_MEM_FENCE);
 	}
 	
 #ifdef ENABLE_DEBUG
@@ -626,46 +542,32 @@ uint parallel_xor_and_store(uint round, __global char *ht_src, __global char *ht
 			slot.slot.xi[4] = xi5;
 		} else {
 			slot.slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
-			slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
-			slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
-			slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
-			slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
-			slot.slot.xi[5] = ((xi5 >> 8));
-		}
+            if (round <= 7) slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
+            if (round <= 6) slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
+            if (round <= 5) slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
+            if (round <= 3) slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
+            if (round <= 1) slot.slot.xi[5] = ((xi5 >> 8));
+ 		}
 		slot.slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(round - 1, row, slot_a, slot_b);
 		new_row = get_row(round, xi0);
 
 		// invalid solutions (which start happenning in round 5) have duplicate
 		// inputs and xor to zero, so discard them
 		if ((xi0 || xi1) && !write_thread_index) {
-			new_slot_index = inc_row_counter(round, rowCounters, new_row);
+			new_slot_indexes[write_index] = inc_row_counter(round, rowCounters, new_row);
+#ifdef ENABLE_DEBUG
 			if (new_slot_index >= NR_SLOTS(round))
 				ret = 1;
-			new_slot_indexes[write_index] = new_slot_index;
+#endif
 		}
 	}
 
 	barrier(CLK_LOCAL_MEM_FENCE);
-	if (write_thread_index)
-		new_slot_index = new_slot_indexes[write_index];
-	barrier(CLK_LOCAL_MEM_FENCE);
-	if (new_slot_index < NR_SLOTS(round)) {
-		__global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
+	if (new_slot_indexes[write_index] < NR_SLOTS(round)) {
+		__global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_indexes[write_index]);
 		*(((__global uint4 *)p) + write_thread_index) = slot.ui4[write_thread_index];
 	}
-#if 0
-	if (THREADS_PER_WRITE(round) == 2 && new_slot_index < NR_SLOTS(round)) {
-		__global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
-		*(((__global uint4 *)p) + write_thread_index) = slot.ui4[write_thread_index];
-	} else if (THREADS_PER_WRITE(round) == 4 && new_slot_index < NR_SLOTS(round)) {
-		__global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
-		*(((__global uint2 *)p) + write_thread_index) = slot.ui2[write_thread_index];
-	} else if (THREADS_PER_WRITE(round) == 8 && new_slot_index < NR_SLOTS(round)) {
-		__global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
-		*(((__global uint *)p) + write_thread_index) = slot.ui[write_thread_index];
-	}
-#endif
-	barrier(CLK_LOCAL_MEM_FENCE);
+	//barrier(CLK_LOCAL_MEM_FENCE);
 	return ret;
 }
 
@@ -720,18 +622,15 @@ void equihash_round(uint round,
 	if (assigned_row_index >= NR_ROWS(round - 1))
 		return;
 
-	if (!get_local_id(0))
-		*nr_collisions = 0;
 	for (i = get_local_id(0); i < NR_BINS(round - 1); i += get_local_size(0))
 		bin_first_slots[i] = NR_SLOTS(round - 1);
 	for (i = get_local_id(0); i < NR_SLOTS(round - 1); i += get_local_size(0))
 		bin_next_slots[i] = NR_SLOTS(round - 1);
-	__local uint nr_slots_shared;
 	if (get_local_id(0) == 0)
-		nr_slots_shared = nr_slots = get_nr_slots(round, rowCountersSrc, assigned_row_index);
+		*nr_collisions = nr_slots = get_nr_slots(round, rowCountersSrc, assigned_row_index);
 	barrier(CLK_LOCAL_MEM_FENCE);
 	if (get_local_id(0))
-		nr_slots = nr_slots_shared;
+		nr_slots = *nr_collisions;
 
 	barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -739,43 +638,36 @@ void equihash_round(uint round,
 
 		// Perform a radix sort as slots get loaded into LDS.
 		// Make sure all the work items in the work group enter the loop.
-		uint i_max;
-		i_max = nr_slots;
-		i_max = i_max + (get_local_size(0) - i_max % get_local_size(0)) - 1;
-		for (i = get_local_id(0); i <= i_max; i += get_local_size(0)) {
-			if (i < MIN(nr_slots, SLOT_CACHE_SIZE(round))) {
-				uint slot_index = i;
-				uint slot_cache_index = i;
+		for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
+			uint slot_index = i;
+			uint slot_cache_index = i;
 #ifdef NVIDIA
-				uint2 slot_data0, slot_data1, slot_data2;
-				if (UINTS_IN_XI(round - 1) >= 1) slot_data0 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
-				if (UINTS_IN_XI(round - 1) >= 3) slot_data1 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 1);
-				if (UINTS_IN_XI(round - 1) >= 5) slot_data2 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 2);
+			uint2 slot_data0, slot_data1, slot_data2;
+			if (UINTS_IN_XI(round - 1) >= 1) slot_data0 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
+			if (UINTS_IN_XI(round - 1) >= 3) slot_data1 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 1);
+			if (UINTS_IN_XI(round - 1) >= 5) slot_data2 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 2);
 
-				if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data0.s0;
-				if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data0.s1;
-				if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data1.s0;
-				if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data1.s1;
-				if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data2.s0;
-				if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data2.s1;
-				uint xi0 = slot_data0.s0;
+			if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data0.s0;
+			if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data0.s1;
+			if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data1.s0;
+			if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data1.s1;
+			if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data2.s0;
+			if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * SLOT_CACHE_SIZE(round) + slot_cache_index] = slot_data2.s1;
+			uint xi0 = slot_data0.s0;
 #else
-				uint xi[6];
-				for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-					xi[j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, assigned_row_index, slot_index) + j);
-				for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-					slot_cache[j * SLOT_CACHE_SIZE(round) + slot_cache_index] = xi[j];
-				uint xi0 = xi[0];
+			uint xi[6];
+			for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
+				xi[j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, assigned_row_index, slot_index) + j);
+			for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
+				slot_cache[j * SLOT_CACHE_SIZE(round) + slot_cache_index] = xi[j];
+			uint xi0 = xi[0];
 #endif
-				uint bin_to_use =
-					  ((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
-					| ((xi0 & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
-				bin_next_slots[i] = atom_xchg(&bin_first_slots[bin_to_use], i);
-			}
-			barrier(CLK_LOCAL_MEM_FENCE);
+			uint bin_to_use =
+					((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
+				| ((xi0 & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
+			bin_next_slots[i] = atom_xchg(&bin_first_slots[bin_to_use], i);
 		}
 
-		barrier(CLK_LOCAL_MEM_FENCE);
 		if (!get_local_id(0))
 			*nr_collisions = 0;
 		uint max_slot_a_index = NR_SLOTS(round - 1) + (get_local_size(0) - NR_SLOTS(round - 1) % get_local_size(0)) - 1;
