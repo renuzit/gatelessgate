@@ -4,248 +4,484 @@
 - [Download precompiled binaries for Windows and NVIDIA (0.0.3)](https://github.com/zawawawa/gatelessgate/releases/download/v0.0.3/gatelessgate-windows-0.0.3-NVIDIA.zip)
 - [Download the source code for Linux (0.0.3)](https://github.com/zawawawa/gatelessgate/archive/v0.0.3.tar.gz)
 
-Gateless Gate is a cross-platform OpenCL Zcash miner. It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://github.com/mbevand/silentarmy) with a significant speed boost. (This miner runs at around 188 sol/s on RX 480 and 165 sol/s on GTX 1060 3GB.) Although the current foci of development are Windows operating systems, it should be able to run on Linux without problems.
+Gateless Gate is a cross-platform OpenCL Zcash miner. It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://github.com/mbevand/silentarmy) with a significant speed boost and the well-tested user-interface and back-end of [sgminer-gm](https://github.com/genesismining/sgminer-gm) combined. (This miner runs at around 198 sol/s on RX 480 and 160 sol/s on GTX 1060 3GB.) Although the current foci of development are Windows operating systems, you should be able to run on Linux without problems.
 
-On Windows, all you have to do for mining is to download the appropriate binary, run `list.bat` to get device ID's and edit and run `gatelessgate.bat`. MAKE SURE TO SPECIFY CORRECT DEVICE IDS WITH THE `--use` OPTION! See the documentation of the original SILENTARMY below for details. You may get the following error if you have missing DLL's on your system: `The application was unable to start correctly (0xc000007b)` In this case, you need to delete `vcruntime140.dll` in the package and install [Visual C++ 2015 Redistributable](https://www.microsoft.com/en-us/download/details.aspx?id=48145) manually.
+On 64-bit Windows operating systems, all you have to do for mining is to download the precompiled binary and edit and run `gatelessgate.bat`. On Linux, you should be able to build the miner with the Makefile in the repository. Note that fglrx drivers are not supported. Please refer to the documentation of the original sgminer-gm below for details. 
 
-On Linux, you should be able to build the miner with the Makefile in the repository. You need to specify the `-DNVIDIA` build option for NVIDIA video cards. See the documentation of the original SILENTARMY below for details. Please note that fglrx drivers are no longer supported.
-
-If you find this miner useful and/or would like to see a feature-rich ZEC miner based on it, please consider donations to: `t1NwUDeSKu4BxkD58mtEYKDjzw5toiLfmCu` I am particularly interested in purchasing a Radeon R9 Nano for testing purposes.
-
-Last but not least, mrb, nerdralph, eXtremal, and Genoil, thank you all so much for the great work. You guys are 
-truly the cream of the FOSS movement.
+If you find this miner useful, please consider donations to: `t1NwUDeSKu4BxkD58mtEYKDjzw5toiLfmCu` I am particularly interested in purchasing a Radeon R9 Nano for testing purposes.
 
 zawawa @ bitcointalk.org
 
-# SILENTARMY
 
-Official site: https://github.com/mbevand/silentarmy
+# sgminer
 
-SILENTARMY is a free open source [Zcash](https://z.cash) miner for Linux
-with multi-GPU and [Stratum](https://github.com/str4d/zips/blob/77-zip-stratum/drafts/str4d-stratum/draft1.rst) support. It is written in OpenCL and has been tested
-on AMD/Nvidia/Intel GPUs, Xeon Phi, and more.
 
-After compiling SILENTARMY, list the available OpenCL devices:
+## Introduction
 
-```
-$ silentarmy --list
-```
+This is a multi-threaded multi-pool GPU miner with ATI GPU monitoring,
+(over)clocking and fanspeed support for scrypt-based cryptocurrency. It is
+based on cgminer by Con Kolivas (ckolivas), which is in turn based on
+cpuminer by Jeff Garzik (jgarzik).
 
-Start mining with two GPUs (ID 2 and ID 5) on a pool:
+**releases**: https://github.com/sgminer-dev/sgminer/releases
 
-```
-$ silentarmy --use 2,5 -c stratum+tcp://us1-zcash.flypool.org:3333 -u t1cVviFvgJinQ4w3C2m2CfRxgP5DnHYaoFC
-```
+**git tree**: https://github.com/sgminer-dev/sgminer
 
-When run without options, SILENTARMY mines with the first OpenCL device, using
-my donation address, on flypool:
+**bugtracker**: https://github.com/sgminer-dev/sgminer/issues
 
-```
-$ silentarmy
-Connecting to us1-zcash.flypool.org:3333
-Stratum server sent us the first job
-Mining on 1 device
-Total 0.0 sol/s [dev0 0.0] 0 shares
-Total 43.9 sol/s [dev0 43.9] 0 shares
-Total 46.9 sol/s [dev0 46.9] 0 shares
-Total 44.9 sol/s [dev0 44.9] 1 share
-[...]
-```
+**irc**: `#sgminer` and `#sgminer-dev` on freenode
 
-Usage:
+**mailing lists**: https://sourceforge.net/p/sgminer/mailman/
 
-```
-$ silentarmy --help
-Usage: silentarmy [options]
+License: GPLv3.  See `COPYING` for details.
 
-Options:
-  -h, --help            show this help message and exit
-  -v, --verbose         verbose mode (may be repeated for more verbosity)
-  --debug               enable debug mode (for developers only)
-  --list                list available OpenCL devices by ID (GPUs...)
-  --use=LIST            use specified GPU device IDs to mine, for example to
-                        use the first three: 0,1,2 (default: 0)
-  --instances=N         run N instances of Equihash per GPU (default: 2)
-  -c POOL, --connect=POOL
-                        connect to POOL, for example:
-                        stratum+tcp://example.com:1234
-  -u USER, --user=USER  username for connecting to the pool
-  -p PWD, --pwd=PWD     password for connecting to the pool
-```
 
-# Compilation and installation
+## Documentation
 
-The steps below describe how to obtain the dependencies needed by SILENTARMY,
-how to compile it, and how to install it.
+Documentation is available in directory `doc`. It is organised by topics:
 
-## Step 1: OpenCL
+* `API` for the RPC API specification;
+* `configuration.md` for (largely incomplete) detailed information on all
+  configuration options;
+* `FAQ.md` for frequently asked questions;
+* `GPU` for semi-obsolete information on GPU configuration options and mining
+  SHA256d-based coins;
+* `kernel.md` for OpenCL kernel-related information, including development
+  procedure;
+* `MINING.md` for how to find the right balance in GPU configuration to mine
+  Scrypt-based coins efficiently;
+* `windows-build.txt` for information on how to build on Windows.
 
-OpenCL support comes with the graphic card driver. Read the appropriate
-subsection below:
+Note that **most of the documentation is outdated or incomplete**. If
+you want to contribute, fork this repository, update as needed, and
+submit a pull request.
 
-### Ubuntu 16.04 / amdgpu
 
-1. Download the [AMDGPU-PRO Driver](http://support.amd.com/en-us/kb-articles/Pages/AMDGPU-PRO-Install.aspx)
-(as of 30 Oct 2016, the latest version is 16.40).
+## Building
 
-2. Extract it:
-   `$ tar xf amdgpu-pro-16.40-348864.tar.xz`
+### Dependencies
 
-3. Install (non-root, will use sudo access automatically):
-   `$ ./amdgpu-pro-install`
+Mandatory:
 
-4. Add yourself to the video group if not already a member:
-   `$ sudo gpasswd -a $(whoami) video`
+* [curl dev library](http://curl.haxx.se/libcurl/) - `libcurl4-openssl-dev` on Debian
+* [pkg-config](http://www.freedesktop.org/wiki/Software/pkg-config)
+* [libtool](http://www.gnu.org/software/libtool/)
+* [AMD APP SDK](http://developer.amd.com/tools-and-sdks/heterogeneous-computing/amd-accelerated-parallel-processing-app-sdk/downloads/)	- available under various names as a package on different GNU/Linux distributions
 
-5. Reboot
+Optional:
 
-6. Download the [AMD APP SDK](http://developer.amd.com/tools-and-sdks/opencl-zone/amd-accelerated-parallel-processing-app-sdk/)
-(as of 27 Oct 2016, the latest version is 3.0)
+* curses dev library - `libncurses5-dev` on Debian or `libpdcurses` on WIN32, for text user interface
+* [AMD ADL SDK](http://developer.amd.com/tools-and-sdks/graphics-development/display-library-adl-sdk/) - version 6, required for ATI GPU monitoring & clocking
 
-7. Extract it:
-   `$ tar xf AMD-APP-SDKInstaller-v3.0.130.136-GA-linux64.tar.bz2`
+If building from git:
 
-8. Install system-wide by running as root (accept all the default options):
-   `$ sudo ./AMD-APP-SDK-v3.0.130.136-GA-linux64.sh`
-   
-### Ubuntu 16.04 / Nvidia
+* autoconf
+* automake
 
-1. Install the OpenCL development files and the latest driver:
-   `$ sudo apt-get install nvidia-opencl-dev nvidia-361`
+sgminer-specific configuration options:
 
-2. Either reboot, or load the kernel driver:
-   `$ sudo modprobe nvidia_361`
+    --disable-adl           Override detection and disable building with adl
+	--disable-adl-checks
+    --without-curses        Do not compile support for curses TUI
 
-## Step 2: Python 3.3
+#### Debian Example
 
-1. SILENTARMY requires Python 3.3 or later (needed to support the use of the
-   `yield from` syntax). On Ubuntu/Debian systems:
-   `$ sudo apt-get install python3`
+    apt-get install libcurl4-openssl-dev pkg-config libtool libncurses5-dev
+AMD APP SDK and AMD ADL SDK must be downloaded from the amd websites.
 
-2. Verify the Python version is 3.3 or later:
-   `$ python3 -V`
+### *nix build instructions
 
-## Step 3: C compiler
+If needed, place include headers (`*.h` files) from `ADL_SDK_*<VERSION>*.zip` in `sgminer/ADL_SDK`.
 
-1. A C compiler is needed to compile the SILENTARMY solver binary (`sa-solver`):
-   `$ sudo apt-get install build-essential`
+Then:
 
-## Step 4: Get SILENTARMY
+    git submodule init
+    git submodule update
+    autoreconf -i
+    CFLAGS="-O2 -Wall -march=native -std=gnu99" ./configure <options>
+    make
 
-Download it as a ZIP from github: https://github.com/mbevand/silentarmy/archive/master.zip
+To compile a version that can be used accross machines, remove
+`-march=native`.
 
-Or clone it from the command line:
-`$ git clone https://github.com/mbevand/silentarmy.git`
+To compile a debug version, replace `-O2` with `-ggdb`.
 
-Or, for Arch Linux users, get the
-[silentarmy AUR package](https://aur.archlinux.org/packages/silentarmy/).
+Depending on your environment, replace `-std=gnu99` with `-std=c99`.
 
-## Step 5: Compile and install
+Systemwide installation is optional. You may run `sgminer` from the build
+directory directly, or `make install` if you wish to install
+`sgminer` to a system location or a location you specified with `--prefix`.
 
-Compiling SILENTARMY is easy:
+### Windows build instructions
 
-`$ make`
+See `doc/windows-build.txt` for MinGW compilation and cross-compiation,
+`doc/cygwin-build.txt` for building using Cygwin, or use the provided
+`winbuild` Microsoft Visual Studio project (tested on MSVS2010), with
+instructions in `winbuild/README.txt`.
 
-You may need to specify the paths to the locations of your OpenCL C headers
-and libOpenCL.so if the compiler does not find them, eg.:
 
-`$ make OPENCL_HEADERS=/usr/local/cuda-8.0/targets/x86_64-linux/include LIBOPENCL=/usr/local/cuda-8.0/targets/x86_64-linux/lib`
+## Basic Usage
 
-Self-testing the command-line solver (solves 100 all-zero 140-byte blocks with
-their nonces varying from 0 to 99):
+**WARNING**: documentation below this point has not been updated since the
+fork.
 
-`$ make test`
+After saving configuration from the menu, you do not need to give sgminer
+any arguments and it will load your configuration.
 
-For more testing run `sa-solver --nonces 10000`. It should finds 18627
-solutions which is less than 1% off the theoretical expected average number of
-solutions of 1.88 per Equihash run at (n,k)=(200,9).
+Any configuration file may also contain a single
 
-For installing, just copy `silentarmy` and `sa-solver` to the same directory.
+    "include" : "filename"
 
-# Equihash solver
+to recursively include another configuration file.
 
-SILENTARMY also provides a command line Equihash solver (`sa-solver`)
-implementing the CLI API described in the
-[Zcash open source miner challenge](https://zcashminers.org/rules).
-To solve a specific block header and print the encoded solution on stdout, run
-the following command (this header is from
-[mainnet block #3400](https://explorer.zcha.in/blocks/00000001687e89e7e1ce48b349e601c89c70dd4c268fdf24b269a3ca4140426f)
-and should result in 1 Equihash solution):
+Writing the configuration will save all settings from all files in the
+output.
 
-```
-$ sa-solver -i 04000000e54c27544050668f272ec3b460e1cde745c6b21239a81dae637fde4704000000844bc0c55696ef9920eeda11c1eb41b0c2e7324b46cc2e7aa0c2aa7736448d7a000000000000000000000000000000000000000000000000000000000000000068241a587e7e061d250e000000000000010000000000000000000000000000000000000000000000
-```
+Single pool:
 
-If the option `-i` is not specified, `sa-solver` solves a 140-byte header of all
-zero bytes. The option `--nonces <nr>` instructs the program to try multiple
-nonces, each time incrementing the nonce by 1. So a convenient way to run a
-quick test/benchmark is simply:
+sgminer -o http://pool:port -u username -p password
 
-`$ sa-solver --nonces 100`
+Multiple pools:
 
-Note: due to BLAKE2b optimizations in my implementation, if the header is
-specified it must be 140 bytes and its last 12 bytes **must** be zero.
+sgminer -o http://pool1:port -u pool1username -p pool1password -o http://pool2:port -u pool2usernmae -p pool2password
 
-Use the verbose (`-v`) and very verbose (`-v -v`) options to show the solutions
-and statistics in progressively more and more details.
+Single pool with a standard http proxy, regular desktop:
 
-# Implementation details
+sgminer -o "http:proxy:port|http://pool:port" -u username -p password
 
-The `silentarmy` Python script is actually mostly a lightweight Stratum
-implementation which launches in the background one or more instances of
-`sa-solver --mining` per GPU. This "mining mode" enables `sa-solver` to
-communicate with `silentarmy` using stdin/stdout. By default 2 instances of
-`sa-solver` are launched for each GPU (this can be changed with the `silentarmy
---instances N` option.) 2 instances per GPU usually results in the best
-performance.
+Single pool with a socks5 proxy, regular desktop:
 
-The `sa-solver` binary invokes the OpenCL kernel which contains the core of the
-Equihash algorithm. My implementation uses two hash tables to avoid having to
-sort the (Xi,i) pairs:
+sgminer -o "socks5:proxy:port|http://pool:port" -u username -p password
 
-* Round 0 (BLAKE2b) fills up table #0
-* Round 1 reads table #0, identifies collisions, XORs the Xi's, stores
-  the results in table #1
-* Round 2 reads table #1 and fills up table #0 (reusing it)
-* Round 3 reads table #0 and fills up table #1 (also reusing it)
-* ...
-* Round 8 (last round) reads table #1 and fills up table #0.
+Single pool with stratum protocol support:
 
-Only the non-zero parts of Xi are stored in the hash table, so fewer and fewer
-bytes are needed to store Xi as we progress toward round 8. For a description
-of the layout of the hash table, see the comment at the top of `input.cl`.
+sgminer -o stratum+tcp://pool:port -u username -p password
 
-Also the code implements the notion of "encoded reference to inputs" which
-I--apparently like most authors of Equihash solvers--independently discovered
-as a neat trick to save having to read/write so much data. Instead of saving
-lists of inputs that double in size every round, SILENTARMY re-uses the fact
-they were stored in the previous hash table, and saves a reference to the two
-previous inputs, encoded as a (row,slot0,slot1) where (row,slot0) and
-(row,slot1) themselves are each a reference to 2 previous inputs, and so on,
-until round 0 where the inputs are just the 21-bit values.
+The list of proxy types are:
+ http:    standard http 1.1 proxy
+ http0:   http 1.0 proxy
+ socks4:  socks4 proxy
+ socks5:  socks5 proxy
+ socks4a: socks4a proxy
+ socks5h: socks5 proxy using a hostname
 
-A BLAKE2b optimization implemented by SILENTARMY requires the last 12 bytes of
-the nonce/header to be zero. When set to a fixed value like zero, not only the
-code does not need to implement the "sigma" permutations, but many 64-bit
-additions in the BLAKE2b mix() function can be pre-computed automatically by
-the OpenCL compiler.
+If you compile sgminer with a version of CURL before 7.19.4 then some of
+the above will not be available. All are available since CURL version
+7.19.4.
 
-Managing invalid solutions (duplicate inputs) is done in multiple places:
+If you specify the --socks-proxy option to sgminer, it will only be
+applied to all pools that don't specify their own proxy setting like
+above.
 
-* Any time a XOR results in an all-zero value, this work item is discarded
-as it is statistically very unlikely that the XOR of 256 or fewer inputs
-is zero. This check is implemented at the end of `xor_and_store()`
-* When the final hash table produced at round 8 has many elements
-that collide in the same row (because bits 160-179 are identical, and
-almost certainly bits 180-199), this is also discarded as a likely invalid
-solution because this is statistically guaranteed to be all inputs repeated
-at least once. This check is implemented in `kernel_sols()` (see
-`likely_invalids`.)
-* When input references are expanded on-GPU by `expand_refs()`, the code
-checks if the last (512th) input is repeated at least once.
-* Finally when the GPU returns potential solutions, the CPU also checks for
-invalid solutions with duplicate inputs. This check is implemented in
-`verify_sol()`.
+For more advanced usage , run `sgminer --help`.
 
-Finally, SILENTARMY makes many optimization assumptions and currently only
-supports Equihash parameters 200,9.
+See `doc/GPU` for more information regarding GPU mining and
+`doc/SCRYPT` for more information regarding Scrypt mining.
+
+
+## Runtime usage
+
+The following options are available while running with a single keypress:
+
+[P]ool management [G]PU management [S]ettings [D]isplay options [Q]uit
+
+P gives you:
+
+Current pool management strategy: Failover
+[F]ailover only disabled
+[A]dd pool [R]emove pool [D]isable pool [E]nable pool
+[C]hange management strategy [S]witch pool [I]nformation
+
+
+S gives you:
+
+[Q]ueue: 1
+[S]cantime: 60
+[E]xpiry: 120
+[W]rite config file
+[C]gminer restart
+
+
+D gives you:
+
+[N]ormal [C]lear [S]ilent mode (disable all output)
+[D]ebug:off
+[P]er-device:off
+[Q]uiet:off
+[V]erbose:off
+[R]PC debug:off
+[W]orkTime details:off
+co[M]pact: off
+[L]og interval:5
+
+
+Q quits the application.
+
+
+G gives you something like:
+
+GPU 0: [124.2 / 191.3 Mh/s] [A:77  R:33  HW:0  U:1.73/m  WU 1.73/m]
+Temp: 67.0 C
+Fan Speed: 35% (2500 RPM)
+Engine Clock: 960 MHz
+Memory Clock: 480 Mhz
+Vddc: 1.200 V
+Activity: 93%
+Powertune: 0%
+Last initialised: [2011-09-06 12:03:56]
+Thread 0: 62.4 Mh/s Enabled ALIVE
+Thread 1: 60.2 Mh/s Enabled ALIVE
+
+[E]nable [D]isable [R]estart GPU [C]hange settings
+Or press any other key to continue
+
+
+The running log shows output like this:
+
+ [2012-10-12 18:02:20] Accepted f0c05469 Diff 1/1 GPU 0 pool 1
+ [2012-10-12 18:02:22] Accepted 218ac982 Diff 7/1 GPU 1 pool 1
+ [2012-10-12 18:02:23] Accepted d8300795 Diff 1/1 GPU 3 pool 1
+ [2012-10-12 18:02:24] Accepted 122c1ff1 Diff 14/1 GPU 1 pool 1
+
+The 8 byte hex value are the 2nd 8 bytes of the share being submitted to the
+pool. The 2 diff values are the actual difficulty target that share reached
+followed by the difficulty target the pool is currently asking for.
+
+The output line shows the following:
+(5s):1713.6 (avg):1707.8 Mh/s | A:729  R:8  HW:0  WU:22.53/m
+
+Each column is as follows:
+5s:  A 5 second exponentially decaying average hash rate
+avg: An all time average hash rate
+A:  The total difficulty of Accepted shares
+R:  The total difficulty of Rejected shares
+HW:  The number of HardWare errors
+WU:  The Work Utility defined as the number of diff1 shares work / minute
+     (accepted or rejected).
+
+ GPU 1: 73.5C 2551RPM | 427.3/443.0Mh/s | A:8 R:0 HW:0 WU:4.39/m
+
+Each column is as follows:
+Temperature (if supported)
+Fanspeed (if supported)
+A 5 second exponentially decaying average hash rate
+An all time average hash rate
+The total difficulty of accepted shares
+The total difficulty of rejected shares
+The number of hardware erorrs
+The work utility defined as the number of diff1 shares work / minute
+
+The sgminer status line shows:
+ ST: 1  SS: 0  NB: 1  LW: 8  GF: 1  RF: 1
+
+ST is STaged work items (ready to use).
+SS is Stale Shares discarded (detected and not submitted so don't count as rejects)
+NB is New Blocks detected on the network
+LW is Locally generated Work items
+GF is Getwork Fail Occasions (server slow to provide work)
+RF is Remote Fail occasions (server slow to accept work)
+
+The block display shows:
+Block: 0074c5e482e34a506d2a051a...  Started: [17:17:22]  Best share: 2.71K
+
+This shows a short stretch of the current block, when the new block started,
+and the all time best difficulty share you've found since starting sgminer
+this time.
+
+
+## Multipool
+
+### Failover strategies
+
+A number of different strategies for dealing with multipool setups are
+available. Each has their advantages and disadvantages so multiple strategies
+are available by user choice, as per the following list:
+
+#### Failover
+
+The default strategy is failover. This means that if you input a number of
+pools, it will try to use them as a priority list, moving away from the 1st
+to the 2nd, 2nd to 3rd and so on. If any of the earlier pools recover, it will
+move back to the higher priority ones.
+
+#### Round robin
+
+This strategy only moves from one pool to the next when the current one falls
+idle and makes no attempt to move otherwise.
+
+#### Rotate
+
+This strategy moves at user-defined intervals from one active pool to the next,
+skipping pools that are idle.
+
+#### Load balance
+
+This strategy sends work to all the pools on a quota basis. By default, all
+pools are allocated equal quotas unless specified with --quota. This
+apportioning of work is based on work handed out, not shares returned so is
+independent of difficulty targets or rejected shares. While a pool is disabled
+or dead, its quota is dropped until it is re-enabled. Quotas are forward
+looking, so if the quota is changed on the fly, it only affects future work.
+If all pools are set to zero quota or all pools with quota are dead, it will
+fall back to a failover mode. See quota below for more information.
+
+The failover-only flag has special meaning in combination with load-balance
+mode and it will distribute quota back to priority pool 0 from any pools that
+are unable to provide work for any reason so as to maintain quota ratios
+between the rest of the pools.
+
+#### Balance
+
+This strategy monitors the amount of difficulty 1 shares solved for each pool
+and uses it to try to end up doing the same amount of work for all pools.
+
+
+### Quotas
+
+The load-balance multipool strategy works off a quota based scheduler. The
+quotas handed out by default are equal, but the user is allowed to specify any
+arbitrary ratio of quotas. For example, if all the quota values add up to 100,
+each quota value will be a percentage, but if 2 pools are specified and pool0
+is given a quota of 1 and pool1 is given a quota of 9, pool0 will get 10% of
+the work and pool1 will get 90%. Quotas can be changed on the fly by the API,
+and do not act retrospectively. Setting a quota to zero will effectively
+disable that pool unless all other pools are disabled or dead. In that
+scenario, load-balance falls back to regular failover priority-based strategy.
+While a pool is dead, it loses its quota and no attempt is made to catch up
+when it comes back to life.
+
+To specify quotas on the command line, pools should be specified with a
+semicolon separated --quota(or -U) entry instead of --url. Pools specified with
+--url are given a nominal quota value of 1 and entries can be mixed.
+
+For example:
+--url poola:porta -u usernamea -p passa --quota "2;poolb:portb" -u usernameb -p passb
+Will give poola 1/3 of the work and poolb 2/3 of the work.
+
+Writing configuration files with quotas is likewise supported. To use
+the above quotas in a configuration file they would be specified thus:
+
+    "pools" : [
+        {
+                "url" : "poola:porta",
+                "user" : "usernamea",
+                "pass" : "passa"
+        },
+        {
+                "quota" : "2;poolb:portb",
+                "user" : "usernameb",
+                "pass" : "passb"
+        }
+    ]
+
+
+### Extra File Configuration
+
+If you want to store a number of pools in your configuration file, but
+don't always want them automatically enabled at start up (or restart),
+then the "state" option with a value of "disabled" can be used:
+
+    "pools" : [
+        {
+                "url" : "poola:porta",
+                "user" : "usernamea",
+                "pass" : "passa"
+        },
+        {
+                "quota" : "2;poolb:portb",
+                "user" : "usernameb",
+                "pass" : "passb",
+                "state" : "disabled"
+        }
+    ]
+
+It is then trivial to change the "state" setting to "enabled" in the
+configuration file at anytime and then restart the miner (see below).
+You can enable the pool whilst the miner is still running ('p' followed
+by 'e' followed by pool number) - but the pool will still be disabled on
+restart if the config file is not changed.
+
+"state" can also be set to "hidden". This allows the json file to
+contain a large number of pools, of which some could be automatically
+culled at start up. This makes it easy to swap pools in and out of the
+runtime selection, without having a large list of pools cluttering up
+the display.
+
+    "pools" : [
+        {
+                "poolname" : "Main Pool",
+                "url" : "poola:porta",
+                "user" : "usernamea",
+                "pass" : "passa",
+                "state" : "disabled"
+        },
+        {
+                "poolname" : "Joe's Weekend Pool",
+                "quota" : "2;poolb:portb",
+                "user" : "usernameb",
+                "pass" : "passb",
+                "state" : "hidden"
+        }
+    ]
+
+These options are considered experimental and therefore will NOT be
+created when the 'Write config file' option is used ('s' followed by
+'w').
+
+A restart of the miner ('s' followed by 'c') will reload the config
+file and any changes that may have been made.
+
+
+## Logging
+
+sgminer will log to stderr if it detects stderr is being redirected to a
+file. To enable logging simply append `2>logfile.txt` to your command line
+and `logfile.txt` will contain all debug output unless you set `debug-log`
+to `false`, in which case it will only contain output at the log level you
+specified (notice by default).
+
+There is also the -m option on Linux which will spawn a command of your choice
+and pipe the output directly to that command.
+
+The WorkTime details 'debug' option adds details on the end of each line
+displayed for Accepted or Rejected work done. An example would be:
+
+ <-00000059.ed4834a3 M:X D:1.0 G:17:02:38:0.405 C:1.855 (2.995) W:3.440 (0.000) S:0.461 R:17:02:47
+
+The first 2 hex codes are the previous block hash, the rest are reported in
+seconds unless stated otherwise:
+The previous hash is followed by the getwork mode used M:X where X is one of
+P:Pool, T:Test Pool, L:LP or B:Benchmark,
+then D:d.ddd is the difficulty required to get a share from the work,
+then G:hh:mm:ss:n.nnn, which is when the getwork or LP was sent to the pool and
+the n.nnn is how long it took to reply,
+followed by 'O' on it's own if it is an original getwork, or 'C:n.nnn' if it was
+a clone with n.nnn stating how long after the work was recieved that it was cloned,
+(m.mmm) is how long from when the original work was received until work started,
+W:n.nnn is how long the work took to process until it was ready to submit,
+(m.mmm) is how long from ready to submit to actually doing the submit, this is
+usually 0.000 unless there was a problem with submitting the work,
+S:n.nnn is how long it took to submit the completed work and await the reply,
+R:hh:mm:ss is the actual time the work submit reply was received
+
+If you start sgminer with the --sharelog option, you can get detailed
+information for each share found. The argument to the option may be "-" for
+standard output (not advisable with the ncurses UI), any valid positive number
+for that file descriptor, or a filename.
+
+To log share data to a file named "share.log", you can use either:
+./sgminer --sharelog 50 -o xxx -u yyy -p zzz 50>share.log
+./sgminer --sharelog share.log -o xxx -u yyy -p zzz
+
+For every share found, data will be logged in a CSV (Comma Separated Value)
+format:
+    timestamp,disposition,target,pool,dev,thr,sharehash,sharedata
+For example (this is wrapped, but it's all on one line for real):
+    1335313090,reject,
+    ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000,
+    http://localhost:8337,GPU0,0,
+    6f983c918f3299b58febf95ec4d0c7094ed634bc13754553ec34fc3800000000,
+    00000001a0980aff4ce4a96d53f4b89a2d5f0e765c978640fe24372a000001c5
+    000000004a4366808f81d44f26df3d69d7dc4b3473385930462d9ab707b50498
+    f681634a4f1f63d01a0cd43fb338000000000080000000000000000000000000
+    0000000000000000000000000000000000000000000000000000000080020000
