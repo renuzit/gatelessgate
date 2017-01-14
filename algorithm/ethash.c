@@ -29,7 +29,7 @@ uint32_t EthCalcEpochNumber(uint8_t *SeedHash)
   uint8_t TestSeedHash[32] = { 0 };
   
   for(int Epoch = 0; Epoch < 2048; ++Epoch) {
-    SHA3_256((ethash_h256 *)TestSeedHash, TestSeedHash, 32);
+    SHA3_256((struct ethash_h256 *)TestSeedHash, TestSeedHash, 32);
     if(!memcmp(TestSeedHash, SeedHash, 32)) return(Epoch + 1);
   }
   
@@ -61,7 +61,9 @@ Node CalcDAGItem(const Node *CacheInputNodes, uint32_t NodeCount, uint32_t NodeI
   return DAGNode;
 }
 
+#ifdef _MSC_VER
 #define restrict
+#endif
 
 // OutHash & MixHash MUST have 32 bytes allocated (at least)
 void LightEthash(uint8_t *restrict OutHash, uint8_t *restrict MixHash, const uint8_t *restrict HeaderPoWHash, const Node *Cache, const uint64_t EpochNumber, const uint64_t Nonce)
