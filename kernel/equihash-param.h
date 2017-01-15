@@ -42,21 +42,30 @@
 #define NR_SLOTS                 684
 
 #define LDS_COLL_SIZE            (NR_SLOTS * 67 / 100)
-#define EXTRA_BITS_FOR_BINS_SOLS 0
 
 #define LOCAL_WORK_SIZE          WORKSIZE  
 #define LOCAL_WORK_SIZE_SOLS     WORKSIZE
 #define LOCAL_WORK_SIZE_ROUND0   WORKSIZE
 #define LOCAL_WORK_SIZE_POTENTIAL_SOLS WORKSIZE
+
 #define ROUND0_INPUTS_PER_WORK_ITEM 1
-#ifdef AMD
+
+#if defined(AMD) && !defined(AMD_LEGACY)
 #define THREADS_PER_WRITE(round) (((round) <= 5) ? 2 : 1)
-#define OPTIM_24BYTE_WRITES
 #else
 #define THREADS_PER_WRITE(round) 1
 #endif
+
+#if defined(AMD) && !defined(AMD_LEGACY)
+#define OPTIM_24BYTE_WRITES
+#endif
 #define OPTIM_16BYTE_WRITES
+#if !defined(AMD_LEGACY)
 #define OPTIM_8BYTE_WRITES
+#endif
+
+//#define OPTIM_FAST_INTEGER_DIVISION
+//#define OPTIM_COMPACT_ROW_COUNTERS
 
 
 
@@ -97,6 +106,7 @@
 // Length of SHA256 target
 #define SHA256_TARGET_LEN               (256 / 8)
 
+#ifdef OPTIM_COMPACT_ROW_COUNTERS
 #if (NR_SLOTS < 3)
 #define BITS_PER_ROW 2
 #define ROWS_PER_UINT 16
@@ -121,8 +131,7 @@
 #define BITS_PER_ROW 8
 #define ROWS_PER_UINT 4
 #define ROW_MASK 0xFF
-#elif 0
-//#elif (NR_SLOTS < 1023)
+#elif (NR_SLOTS < 1023)
 #define BITS_PER_ROW 10
 #define ROWS_PER_UINT 3
 #define ROW_MASK 0x3FF
@@ -131,27 +140,44 @@
 #define ROWS_PER_UINT 2
 #define ROW_MASK 0xFFFF
 #endif
+#else
+#if (NR_SLOTS < 3)
+#define BITS_PER_ROW 2
+#define ROWS_PER_UINT 16
+#define ROW_MASK 0x03
+#elif (NR_SLOTS < 15)
+#define BITS_PER_ROW 4
+#define ROWS_PER_UINT 8
+#define ROW_MASK 0x0F
+#elif (NR_SLOTS < 255)
+#define BITS_PER_ROW 8
+#define ROWS_PER_UINT 4
+#define ROW_MASK 0xFF
+#else
+#define BITS_PER_ROW 16
+#define ROWS_PER_UINT 2
+#define ROW_MASK 0xFFFF
+#endif
+#endif
+
 #define RC_SIZE ((NR_ROWS * 4 + ROWS_PER_UINT - 1) / ROWS_PER_UINT)
 
-/*
-** Return the offset of Xi in bytes from the beginning of the slot.
-*/
-#define xi_offset_for_round(round)	4
+
 
 // An (uncompressed) solution stores (1 << PARAM_K) 32-bit values
 #define SOL_SIZE			((1 << PARAM_K) * 4)
 typedef struct	sols_s
 {
-	uint	nr;
-	uint	likely_invalids;
-	uchar	valid[MAX_SOLS];
-	uint	values[MAX_SOLS][(1 << PARAM_K)];
+    uint	nr;
+    uint	likely_invalids;
+    uchar	valid[MAX_SOLS];
+    uint	values[MAX_SOLS][(1 << PARAM_K)];
 }		sols_t;
 
 typedef struct	potential_sols_s
 {
-	uint	nr;
-	uint	values[MAX_POTENTIAL_SOLS][2];
+    uint	nr;
+    uint	values[MAX_POTENTIAL_SOLS][2];
 } potential_sols_t;
 
 #if NR_ROWS_LOG <= 12 && NR_SLOTS <= (1 << 10)
@@ -205,10 +231,6 @@ typedef struct	potential_sols_s
 #else
 #error "unsupported NR_ROWS_LOG"
 #endif
-
-// Windows only for now
-#define DEFAULT_NUM_MINING_MODE_THREADS 1
-#define MAX_NUM_MINING_MODE_THREADS 16
 
 #define NEXT_PRIME_NO(n) \
 	(((n) <= 2) ? 2 : \
@@ -402,25 +424,8 @@ typedef struct	potential_sols_s
 
 #if NR_SLOTS < 255
 #define BIN_INDEX_TYPE uchar
-#define BIN_INDEXES_IN_UINT 4
-#define BIN_INDEX_MASK 0xff
-#define BITS_IN_BIN_INDEX 8
-#elif NR_SLOTS < 1024
-#define BIN_INDEX_TYPE ushort
-#define BIN_INDEXES_IN_UINT 3
-#define BIN_INDEX_MASK 0x3ff
-#define BITS_IN_BIN_INDEX 10
 #elif NR_SLOTS < 65535
 #define BIN_INDEX_TYPE ushort
-#define BIN_INDEXES_IN_UINT 2
-#define BIN_INDEX_MASK 0xffff
-#define BITS_IN_BIN_INDEX 16
 #else
 #error "Unsupported NR_SLOTS"
 #endif
-
-#define SLOT_CACHE_OFFSET NR_SLOTS
-
-// Don't change these.
-#define THREADS_PER_ROW          LOCAL_WORK_SIZE
-#define THREADS_PER_ROW_SOLS     LOCAL_WORK_SIZE_SOLS
