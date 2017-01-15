@@ -246,7 +246,7 @@ void kernel_round0(__constant ulong *blake_state, __global char *ht,
     __global uint *rowCounters, __global uint *debug)
 {
     uint                tid = get_global_id(0);
-#ifdef AMD
+#if defined(AMD) && !defined(AMD_LEGACY)
     volatile ulong      v[16];
     uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
     slot_t slot;
@@ -288,7 +288,7 @@ void kernel_round0(__constant ulong *blake_state, __global char *ht,
             // last block
             v[14] ^= (ulong)-1;
 
-#ifdef AMD
+#if defined(AMD) && !defined(AMD_LEGACY)
 #pragma unroll 1
             for (uint blake_round = 1; blake_round <= 9; ++blake_round) {
 #else
@@ -462,21 +462,21 @@ uint xor_and_store(uint round, __global char *ht_src, __global char *ht_dst, uin
         else
 #endif
 #ifdef OPTIM_12BYTE_WRITES
-            if (round >= 7)
-                *(__global uint3 *)p = slot.ui3[0];
-            else
+        if (round >= 7)
+            *(__global uint3 *)p = slot.ui3[0];
+        else
 #endif
 #ifdef OPTIM_16BYTE_WRITES
-                if (round >= 6)
-                    *(__global uint4 *)p = slot.ui4[0];
-                else
+        if (round >= 6)
+            *(__global uint4 *)p = slot.ui4[0];
+        else
 #endif
 #ifdef OPTIM_24BYTE_WRITES
-                    if (round >= 2)
-                        *(__global ulong3 *)p = slot.ul3;
-                    else
+        if (round >= 2)
+            *(__global ulong3 *)p = slot.ul3;
+        else
 #endif
-                        *(__global uint8 *)p = slot.ui8;
+            *(__global uint8 *)p = slot.ui8;
     }
     return ret;
 }
@@ -606,8 +606,7 @@ void equihash_round(uint round,
 
     uint nr_slots = 0;
     uint assigned_row_index = get_group_id(0);
-
-    if (assigned_row_index >= NR_ROWS)
+if (assigned_row_index >= NR_ROWS)
         return;
 
     for (i = get_local_id(0); i < NR_BINS; i += get_local_size(0))
@@ -648,7 +647,7 @@ void equihash_round(uint round,
             uint xi0 = slot_cache[0 * NR_SLOTS + slot_cache_index];
 #endif
             uint bin_to_use =
-                ((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
+                  ((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
                 | ((xi0 & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
             bin_next_slots[i] = atomic_xchg(&bin_first_slots[bin_to_use], i);
         }
@@ -772,7 +771,6 @@ void kernel_potential_sols(
 {
     __local uint refs[ADJUSTED_LDS_ARRAY_SIZE(NR_SLOTS)];
     __local uint data[ADJUSTED_LDS_ARRAY_SIZE(NR_SLOTS)];
-    __local volatile uint    semaphoe;
 
     uint		nr_slots;
     uint		i, j;
@@ -786,59 +784,49 @@ void kernel_potential_sols(
     barrier(CLK_GLOBAL_MEM_FENCE);
 
     uint assigned_row_index = (get_global_id(0) / get_local_size(0));
+    if (assigned_row_index >= NR_ROWS)
+        return;
 
     __local uint nr_slots_shared;
-    if (!get_local_id(0))
-        semaphoe = 0;
     for (i = get_local_id(0); i < NR_BINS; i += get_local_size(0))
         bin_first_slots[i] = NR_SLOTS;
     for (i = get_local_id(0); i < NR_SLOTS; i += get_local_size(0))
         bin_next_slots[i] = NR_SLOTS;
-    if (assigned_row_index < NR_ROWS) {
-        if (get_local_id(0) == 0)
-            nr_slots_shared = nr_slots = get_nr_slots(rowCountersSrc, assigned_row_index);
-    }
+    if (get_local_id(0) == 0)
+        nr_slots_shared = nr_slots = get_nr_slots(rowCountersSrc, assigned_row_index);
     barrier(CLK_LOCAL_MEM_FENCE);
-    if (assigned_row_index < NR_ROWS) {
-        if (get_local_id(0))
-            nr_slots = nr_slots_shared;
-    }
+    if (get_local_id(0))
+        nr_slots = nr_slots_shared;
+
     barrier(CLK_LOCAL_MEM_FENCE);
 
     // in the final hash table, we are looking for a match on both the bits
     // part of the previous PREFIX colliding bits, and the last PREFIX bits.
-    if (assigned_row_index < NR_ROWS) {
-        for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
-            ulong slot_first_8bytes = *(__global ulong *) get_slot_ptr(ht_src, PARAM_K - 1, assigned_row_index, i);
-            uint ref_i = refs[i] = slot_first_8bytes >> 32;
-            uint xi_first_4bytes = data[i] = slot_first_8bytes & 0xffffffff;
-            uint bin_to_use =
-                ((xi_first_4bytes & BIN_MASK(PARAM_K - 1)) >> BIN_MASK_OFFSET(PARAM_K - 1))
-                | ((xi_first_4bytes & BIN_MASK2(PARAM_K - 1)) >> BIN_MASK2_OFFSET(PARAM_K - 1));
-            bin_next_slots[i] = atomic_xchg(&bin_first_slots[bin_to_use], i);
-        }
+    for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
+        ulong slot_first_8bytes = *(__global ulong *) get_slot_ptr(ht_src, PARAM_K - 1, assigned_row_index, i);
+        uint ref_i = refs[i] = slot_first_8bytes >> 32;
+        uint xi_first_4bytes = data[i] = slot_first_8bytes & 0xffffffff;
+        uint bin_to_use =
+            ((xi_first_4bytes & BIN_MASK(PARAM_K - 1)) >> BIN_MASK_OFFSET(PARAM_K - 1))
+            | ((xi_first_4bytes & BIN_MASK2(PARAM_K - 1)) >> BIN_MASK2_OFFSET(PARAM_K - 1));
+        bin_next_slots[i] = atomic_xchg(&bin_first_slots[bin_to_use], i);
     }
 
     barrier(CLK_LOCAL_MEM_FENCE);
-    __local ulong coll;
-    if (assigned_row_index < NR_ROWS) {
-        for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
-            uint data_i = data[i];
-            j = bin_next_slots[i];
-            while (j < NR_SLOTS) {
-                if (data_i == data[j] && atomic_inc(&semaphoe) == 0)
-                    coll = ((ulong)refs[i] << 32) | refs[j];
-                j = bin_next_slots[j];
+
+    for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
+        uint data_i = data[i];
+        j = bin_next_slots[i];
+        while (j < NR_SLOTS) {
+            if (data_i == data[j]) {
+                mark_potential_sol(potential_sols, refs[i], refs[j]);
+                return;
             }
+            j = bin_next_slots[j];
         }
-    }
-
-    barrier(CLK_LOCAL_MEM_FENCE);
-    if (assigned_row_index < NR_ROWS) {
-        if (get_local_id(0) == 0 && semaphoe)
-            mark_potential_sol(potential_sols, coll >> 32, coll & 0xffffffff);
     }
 }
+
 
 
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_SOLS, 1, 1)))
