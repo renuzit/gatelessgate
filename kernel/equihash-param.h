@@ -27,6 +27,12 @@
 #ifdef cl_amd_fp64
 #define AMD
 #endif
+#if (defined(__Tahiti__) || defined(__Pitcairn__) || defined(__Capeverde__) || defined(__Oland__)) && !defined(AMD_LEGACY)
+#define AMD_LEGACY
+#endif
+#ifdef cl_nv_pragma_unroll
+#define NVIDIA
+#endif
 //#define ENABLE_DEBUG
 
 
@@ -50,7 +56,7 @@
 
 #define ROUND0_INPUTS_PER_WORK_ITEM 1
 
-#if defined(AMD) && !defined(AMD_LEGACY)
+#if defined(AMD)
 #define THREADS_PER_WRITE(round) (((round) <= 5) ? 2 : 1)
 #else
 #define THREADS_PER_WRITE(round) 1
@@ -66,6 +72,8 @@
 
 //#define OPTIM_FAST_INTEGER_DIVISION
 //#define OPTIM_COMPACT_ROW_COUNTERS
+
+#define ADJUSTED_LDS_ARRAY_SIZE(n) (n)
 
 
 
@@ -107,58 +115,23 @@
 #define SHA256_TARGET_LEN               (256 / 8)
 
 #ifdef OPTIM_COMPACT_ROW_COUNTERS
-#if (NR_SLOTS < 3)
-#define BITS_PER_ROW 2
-#define ROWS_PER_UINT 16
-#define ROW_MASK 0x03
-#elif (NR_SLOTS < 7)
-#define BITS_PER_ROW 3
-#define ROWS_PER_UINT 10
-#define ROW_MASK 0x07
-#elif (NR_SLOTS < 15)
-#define BITS_PER_ROW 4
-#define ROWS_PER_UINT 8
-#define ROW_MASK 0x0F
-#elif (NR_SLOTS < 31)
-#define BITS_PER_ROW 5
-#define ROWS_PER_UINT 6
-#define ROW_MASK 0x1F
-#elif (NR_SLOTS < 63)
-#define BITS_PER_ROW 6
-#define ROWS_PER_UINT 5
-#define ROW_MASK 0x3F
-#elif (NR_SLOTS < 255)
-#define BITS_PER_ROW 8
-#define ROWS_PER_UINT 4
-#define ROW_MASK 0xFF
-#elif (NR_SLOTS < 1023)
-#define BITS_PER_ROW 10
-#define ROWS_PER_UINT 3
-#define ROW_MASK 0x3FF
+#define BITS_PER_ROW ((NR_SLOTS < 3)    ? 2 : \
+	                          (NR_SLOTS < 7)    ? 3 : \
+	                          (NR_SLOTS < 15)   ? 4 : \
+	                          (NR_SLOTS < 31)   ? 5 : \
+	                          (NR_SLOTS < 63)   ? 6 : \
+	                          (NR_SLOTS < 255)  ? 8 : \
+	                          (NR_SLOTS < 1023) ? 10 : \
+                                                         16)
 #else
-#define BITS_PER_ROW 16
-#define ROWS_PER_UINT 2
-#define ROW_MASK 0xFFFF
+#define BITS_PER_ROW  ((NR_SLOTS < 3)   ? 2 : \
+	                          (NR_SLOTS < 15)  ? 4 : \
+	                          (NR_SLOTS < 255) ? 8 : \
+                                                        16)
 #endif
-#else
-#if (NR_SLOTS < 3)
-#define BITS_PER_ROW 2
-#define ROWS_PER_UINT 16
-#define ROW_MASK 0x03
-#elif (NR_SLOTS < 15)
-#define BITS_PER_ROW 4
-#define ROWS_PER_UINT 8
-#define ROW_MASK 0x0F
-#elif (NR_SLOTS < 255)
-#define BITS_PER_ROW 8
-#define ROWS_PER_UINT 4
-#define ROW_MASK 0xFF
-#else
-#define BITS_PER_ROW 16
-#define ROWS_PER_UINT 2
-#define ROW_MASK 0xFFFF
-#endif
-#endif
+#define ROWS_PER_UINT (32 / BITS_PER_ROW)
+#define ROW_MASK      ((1 << BITS_PER_ROW) - 1)
+
 
 #define RC_SIZE ((NR_ROWS * 4 + ROWS_PER_UINT - 1) / ROWS_PER_UINT)
 

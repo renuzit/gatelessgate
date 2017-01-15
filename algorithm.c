@@ -1081,7 +1081,6 @@ static cl_int queue_ethash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_u
 static void append_equihash_compiler_options(struct _build_kernel_data *data, struct cgpu_info *cgpu, struct _algorithm_t *algorithm)
 {
     strcat(data->compiler_options, "");
-    //strcat(data->compiler_options, " -legacy -DAMD_LEGACY -O1 ");
 }
 
 static cl_int queue_cryptonight_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint threads)
