@@ -1,6 +1,6 @@
 # Gateless Gate
 
-- [Download precompiled binaries for Windows (0.1.1)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.1/gatelessgate-0.1.1-win64.zip) 
+- [Download precompiled binaries for 64-bit Windows (0.1.1)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.1/gatelessgate-0.1.1-win64.zip) 
 - [Download the source code for Linux (0.1.1)](https://github.com/zawawawa/gatelessgate/archive/v0.1.1.tar.gz)
 
 Gateless Gate is a cross-platform OpenCL Zcash miner. It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://github.com/mbevand/silentarmy) with a significant speed boost combined with the well-tested user-interface and back-end of [sgminer-gm](https://github.com/genesismining/sgminer-gm). (This miner runs at around 223 sol/s on RX 480 and 163 sol/s on GTX 1060 3GB.) Although the current foci of development are Windows operating systems, you should be able to run on Linux without problems.
