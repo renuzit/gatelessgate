@@ -423,9 +423,9 @@ typedef struct	potential_sols_s
                      (n))
 
 #if NR_SLOTS < 255
-#define BIN_INDEX_TYPE uchar
+#define SLOT_INDEX_TYPE uchar
 #elif NR_SLOTS < 65535
-#define BIN_INDEX_TYPE ushort
+#define SLOT_INDEX_TYPE ushort
 #else
 #error "Unsupported NR_SLOTS"
 #endif

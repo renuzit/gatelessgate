@@ -186,10 +186,10 @@ uint inc_row_counter(__global uint *rowCounters, uint row)
     get_row_counters_index(&rowIdx, &rowOffset, row);
     uint nr_slots = atomic_add(rowCounters + rowIdx, 1 << rowOffset);
     nr_slots = (nr_slots >> rowOffset) & ROW_MASK;
-    if (nr_slots >= NR_SLOTS) {
-        // avoid overflows
-        atomic_sub(rowCounters + rowIdx, 1 << rowOffset);
-    }
+    //if (nr_slots >= NR_SLOTS) {
+    //    // avoid overflows
+    //    atomic_sub(rowCounters + rowIdx, 1 << rowOffset);
+    //}
     return nr_slots;
 }
 
@@ -209,11 +209,7 @@ uint ht_store(uint round, __global char *ht, uint i,
     slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
     slot.slot.xi[5] = ((xi6 << 24) | (xi5 >> 8));
     slot.slot.xi[UINTS_IN_XI(round)] = i;
-    if (round <= 5) {
-        *(__global uint8 *)p = slot.ui8;
-    } else {
-        *(__global uint4 *)p = slot.ui4[0];
-    }
+    *(__global uint8 *)p = slot.ui8;
     return 0;
 }
 
@@ -255,8 +251,12 @@ void kernel_round0(__constant ulong *blake_state_const, __global char *ht,
 {
 	__local ulong blake_state[64];
 	__local ulong blake_iv[8];
-	ulong               v[16];
-	uint                inputs_per_thread = (NR_INPUTS + get_global_size(0) - 1) / get_global_size(0);
+#ifdef AMD
+    volatile ulong               v[16];
+#else
+    ulong               v[16];
+#endif
+    uint                inputs_per_thread = (NR_INPUTS + get_global_size(0) - 1) / get_global_size(0);
 	uint                input = get_global_id(0) * inputs_per_thread;
 	uint                input_end = (get_global_id(0) + 1) * inputs_per_thread;
 	uint                dropped = 0;
@@ -636,16 +636,14 @@ void equihash_round(uint round,
     __global uint *rowCountersSrc,
     __global uint *rowCountersDst,
     __local uint *bin_first_slots,
-    __local BIN_INDEX_TYPE *bin_next_slots,
+    __local SLOT_INDEX_TYPE *bin_next_slots,
     __local global_pointer_to_slot_t *slot_ptrs)
 {
-    __global char *p;
     uint     i, j;
     uint     dropped_coll = 0;
     uint     dropped_stor = 0;
-    __local uint  *a, *b;
 
-    // the mask is also computed to read data from the previous round
+    // the mask is computed to read data from the previous round
 #define BIN_MASK(round)        ((((round) + 1) % 2) ? 0xf000 : 0xf0000)
 #define BIN_MASK_OFFSET(round) ((((round) + 1) % 2) ? 3 * 4 : 4 * 4)
 
@@ -666,6 +664,7 @@ void equihash_round(uint round,
     uint rows_per_work_item = (NR_ROWS + get_num_groups(0) - 1) / (get_num_groups(0));
     uint rows_per_chunk = get_num_groups(0);
 
+#pragma unroll 1
     for (uint chunk = 0; chunk < rows_per_work_item; chunk++) {
         uint nr_slots = 0;
         uint assigned_row_index = get_group_id(0) + rows_per_chunk * chunk;
@@ -753,17 +752,16 @@ void equihash_round(uint round,
             uint slot_b_index = slot_a_index < NR_SLOTS ? bin_next_slots[slot_a_index] : NR_SLOTS;
             while (slot_b_index < NR_SLOTS) {
                 uint coll_index = atomic_inc(nr_collisions);
-                if (coll_index >= LDS_COLL_SIZE) {
-                    atomic_dec(nr_collisions);
-                    ++dropped_coll;
-                } else {
+                if (coll_index < LDS_COLL_SIZE) {
                     collision_array[coll_index] = (slot_a_index << 12) | slot_b_index;
+                } else {
+                    ++dropped_coll;
                 }
                 slot_b_index = bin_next_slots[slot_b_index];
             }
             barrier(CLK_LOCAL_MEM_FENCE);
 
-            uint nr_collisions_copy = *nr_collisions;
+            uint nr_collisions_copy = min(*nr_collisions, (uint)LDS_COLL_SIZE);
             barrier(CLK_LOCAL_MEM_FENCE);
             while (nr_collisions_copy > 0) {
                 // while (nr_collisions_copy >= get_local_size(0) || (slot_a_index + get_local_size(0) > max_slot_a_index && nr_collisions_copy > 0) {
@@ -778,21 +776,19 @@ void equihash_round(uint round,
                     a = (__local uint *)&slot_cache[i];
                     b = (__local uint *)&slot_cache[j];
                 }
+
                 barrier(CLK_LOCAL_MEM_FENCE);
-#ifdef AMD_LEGACY
-                dropped_stor += xor_and_store(round, ht_dst, assigned_row_index, i, j, a, b, rowCountersDst);
-#else
+
                 if (THREADS_PER_WRITE(round) > 1) {
                     dropped_stor += parallel_xor_and_store(round, ht_dst, assigned_row_index, i, j, a, b, rowCountersDst, slot_ptrs);
                 } else {
                     dropped_stor += xor_and_store(round, ht_dst, assigned_row_index, i, j, a, b, rowCountersDst);
                 }
-#endif
-                if (!get_local_id(0))
-                    *nr_collisions -= min(*nr_collisions, (uint)get_local_size(0) / THREADS_PER_WRITE(round));
 
-                barrier(CLK_LOCAL_MEM_FENCE);
-                nr_collisions_copy = *nr_collisions;
+                nr_collisions_copy -= min(nr_collisions_copy, (uint)get_local_size(0) / THREADS_PER_WRITE(round));
+                if (!get_local_id(0))
+                    *nr_collisions = nr_collisions_copy;
+
                 barrier(CLK_LOCAL_MEM_FENCE);
             }
             barrier(CLK_LOCAL_MEM_FENCE);
@@ -819,7 +815,7 @@ void kernel_name(__global char *ht_src, __global char *ht_dst, \
     __local uint    collision_array[NEXT_PRIME_NO(LDS_COLL_SIZE)]; \
     __local uint    nr_collisions; \
 	__local uint    bin_first_slots[NEXT_PRIME_NO(NR_BINS)]; \
-	__local BIN_INDEX_TYPE    bin_next_slots[NEXT_PRIME_NO(NR_SLOTS)]; \
+	__local SLOT_INDEX_TYPE    bin_next_slots[NEXT_PRIME_NO(NR_SLOTS)]; \
 	__local global_pointer_to_slot_t slot_ptrs[NEXT_PRIME_NO((THREADS_PER_WRITE(N) > 1) ? LOCAL_WORK_SIZE / THREADS_PER_WRITE(N) : 0)]; \
 	equihash_round(N, ht_src, ht_dst, debug, slot_cache, collision_array, \
 	    &nr_collisions, rowCountersSrc, rowCountersDst, bin_first_slots, bin_next_slots, slot_ptrs); \
@@ -856,20 +852,16 @@ void kernel_potential_sols(
 {
     __local uint refs[NEXT_PRIME_NO(NR_SLOTS)];
     __local uint data[NEXT_PRIME_NO(NR_SLOTS)];
-    __local volatile uint    semaphoe;
 
     uint		nr_slots;
     uint		i, j;
     __local uint    bin_first_slots[NEXT_PRIME_NO(NR_BINS)];
-    __local BIN_INDEX_TYPE    bin_next_slots[NEXT_PRIME_NO(NR_SLOTS)];
-
-    if (!get_global_id(0))
-        potential_sols->nr = 0;
-    barrier(CLK_GLOBAL_MEM_FENCE);
+    __local SLOT_INDEX_TYPE    bin_next_slots[NEXT_PRIME_NO(NR_SLOTS)];
 
     uint rows_per_work_item = (NR_ROWS + get_num_groups(0) - 1) / (get_num_groups(0));
     uint rows_per_chunk = get_num_groups(0);
 
+#pragma unroll 1
     for (uint chunk = 0; chunk < rows_per_work_item; chunk++) {
         uint assigned_row_index = get_group_id(0) + rows_per_chunk * chunk;
         if (assigned_row_index >= NR_ROWS)
@@ -881,7 +873,6 @@ void kernel_potential_sols(
         for (i = get_local_id(0); i < NR_SLOTS; i += get_local_size(0))
             bin_next_slots[i] = NR_SLOTS;
         if (!get_local_id(0)) {
-            semaphoe = 0;
             uint rowIdx, rowOffset;
             get_row_counters_index(&rowIdx, &rowOffset, assigned_row_index);
             nr_slots = (rowCountersSrc[rowIdx] >> rowOffset) & ROW_MASK;
@@ -906,20 +897,18 @@ void kernel_potential_sols(
         }
 
         barrier(CLK_LOCAL_MEM_FENCE);
-        __local ulong coll;
+
         for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
             uint data_i = data[i];
             j = bin_next_slots[i];
             while (j < NR_SLOTS) {
-                if (data_i == data[j] && atomic_inc(&semaphoe) == 0)
-                    coll = ((ulong)refs[i] << 32) | refs[j];
+                if (data_i == data[j])
+                    mark_potential_sol(potential_sols, refs[i], refs[j]);
                 j = bin_next_slots[j];
             }
         }
 
         barrier(CLK_LOCAL_MEM_FENCE);
-        if (get_local_id(0) == 0 && semaphoe)
-            mark_potential_sol(potential_sols, coll >> 32, coll & 0xffffffff);
     }
 }
 
