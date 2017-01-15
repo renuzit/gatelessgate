@@ -9,8 +9,8 @@ On 64-bit Windows operating systems, all you have to do for mining is to downloa
 
 If you find this miner useful, please consider donations to:
 
-`1BHwDWVerUTiKxhHPf2ubqKKiBMiKQGomZ` (Bitcoin)
-`t1NwUDeSKu4BxkD58mtEYKDjzw5toiLfmCu` (Zcash) 
+* `1BHwDWVerUTiKxhHPf2ubqKKiBMiKQGomZ` (Bitcoin)
+* `t1NwUDeSKu4BxkD58mtEYKDjzw5toiLfmCu` (Zcash) 
 
 zawawa @ bitcointalk.org
 
