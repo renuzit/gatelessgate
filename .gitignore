@@ -48,3 +48,5 @@ mkinstalldirs
 winbuild/sgminer.VC.db
 winbuild/sgminer.VC.VC.opendb
 winbuild/output
+winbuild/gatelessgate.VC.db
+winbuild/gatelessgate.VC.VC.opendb
