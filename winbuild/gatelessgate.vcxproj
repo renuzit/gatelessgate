@@ -121,6 +121,8 @@
       <LinkTimeCodeGeneration>
       </LinkTimeCodeGeneration>
       <IgnoreSpecificDefaultLibraries>LIBCMT</IgnoreSpecificDefaultLibraries>
+      <StackReserveSize>16777216</StackReserveSize>
+      <StackCommitSize>65536</StackCommitSize>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /Y /E /I "$(ProjectDir)..\kernel" "$(OutDir)kernel"
@@ -162,6 +164,8 @@
       <LinkTimeCodeGeneration>
       </LinkTimeCodeGeneration>
       <IgnoreSpecificDefaultLibraries>LIBCMT</IgnoreSpecificDefaultLibraries>
+      <StackReserveSize>16777216</StackReserveSize>
+      <StackCommitSize>65536</StackCommitSize>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /Y /E /I "$(ProjectDir)..\kernel" "$(OutDir)kernel"
@@ -204,6 +208,8 @@
       <IgnoreSpecificDefaultLibraries>LIBCMT</IgnoreSpecificDefaultLibraries>
       <LinkTimeCodeGeneration>
       </LinkTimeCodeGeneration>
+      <StackReserveSize>16777216</StackReserveSize>
+      <StackCommitSize>65536</StackCommitSize>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /Y /E /I "$(ProjectDir)..\kernel" "$(OutDir)kernel"
@@ -248,6 +254,8 @@ del  "$(OutDir)*.bin"</Command>
       <IgnoreSpecificDefaultLibraries>LIBCMT</IgnoreSpecificDefaultLibraries>
       <LinkTimeCodeGeneration>
       </LinkTimeCodeGeneration>
+      <StackReserveSize>16777216</StackReserveSize>
+      <StackCommitSize>65536</StackCommitSize>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /Y /E /I "$(ProjectDir)..\kernel" "$(OutDir)kernel"
