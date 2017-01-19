@@ -1,5 +1,5 @@
 // Gateless Gate, a Zcash miner
-// Copyright 2016 zawawa @ bitcointalk.org
+// Copyright 2016-2017 zawawa @ bitcointalk.org
 //
 // The initial version of this software was based on:
 // SILENTARMY v5
@@ -182,10 +182,12 @@ uint inc_row_counter(__global uint *rowCounters, uint row)
     get_row_counters_index(&rowIdx, &rowOffset, row);
     uint nr_slots = atomic_add(rowCounters + rowIdx, 1U << rowOffset);
     nr_slots = (nr_slots >> rowOffset) & ROW_MASK;
+#ifndef OPTIM_IGNORE_ROW_COUNTER_OVERFLOWS
     if (nr_slots >= NR_SLOTS) {
         // avoid overflows
         atomic_sub(rowCounters + rowIdx, 1 << rowOffset);
     }
+#endif
     return nr_slots;
 }
 
@@ -604,24 +606,28 @@ void equihash_round(uint round,
 
 
 
-    uint nr_slots = 0;
-    uint assigned_row_index = get_group_id(0);
-if (assigned_row_index >= NR_ROWS)
-        return;
 
-    for (i = get_local_id(0); i < NR_BINS; i += get_local_size(0))
-        bin_first_slots[i] = NR_SLOTS;
-    for (i = get_local_id(0); i < NR_SLOTS; i += get_local_size(0))
-        bin_next_slots[i] = NR_SLOTS;
-    if (get_local_id(0) == 0)
-        *nr_collisions = nr_slots = get_nr_slots(rowCountersSrc, assigned_row_index);
-    barrier(CLK_LOCAL_MEM_FENCE);
-    if (get_local_id(0))
-        nr_slots = *nr_collisions;
+    uint rows_per_work_item = (NR_ROWS + get_num_groups(0) - 1) / (get_num_groups(0));
+    uint rows_per_chunk = get_num_groups(0);
 
-    barrier(CLK_LOCAL_MEM_FENCE);
+    for (uint chunk = 0; chunk < rows_per_work_item; chunk++) {
+        uint nr_slots = 0;
+        uint assigned_row_index = get_group_id(0) + rows_per_chunk * chunk;
+        if (assigned_row_index >= NR_ROWS)
+            return;
 
-    for (uint phase = 0; phase < 1; ++phase) {
+        for (i = get_local_id(0); i < NR_BINS; i += get_local_size(0))
+            bin_first_slots[i] = NR_SLOTS;
+        for (i = get_local_id(0); i < NR_SLOTS; i += get_local_size(0))
+            bin_next_slots[i] = NR_SLOTS;
+        if (get_local_id(0) == 0)
+            *nr_collisions = nr_slots = get_nr_slots(rowCountersSrc, assigned_row_index);
+        barrier(CLK_LOCAL_MEM_FENCE);
+        if (get_local_id(0))
+            nr_slots = *nr_collisions;
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+
 
         // Perform a radix sort as slots get loaded into LDS.
         // Make sure all the work items in the work group enter the loop.
@@ -647,7 +653,7 @@ if (assigned_row_index >= NR_ROWS)
             uint xi0 = slot_cache[0 * NR_SLOTS + slot_cache_index];
 #endif
             uint bin_to_use =
-                  ((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
+                ((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
                 | ((xi0 & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
             bin_next_slots[i] = atomic_xchg(&bin_first_slots[bin_to_use], i);
         }

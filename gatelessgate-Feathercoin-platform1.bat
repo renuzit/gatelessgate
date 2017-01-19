@@ -4,5 +4,5 @@
 @set GPU_USE_SYNC_OBJECTS 1
 @set GPU_MAX_ALLOC_PERCENT 100
 @set GPU_SINGLE_ALLOC_PERCENT 100
-gatelessgate.exe -k equihash --gpu-threads 2 --gpu-platform 0 -o stratum+tcp://us1-zcash.flypool.org:3333 -u t1NwUDeSKu4BxkD58mtEYKDjzw5toiLfmCu -p z
+gatelessgate.exe -k neoscrypt --gpu-platform 1 -o s1.theblocksfactory.com:3333 -u zawawa.gatelessgate_128 -p x -I 16 -w 256 -g 1
 pause

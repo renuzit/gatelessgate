@@ -1,6 +1,16 @@
 #ifndef WOLF_SKEIN_CL
 #define WOLF_SKEIN_CL
 
+#ifdef cl_amd_media_ops
+#pragma OPENCL EXTENSION cl_amd_media_ops : enable
+#else
+#define amd_bitalign(src0, src1, src2) ((uint) (((((long)(src0)) << 32) | (long)(src1)) >> ((src2) & 31)))
+#endif
+
+#ifdef cl_nv_pragma_unroll
+#define as_ulong (ulong)
+#endif
+
 // Vectorized Skein implementation macros and functions by Wolf
 
 #define SKEIN_KS_PARITY	0x1BD11BDAA9FC1A22

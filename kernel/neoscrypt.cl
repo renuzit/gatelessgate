@@ -1,101 +1,181 @@
-// NeoScrypt(128, 2, 1) with Salsa20/20 and ChaCha20/20
-// By Wolf (Wolf0 aka Wolf9466)
+// Gateless Gate, a Zcash miner
+// Copyright 2016-2017 zawawa @ bitcointalk.org
+//
+// The initial version of this software was based on:
+// SILENTARMY v5
+// The MIT License (MIT) Copyright (c) 2016 Marc Bevand, Genoil, eXtremal
+//
+// This program is free software : you can redistribute it and / or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+// 
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.See the
+// GNU General Public License for more details.
+// 
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-// Stupid AMD compiler ignores the unroll pragma in these two
+/*
+ * Copyright (c) 2014-2016 John Doering <ghostlander@phoenixcoin.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
 
-// Tahiti 3/2, 
-// Hawaii 4/4 + notneededswap
-// Pitcairn 3/4 + notneededswap
-#if defined(__Tahiti__)
-#define SALSA_SMALL_UNROLL 4
-#define CHACHA_SMALL_UNROLL 2
-//#define SWAP 1
-//#define SHITMAIN 1
-//#define WIDE_STRIPE 1
-#elif defined(__Pitcairn__)
 
-#define SALSA_SMALL_UNROLL 3
-#define CHACHA_SMALL_UNROLL 2
-//#define SWAP 1
-//#define SHITMAIN 1
-//#define WIDE_STRIPE 1
+/* NeoScrypt(128, 2, 1) with Salsa20/20 and ChaCha20/20
+ * Optimised for the AMD GCN, VLIW4 and VLIW5 architectures
+ * v7, 20-Feb-2016 */
 
-#else
-#define SALSA_SMALL_UNROLL 4
-#define CHACHA_SMALL_UNROLL 4
-//#define SWAP 1
-//#define SHITMAIN 1
-//#define WIDE_STRIPE 1
-#endif
 
-// If SMALL_BLAKE2S is defined, BLAKE2S_UNROLL is interpreted
-// as the unroll factor; must divide cleanly into ten.
-// Usually a bad idea.
-//#define SMALL_BLAKE2S
-//#define BLAKE2S_UNROLL 5
+/* Use amd_bitalign() because amd_bytealign() might be broken in old drivers */
+#pragma OPENCL EXTENSION cl_amd_media_ops : enable
 
-#define BLOCK_SIZE           64U
-#define FASTKDF_BUFFER_SIZE 256U
-#ifndef PASSWORD_LEN
-#define PASSWORD_LEN         80U
-#endif
 
-#if !defined(cl_khr_byte_addressable_store)
-#error "Device does not support unaligned stores"
-#endif
+/* memcpy() of 4-byte aligned memory */
+#define neoscrypt_copy4(di, si, len) {\
+    uint i;\
+\
+    uint _len = (len) >> 2;\
+\
+    for(i = 0; i < _len; i++)\
+      XZi[(di) + i] = XZi[(si) + i];\
+}\
 
-// Swaps 128 bytes at a time without using temp vars
-void SwapBytes128(void *restrict A, void *restrict B, uint len)
-{
-	#pragma unroll 2
-	for(int i = 0; i < (len >> 7); ++i)
-	{
-		((ulong16 *)A)[i] ^= ((ulong16 *)B)[i];
-		((ulong16 *)B)[i] ^= ((ulong16 *)A)[i];
-		((ulong16 *)A)[i] ^= ((ulong16 *)B)[i];
-	}
-}
+#define neoscrypt_copy32(dst, i, off)\
+{\
+    uint _offset = amd_bitalign((off), (off), 29U);\
+\
+    (dst)[0] = amd_bitalign(XZi[(i) + 1], XZi[(i) + 0], _offset);\
+    (dst)[1] = amd_bitalign(XZi[(i) + 2], XZi[(i) + 1], _offset);\
+    (dst)[2] = amd_bitalign(XZi[(i) + 3], XZi[(i) + 2], _offset);\
+    (dst)[3] = amd_bitalign(XZi[(i) + 4], XZi[(i) + 3], _offset);\
+    (dst)[4] = amd_bitalign(XZi[(i) + 5], XZi[(i) + 4], _offset);\
+    (dst)[5] = amd_bitalign(XZi[(i) + 6], XZi[(i) + 5], _offset);\
+    (dst)[6] = amd_bitalign(XZi[(i) + 7], XZi[(i) + 6], _offset);\
+    (dst)[7] = amd_bitalign(XZi[(i) + 8], XZi[(i) + 7], _offset);\
+}\
 
-void CopyBytes128(void *restrict dst, const void *restrict src, uint len)
-{
-	#pragma unroll 2
-    for(int i = 0; i < len; ++i)
-		((ulong16 *)dst)[i] = ((ulong16 *)src)[i];
-}
+#define neoscrypt_copy64(dst, i, off)\
+{\
+    uint _offset = amd_bitalign((off), (off), 29U);\
+\
+    (dst)[0] = amd_bitalign(XZi[(i) + 1], XZi[(i) + 0], _offset);\
+    (dst)[1] = amd_bitalign(XZi[(i) + 2], XZi[(i) + 1], _offset);\
+    (dst)[2] = amd_bitalign(XZi[(i) + 3], XZi[(i) + 2], _offset);\
+    (dst)[3] = amd_bitalign(XZi[(i) + 4], XZi[(i) + 3], _offset);\
+    (dst)[4] = amd_bitalign(XZi[(i) + 5], XZi[(i) + 4], _offset);\
+    (dst)[5] = amd_bitalign(XZi[(i) + 6], XZi[(i) + 5], _offset);\
+    (dst)[6] = amd_bitalign(XZi[(i) + 7], XZi[(i) + 6], _offset);\
+    (dst)[7] = amd_bitalign(XZi[(i) + 8], XZi[(i) + 7], _offset);\
+    (dst)[8] = amd_bitalign(XZi[(i) + 9], XZi[(i) + 8], _offset);\
+    (dst)[9] = amd_bitalign(XZi[(i) + 10], XZi[(i) + 9], _offset);\
+    (dst)[10] = amd_bitalign(XZi[(i) + 11], XZi[(i) + 10], _offset);\
+    (dst)[11] = amd_bitalign(XZi[(i) + 12], XZi[(i) + 11], _offset);\
+    (dst)[12] = amd_bitalign(XZi[(i) + 13], XZi[(i) + 12], _offset);\
+    (dst)[13] = amd_bitalign(XZi[(i) + 14], XZi[(i) + 13], _offset);\
+    (dst)[14] = amd_bitalign(XZi[(i) + 15], XZi[(i) + 14], _offset);\
+    (dst)[15] = amd_bitalign(XZi[(i) + 16], XZi[(i) + 15], _offset);\
+}\
 
-void CopyBytes(void *restrict dst, const void *restrict src, uint len)
-{
-    for(int i = 0; i < len; ++i)
-		((uchar *)dst)[i] = ((uchar *)src)[i];
-}
+/* 32-byte XOR of possibly unaligned memory to 4-byte aligned memory */
+#define neoscrypt_xor32_ua(di, si, offset) {\
+\
+    uint roffset = amd_bitalign((offset), (offset), 29U);\
+\
+		XZi[(di) + 0] ^= amd_bitalign(XZi[(si) + 1], XZi[(si) + 0], roffset);\
+		XZi[(di) + 1] ^= amd_bitalign(XZi[(si) + 2], XZi[(si) + 1], roffset);\
+		XZi[(di) + 2] ^= amd_bitalign(XZi[(si) + 3], XZi[(si) + 2], roffset);\
+		XZi[(di) + 3] ^= amd_bitalign(XZi[(si) + 4], XZi[(si) + 3], roffset);\
+		XZi[(di) + 4] ^= amd_bitalign(XZi[(si) + 5], XZi[(si) + 4], roffset);\
+		XZi[(di) + 5] ^= amd_bitalign(XZi[(si) + 6], XZi[(si) + 5], roffset);\
+		XZi[(di) + 6] ^= amd_bitalign(XZi[(si) + 7], XZi[(si) + 6], roffset);\
+		XZi[(di) + 7] ^= amd_bitalign(XZi[(si) + 8], XZi[(si) + 7], roffset);\
+}\
 
-void XORBytesInPlace(void *restrict dst, const void *restrict src, uint len)
-{
-	for(int i = 0; i < len; ++i)
-		((uchar *)dst)[i] ^= ((uchar *)src)[i];
-}
+/* 32-byte XOR of possibly unaligned memory to 4-byte aligned memory (iterated) */
+#define neoscrypt_xor32_ua_it(di, si, offset, it) {\
+\
+    uint roffset = amd_bitalign((offset), (offset), 29U);\
+    uint rit = amd_bitalign((it), (it), 29U);\
+\
+    for(uint _i = 0; _i < (rit); _i += 8) {\
+		XZi[(di) + 0 + _i] ^= amd_bitalign(XZi[(si) + 1 + _i], XZi[(si) + 0 + _i], roffset);\
+		XZi[(di) + 1 + _i] ^= amd_bitalign(XZi[(si) + 2 + _i], XZi[(si) + 1 + _i], roffset);\
+		XZi[(di) + 2 + _i] ^= amd_bitalign(XZi[(si) + 3 + _i], XZi[(si) + 2 + _i], roffset);\
+		XZi[(di) + 3 + _i] ^= amd_bitalign(XZi[(si) + 4 + _i], XZi[(si) + 3 + _i], roffset);\
+		XZi[(di) + 4 + _i] ^= amd_bitalign(XZi[(si) + 5 + _i], XZi[(si) + 4 + _i], roffset);\
+		XZi[(di) + 5 + _i] ^= amd_bitalign(XZi[(si) + 6 + _i], XZi[(si) + 5 + _i], roffset);\
+		XZi[(di) + 6 + _i] ^= amd_bitalign(XZi[(si) + 7 + _i], XZi[(si) + 6 + _i], roffset);\
+		XZi[(di) + 7 + _i] ^= amd_bitalign(XZi[(si) + 8 + _i], XZi[(si) + 7 + _i], roffset);\
+	  }\
+}\
 
-void XORBytes(void *restrict dst, const void *restrict src1, const void *restrict src2, uint len)
-{
-	#pragma unroll 1
-	for(int i = 0; i < len; ++i)
-		((uchar *)dst)[i] = ((uchar *)src1)[i] ^ ((uchar *)src2)[i];
-}
+/* 32-byte XOR of 4-byte aligned memory to possibly unaligned memory */
+#define neoscrypt_xor32_au(di, si, offset) {\
+    uint roffset;\
+\
+    /* OpenCL cannot shift uint by 32 to zero value */\
+\
+			\
+        /* 75% chance */\
+        roffset = 32U - amd_bitalign((offset), (offset), 29U);\
+        XZi[(di) + 0] ^= amd_bitalign(XZi[(si) + 0], 0U,     roffset);\
+        XZi[(di) + 1] ^= amd_bitalign(XZi[(si) + 1], XZi[(si) + 0], roffset);\
+        XZi[(di) + 2] ^= amd_bitalign(XZi[(si) + 2], XZi[(si) + 1], roffset);\
+        XZi[(di) + 3] ^= amd_bitalign(XZi[(si) + 3], XZi[(si) + 2], roffset);\
+        XZi[(di) + 4] ^= amd_bitalign(XZi[(si) + 4], XZi[(si) + 3], roffset);\
+        XZi[(di) + 5] ^= amd_bitalign(XZi[(si) + 5], XZi[(si) + 4], roffset);\
+        XZi[(di) + 6] ^= amd_bitalign(XZi[(si) + 6], XZi[(si) + 5], roffset);\
+        XZi[(di) + 7] ^= amd_bitalign(XZi[(si) + 7], XZi[(si) + 6], roffset);\
+        XZi[(di) + 8] ^= amd_bitalign(0U,            XZi[(si) + 7], roffset);\
+    } else {\
+        /* 25% chance */\
+        XZi[(di) + 0] ^= XZi[(si) + 0];\
+        XZi[(di) + 1] ^= XZi[(si) + 1];\
+        XZi[(di) + 2] ^= XZi[(si) + 2];\
+        XZi[(di) + 3] ^= XZi[(si) + 3];\
+        XZi[(di) + 4] ^= XZi[(si) + 4];\
+        XZi[(di) + 5] ^= XZi[(si) + 5];\
+        XZi[(di) + 6] ^= XZi[(si) + 6];\
+        XZi[(di) + 7] ^= XZi[(si) + 7];\
+    }\
+}\
 
-// Blake2S
 
-#define BLAKE2S_BLOCK_SIZE    64U
-#define BLAKE2S_OUT_SIZE      32U
-#define BLAKE2S_KEY_SIZE      32U
 
-static const __constant uint BLAKE2S_IV[8] =
-{
-    0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A,
-    0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19
+
+/* BLAKE2s */
+
+/* Initialisation vector */
+static const __constant uint8 blake2s_IV4[1] = {
+    (uint8)(0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A,
+            0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19)
 };
 
-static const __constant uchar BLAKE2S_SIGMA[10][16] =
-{
+static const __constant uchar blake2s_sigma[10][16] = {
     {  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15 } ,
     { 14, 10,  4,  8,  9, 15, 13,  6,  1, 12,  0,  2, 11,  7,  5,  3 } ,
     { 11,  8, 12,  0,  5,  2, 15, 13, 10, 14,  3,  6,  7,  1,  9,  4 } ,
@@ -108,1389 +188,1425 @@ static const __constant uchar BLAKE2S_SIGMA[10][16] =
     { 10,  2,  8,  4,  7,  6,  1,  5, 15, 11,  9, 14,  3, 12, 13 , 0 } ,
 };
 
-#define BLAKE_G(idx0, idx1, a, b, c, d, key)	do { \
-	a += b + key[BLAKE2S_SIGMA[idx0][idx1]]; \
-	d = rotate(d ^ a, 16U); \
-	c += d; \
-	b = rotate(b ^ c, 20U); \
-	a += b + key[BLAKE2S_SIGMA[idx0][idx1 + 1]]; \
-	d = rotate(d ^ a, 24U); \
-	c += d; \
-	b = rotate(b ^ c, 25U); \
-} while(0)
+#define G1(x, a, b, c, d) \
+    a += b + (uint4)(m[blake2s_sigma[x][0]], m[blake2s_sigma[x][2]], m[blake2s_sigma[x][4]], m[blake2s_sigma[x][6]]); \
+    d = rotate(d ^ a, (uint4)(16, 16, 16, 16)); \
+    c += d; \
+    b = rotate(b ^ c, (uint4)(20, 20, 20, 20)); \
+    a += b + (uint4)(m[blake2s_sigma[x][1]], m[blake2s_sigma[x][3]], m[blake2s_sigma[x][5]], m[blake2s_sigma[x][7]]); \
+    d = rotate(d ^ a, (uint4)(24, 24, 24, 24)); \
+    c += d; \
+    b = rotate(b ^ c, (uint4)(25, 25, 25, 25));
 
-#define BLAKE_PARALLEL_G1(idx0, a, b, c, d, key)	do { \
-	a += b + (uint4)(key[BLAKE2S_SIGMA[idx0][0]], key[BLAKE2S_SIGMA[idx0][2]], key[BLAKE2S_SIGMA[idx0][4]], key[BLAKE2S_SIGMA[idx0][6]]); \
-	d = rotate(d ^ a, 16U); \
-	c += d; \
-	b = rotate(b ^ c, 20U); \
-	a += b + (uint4)(key[BLAKE2S_SIGMA[idx0][1]], key[BLAKE2S_SIGMA[idx0][3]], key[BLAKE2S_SIGMA[idx0][5]], key[BLAKE2S_SIGMA[idx0][7]]); \
-	d = rotate(d ^ a, 24U); \
-	c += d; \
-	b = rotate(b ^ c, 25U); \
-} while(0)
+#define G2(x, a, b, c, d) \
+    a += b + (uint4)(m[blake2s_sigma[x][8]], m[blake2s_sigma[x][10]], m[blake2s_sigma[x][12]], m[blake2s_sigma[x][14]]); \
+    d = rotate(d ^ a, (uint4)(16, 16, 16, 16)); \
+    c += d; \
+    b = rotate(b ^ c, (uint4)(20, 20, 20, 20)); \
+    a += b + (uint4)(m[blake2s_sigma[x][9]], m[blake2s_sigma[x][11]], m[blake2s_sigma[x][13]], m[blake2s_sigma[x][15]]); \
+    d = rotate(d ^ a, (uint4)(24, 24, 24, 24)); \
+    c += d; \
+    b = rotate(b ^ c, (uint4)(25, 25, 25, 25));
 
-#define BLAKE_PARALLEL_G2(idx0, a, b, c, d, key)	do { \
-	a += b + (uint4)(key[BLAKE2S_SIGMA[idx0][8]], key[BLAKE2S_SIGMA[idx0][10]], key[BLAKE2S_SIGMA[idx0][12]], key[BLAKE2S_SIGMA[idx0][14]]); \
-	d = rotate(d ^ a, 16U); \
-	c += d; \
-	b = rotate(b ^ c, 20U); \
-	a += b + (uint4)(key[BLAKE2S_SIGMA[idx0][9]], key[BLAKE2S_SIGMA[idx0][11]], key[BLAKE2S_SIGMA[idx0][13]], key[BLAKE2S_SIGMA[idx0][15]]); \
-	d = rotate(d ^ a, 24U); \
-	c += d; \
-	b = rotate(b ^ c, 25U); \
-} while(0)
 
-void Blake2S(uint *restrict inout, const uint *restrict inkey)
-{
-	uint16 V;
-	uint8 tmpblock;
+/* Salsa20/20 */
 
-	// Load first block (IV into V.lo) and constants (IV into V.hi)
-	V.lo = V.hi = vload8(0U, BLAKE2S_IV);
+#define SALSA_CORE_VECTOR(Y0, Y1, Y2, Y3) \
+    Y0 ^= rotate(Y3 + Y2, (uint4)( 7,  7,  7,  7)); \
+    Y1 ^= rotate(Y0 + Y3, (uint4)( 9,  9,  9,  9)); \
+    Y2 ^= rotate(Y1 + Y0, (uint4)(13, 13, 13, 13)); \
+    Y3 ^= rotate(Y2 + Y1, (uint4)(18, 18, 18, 18)); \
+    Y2 ^= rotate(Y3.wxyz + Y0.zwxy, (uint4)( 7,  7,  7,  7)); \
+    Y1 ^= rotate(Y2.wxyz + Y3.zwxy, (uint4)( 9,  9,  9,  9)); \
+    Y0 ^= rotate(Y1.wxyz + Y2.zwxy, (uint4)(13, 13, 13, 13)); \
+    Y3 ^= rotate(Y0.wxyz + Y1.zwxy, (uint4)(18, 18, 18, 18));
 
-	// XOR with initial constant
-	V.s0 ^= 0x01012020;
+uint16 neoscrypt_salsa(uint16 X) {
+    uint i;
 
-	// Copy input block for later
-	tmpblock = V.lo;
+    uint4 Y0 = (uint4)(X.s4, X.s9, X.se, X.s3);
+    uint4 Y1 = (uint4)(X.s8, X.sd, X.s2, X.s7);
+    uint4 Y2 = (uint4)(X.sc, X.s1, X.s6, X.sb);
+    uint4 Y3 = (uint4)(X.s0, X.s5, X.sa, X.sf);
 
-	// XOR length of message so far (including this block)
-	// There are two uints for this field, but high uint is zero
-	V.sc ^= BLAKE2S_BLOCK_SIZE;
+    volatile uint const_10 = 10;
+    for(i = 0; i < const_10; i++) {
+        SALSA_CORE_VECTOR(Y0, Y1, Y2, Y3);
+     }
 
-	// Compress state, using the key as the key
-	#ifdef SMALL_BLAKE2S
-	#pragma unroll BLAKE2S_UNROLL
-	#else
-	#pragma unroll
-	#endif
-	for(int x = 0; x < 10; ++x)
-	{
-		/*BLAKE_G(x, 0x00, V.s0, V.s4, V.s8, V.sc, inkey);
-		BLAKE_G(x, 0x02, V.s1, V.s5, V.s9, V.sd, inkey);
-		BLAKE_G(x, 0x04, V.s2, V.s6, V.sa, V.se, inkey);
-		BLAKE_G(x, 0x06, V.s3, V.s7, V.sb, V.sf, inkey);
-		BLAKE_G(x, 0x08, V.s0, V.s5, V.sa, V.sf, inkey);
-		BLAKE_G(x, 0x0A, V.s1, V.s6, V.sb, V.sc, inkey);
-		BLAKE_G(x, 0x0C, V.s2, V.s7, V.s8, V.sd, inkey);
-		BLAKE_G(x, 0x0E, V.s3, V.s4, V.s9, V.se, inkey);*/
-		
-		BLAKE_PARALLEL_G1(x, V.s0123, V.s4567, V.s89ab, V.scdef, inkey);
-		BLAKE_PARALLEL_G2(x, V.s0123, V.s5674, V.sab89, V.sfcde, inkey);
-	}
-
-	// XOR low part of state with the high part,
-	// then with the original input block.
-	V.lo ^= V.hi ^ tmpblock;
-
-	// Load constants (IV into V.hi)
-	V.hi = vload8(0U, BLAKE2S_IV);
-
-	// Copy input block for later
-	tmpblock = V.lo;
-
-	// XOR length of message into block again
-	V.sc ^= BLAKE2S_BLOCK_SIZE << 1;
-
-	// Last block compression - XOR final constant into state
-	V.se ^= 0xFFFFFFFFU;
-
-	// Compress block, using the input as the key
-	#ifdef SMALL_BLAKE2S
-	#pragma unroll BLAKE2S_UNROLL
-	#else
-	#pragma unroll
-	#endif
-	for(int x = 0; x < 10; ++x)
-	{
-		/*BLAKE_G(x, 0x00, V.s0, V.s4, V.s8, V.sc, inout);
-		BLAKE_G(x, 0x02, V.s1, V.s5, V.s9, V.sd, inout);
-		BLAKE_G(x, 0x04, V.s2, V.s6, V.sa, V.se, inout);
-		BLAKE_G(x, 0x06, V.s3, V.s7, V.sb, V.sf, inout);
-		BLAKE_G(x, 0x08, V.s0, V.s5, V.sa, V.sf, inout);
-		BLAKE_G(x, 0x0A, V.s1, V.s6, V.sb, V.sc, inout);
-		BLAKE_G(x, 0x0C, V.s2, V.s7, V.s8, V.sd, inout);
-		BLAKE_G(x, 0x0E, V.s3, V.s4, V.s9, V.se, inout);*/
-		
-		BLAKE_PARALLEL_G1(x, V.s0123, V.s4567, V.s89ab, V.scdef, inout);
-		BLAKE_PARALLEL_G2(x, V.s0123, V.s5674, V.sab89, V.sfcde, inout);
-	}
-
-	// XOR low part of state with high part, then with input block
-	V.lo ^= V.hi ^ tmpblock;
-
-	// Store result in input/output buffer
-	vstore8(V.lo, 0, inout);
+    return(X + (uint16)(Y3.x, Y2.y, Y1.z, Y0.w, Y0.x, Y3.y, Y2.z, Y1.w,
+                        Y1.x, Y0.y, Y3.z, Y2.w, Y2.x, Y1.y, Y0.z, Y3.w));
 }
 
-/* FastKDF, a fast buffered key derivation function:
- * FASTKDF_BUFFER_SIZE must be a power of 2;
- * password_len, salt_len and output_len should not exceed FASTKDF_BUFFER_SIZE;
- * prf_output_size must be <= prf_key_size; */
-void fastkdf(const uchar *restrict password, const uchar *restrict salt, const uint salt_len, uchar *restrict output, uint output_len)
-{
+#define neoscrypt_salsa_i(i)\
+{\
+    uint4 Y0 = (uint4)(XZi[(i) +  4], XZi[(i) +  9], XZi[(i) + 14], XZi[(i) +  3]);\
+    uint4 Y1 = (uint4)(XZi[(i) +  8], XZi[(i) + 13], XZi[(i) +  2], XZi[(i) +  7]);\
+    uint4 Y2 = (uint4)(XZi[(i) + 12], XZi[(i) +  1], XZi[(i) +  6], XZi[(i) + 11]);\
+    uint4 Y3 = (uint4)(XZi[(i) +  0], XZi[(i) +  5], XZi[(i) + 10], XZi[(i) + 15]);\
+\
+    volatile uint const_10 = 10;\
+    for (uint k = 0; k < const_10; k++) {\
+        SALSA_CORE_VECTOR(Y0, Y1, Y2, Y3);\
+    }\
+\
+    XZi[(i) +  0] += Y3.x;\
+		XZi[(i) +  1] += Y2.y,\
+		XZi[(i) +  2] += Y1.z,\
+		XZi[(i) +  3] += Y0.w, \
+		XZi[(i) +  4] += Y0.x, \
+		XZi[(i) +  5] += Y3.y, \
+		XZi[(i) +  6] += Y2.z, \
+		XZi[(i) +  7] += Y1.w,\
+    XZi[(i) +  8] += Y1.x,\
+		XZi[(i) +  9] += Y0.y, \
+		XZi[(i) + 10] += Y3.z, \
+		XZi[(i) + 11] += Y2.w, \
+		XZi[(i) + 12] += Y2.x, \
+		XZi[(i) + 13] += Y1.y, \
+		XZi[(i) + 14] += Y0.z, \
+		XZi[(i) + 15] += Y3.w;\
+}\
 
-	/*                    WARNING!
-	 * This algorithm uses byte-wise addressing for memory blocks.
-	 * Or in other words, trying to copy an unaligned memory region
-	 * will significantly slow down the algorithm, when copying uses
-	 * words or bigger entities. It even may corrupt the data, when
-	 * the device does not support it properly.
-	 * Therefore use byte copying, which will not the fastest but at
-	 * least get reliable results. */
+/* ChaCha20/20 */
 
-	// BLOCK_SIZE            64U
-	// FASTKDF_BUFFER_SIZE  256U
-	// BLAKE2S_BLOCK_SIZE    64U
-	// BLAKE2S_KEY_SIZE      32U
-	// BLAKE2S_OUT_SIZE      32U
-	uchar bufidx = 0;
-	uint8 Abuffer[9], Bbuffer[9] = { (uint8)(0) };
-	uchar *A = (uchar *)Abuffer, *B = (uchar *)Bbuffer;
+#define CHACHA_CORE_VECTOR(Y0, Y1, Y2, Y3) \
+    Y0 += Y1; Y3 = rotate(Y3 ^ Y0, (uint4)(16, 16, 16, 16)); \
+    Y2 += Y3; Y1 = rotate(Y1 ^ Y2, (uint4)(12, 12, 12, 12)); \
+    Y0 += Y1; Y3 = rotate(Y3 ^ Y0, (uint4)( 8,  8,  8,  8)); \
+    Y2 += Y3; Y1 = rotate(Y1 ^ Y2, (uint4)( 7,  7,  7,  7)); \
+    Y0 += Y1.yzwx; Y3 = rotate(Y3 ^ Y0.yzwx, (uint4)(16, 16, 16, 16)); \
+    Y2 += Y3.yzwx; Y1 = rotate(Y1 ^ Y2.yzwx, (uint4)(12, 12, 12, 12)); \
+    Y0 += Y1.yzwx; Y3 = rotate(Y3 ^ Y0.yzwx, (uint4)( 8,  8,  8,  8)); \
+    Y2 += Y3.yzwx; Y1 = rotate(Y1 ^ Y2.yzwx, (uint4)( 7,  7,  7,  7));
 
-	// Initialize the password buffer
-	#pragma unroll 1
-	for(int i = 0; i < (FASTKDF_BUFFER_SIZE >> 3); ++i) ((ulong *)A)[i] = ((ulong *)password)[i % 10];
+uint16 neoscrypt_chacha(uint16 X) {
+    uint i;
 
-	((uint16 *)(A + FASTKDF_BUFFER_SIZE))[0] = ((uint16 *)password)[0];
+    uint4 Y0 = X.s0123, Y1 = X.s4567, Y2 = X.s89ab, Y3 = X.scdef;
 
-	// Initialize the salt buffer
-	if(salt_len == FASTKDF_BUFFER_SIZE)
-	{
-		((ulong16 *)B)[0] = ((ulong16 *)B)[2] = ((ulong16 *)salt)[0];
-		((ulong16 *)B)[1] = ((ulong16 *)B)[3] = ((ulong16 *)salt)[1];
-	}
-	else
-	{
-		// salt_len is 80 bytes here
-		#pragma unroll 1
-		for(int i = 0; i < (FASTKDF_BUFFER_SIZE >> 3); ++i) ((ulong *)B)[i] = ((ulong *)salt)[i % 10];
+    volatile uint const_10 = 10;
+    for(i = 0; i < const_10; i++) {
+        CHACHA_CORE_VECTOR(Y0, Y1, Y2, Y3);
+     }
 
-		// Initialized the rest to zero earlier
-		#pragma unroll 1
-		for(int i = 0; i < 10; ++i) ((ulong *)(B + FASTKDF_BUFFER_SIZE))[i] = ((ulong *)salt)[i];
-	}
-
-    // The primary iteration
-    #pragma unroll 1
-    for(int i = 0; i < 32; ++i)
-    {
-		// Make the key buffer twice the size of the key so it fits a Blake2S block
-		// This way, we don't need a temp buffer in the Blake2S function.
-		uchar input[BLAKE2S_BLOCK_SIZE] __attribute__((aligned)), key[BLAKE2S_BLOCK_SIZE] __attribute__((aligned)) = { 0 };
-
-		// Copy input and key to their buffers
-		CopyBytes(input, A + bufidx, BLAKE2S_BLOCK_SIZE);
-		CopyBytes(key, B + bufidx, BLAKE2S_KEY_SIZE);
-
-        // PRF
-        //Blake2S((uint *)input, (uint *)key);
-		
-		uint *inkey = (uint *)key, *inout = (uint *)input;
-		
-        // PRF
-        uint16 V;
-		uint8 tmpblock;
-
-		// Load first block (IV into V.lo) and constants (IV into V.hi)
-		V.lo = V.hi = vload8(0U, BLAKE2S_IV);
-
-		// XOR with initial constant
-		V.s0 ^= 0x01012020;
-
-		// Copy input block for later
-		tmpblock = V.lo;
-
-		// XOR length of message so far (including this block)
-		// There are two uints for this field, but high uint is zero
-		V.sc ^= BLAKE2S_BLOCK_SIZE;
-
-		// Compress state, using the key as the key
-		#pragma unroll
-		for(int x = 0; x < 10; ++x)
-		{
-			BLAKE_PARALLEL_G1(x, V.s0123, V.s4567, V.s89ab, V.scdef, inkey);
-			BLAKE_PARALLEL_G2(x, V.s0123, V.s5674, V.sab89, V.sfcde, inkey);
-		}
-
-		// XOR low part of state with the high part,
-		// then with the original input block.
-		V.lo ^= V.hi ^ tmpblock;
-
-		// Load constants (IV into V.hi)
-		V.hi = vload8(0U, BLAKE2S_IV);
-
-		// Copy input block for later
-		tmpblock = V.lo;
-
-		// XOR length of message into block again
-		V.sc ^= BLAKE2S_BLOCK_SIZE << 1;
-
-		// Last block compression - XOR final constant into state
-		V.se ^= 0xFFFFFFFFU;
-
-		// Compress block, using the input as the key
-		#pragma unroll
-		for(int x = 0; x < 10; ++x)
-		{	
-			BLAKE_PARALLEL_G1(x, V.s0123, V.s4567, V.s89ab, V.scdef, inout);
-			BLAKE_PARALLEL_G2(x, V.s0123, V.s5674, V.sab89, V.sfcde, inout);
-		}
-
-		// XOR low part of state with high part, then with input block
-		V.lo ^= V.hi ^ tmpblock;
-
-		// Store result in input/output buffer
-		vstore8(V.lo, 0, inout);
-
-		
-        // Calculate the next buffer pointer
-		bufidx = 0;
-
-		for(int x = 0; x < BLAKE2S_OUT_SIZE; ++x)
-			bufidx += input[x];
-
-		// bufidx a uchar now - always mod 255
-		//bufidx &= (FASTKDF_BUFFER_SIZE - 1);
-
-        // Modify the salt buffer
-		XORBytesInPlace(B + bufidx, input, BLAKE2S_OUT_SIZE);
-
-		if(bufidx < BLAKE2S_KEY_SIZE)
-		{
-			// Head modified, tail updated
-			// this was made off the original code... wtf
-			//CopyBytes(B + FASTKDF_BUFFER_SIZE + bufidx, B + bufidx, min(BLAKE2S_OUT_SIZE, BLAKE2S_KEY_SIZE - bufidx));
-			CopyBytes(B + FASTKDF_BUFFER_SIZE + bufidx, B + bufidx, BLAKE2S_KEY_SIZE - bufidx);
-		}
-		else if((FASTKDF_BUFFER_SIZE - bufidx) < BLAKE2S_OUT_SIZE)
-		{
-			// Tail modified, head updated
-			CopyBytes(B, B + FASTKDF_BUFFER_SIZE, BLAKE2S_OUT_SIZE - (FASTKDF_BUFFER_SIZE - bufidx));
-		}
-    }
-
-    // Modify and copy into the output buffer
-
-    // Damned compiler crashes
-    // Fuck you, AMD
-
-	//for(uint i = 0; i < output_len; ++i, ++bufidx)
-	//	output[i] = B[bufidx] ^ A[i];
-
-    uint left = FASTKDF_BUFFER_SIZE - bufidx;
-	//uint left = (~bufidx) + 1
-
-	if(left < output_len)
-	{
-		XORBytes(output, B + bufidx, A, left);
-		XORBytes(output + left, B, A + left, output_len - left);
-	}
-	else
-	{
-		XORBytes(output, B + bufidx, A, output_len);
-	}
+		 return(X + (uint16)(Y0, Y1, Y2, Y3));
 }
 
-/* FastKDF, a fast buffered key derivation function:
- * FASTKDF_BUFFER_SIZE must be a power of 2;
- * password_len, salt_len and output_len should not exceed FASTKDF_BUFFER_SIZE;
- * prf_output_size must be <= prf_key_size; */
-void fastkdf1(const uchar password[80], uchar output[256])
-{
+#define neoscrypt_chacha_i(i)\
+{\
+    uint4 Y0 = (uint4)(XZi[(i) +  0], XZi[(i) +  1], XZi[(i) +  2], XZi[(i) +  3]);\
+    uint4 Y1 = (uint4)(XZi[(i) +  4], XZi[(i) +  5], XZi[(i) +  6], XZi[(i) +  7]);\
+    uint4 Y2 = (uint4)(XZi[(i) +  8], XZi[(i) +  9], XZi[(i) + 10], XZi[(i) + 11]);\
+    uint4 Y3 = (uint4)(XZi[(i) + 12], XZi[(i) + 13], XZi[(i) + 14], XZi[(i) + 15]);\
+\
+    volatile uint const_10 = 10;\
+    for (uint k = 0; k < const_10; k++) {\
+        CHACHA_CORE_VECTOR(Y0, Y1, Y2, Y3);\
+    }\
+\
+    XZi[(i) +  0] += Y0.x;\
+		XZi[(i) +  1] += Y0.y,\
+		XZi[(i) +  2] += Y0.z,\
+		XZi[(i) +  3] += Y0.w,\
+		XZi[(i) +  4] += Y1.x,\
+		XZi[(i) +  5] += Y1.y,\
+		XZi[(i) +  6] += Y1.z,\
+		XZi[(i) +  7] += Y1.w,\
+    XZi[(i) +  8] += Y2.x,\
+		XZi[(i) +  9] += Y2.y,\
+		XZi[(i) + 10] += Y2.z,\
+		XZi[(i) + 11] += Y2.w,\
+		XZi[(i) + 12] += Y3.x,\
+		XZi[(i) + 13] += Y3.y,\
+		XZi[(i) + 14] += Y3.z,\
+		XZi[(i) + 15] += Y3.w;\
+}\
 
-	/*                    WARNING!
-	 * This algorithm uses byte-wise addressing for memory blocks.
-	 * Or in other words, trying to copy an unaligned memory region
-	 * will significantly slow down the algorithm, when copying uses
-	 * words or bigger entities. It even may corrupt the data, when
-	 * the device does not support it properly.
-	 * Therefore use byte copying, which will not the fastest but at
-	 * least get reliable results. */
 
-	// BLOCK_SIZE            64U
-	// FASTKDF_BUFFER_SIZE  256U
-	// BLAKE2S_BLOCK_SIZE    64U
-	// BLAKE2S_KEY_SIZE      32U
-	// BLAKE2S_OUT_SIZE      32U
-	uchar bufidx = 0;
-	uint8 Abuffer[9], Bbuffer[9] = { (uint8)(0) };
-	uchar *A = (uchar *)Abuffer, *B = (uchar *)Bbuffer;
-	
-	// Initialize the password buffer
-	#pragma unroll 1
-	for(int i = 0; i < (FASTKDF_BUFFER_SIZE >> 3); ++i) ((ulong *)B)[i] = ((ulong *)A)[i] = ((ulong *)password)[i % 10];
-
-	((uint16 *)(B + FASTKDF_BUFFER_SIZE))[0] = ((uint16 *)(A + FASTKDF_BUFFER_SIZE))[0] = ((uint16 *)password)[0];
-
-    // The primary iteration
-    #pragma unroll 1
-    for(int i = 0; i < 32; ++i)
-    {
-		// Make the key buffer twice the size of the key so it fits a Blake2S block
-		// This way, we don't need a temp buffer in the Blake2S function.
-		uchar input[BLAKE2S_BLOCK_SIZE] __attribute__((aligned)), key[BLAKE2S_BLOCK_SIZE] __attribute__((aligned)) = { 0 };
-		
-		// Copy input and key to their buffers
-		CopyBytes(input, A + bufidx, BLAKE2S_BLOCK_SIZE);
-		CopyBytes(key, B + bufidx, BLAKE2S_KEY_SIZE);
-		
-		uint *inkey = (uint *)key, *inout = (uint *)input;
-		
-		#ifndef __Hawaii__
-		
-        // PRF
-        uint4 V[4];
-		uint8 tmpblock;
-		
-		tmpblock = vload8(0U, BLAKE2S_IV);
-		
-		V[0] = V[2] = tmpblock.lo;
-		V[1] = V[3] = tmpblock.hi;
-		
-		V[0].s0 ^= 0x01012020U;
-		tmpblock.lo = V[0];
-		
-		V[3].s0 ^= BLAKE2S_BLOCK_SIZE;
-
-		// Compress state, using the key as the key
-		#pragma unroll
-		for(int x = 0; x < 10; ++x)
-		{
-			BLAKE_PARALLEL_G1(x, V[0], V[1], V[2], V[3], inkey);
-			BLAKE_PARALLEL_G2(x, V[0], V[1].s1230, V[2].s2301, V[3].s3012, inkey);
-		}
-		
-		V[0] ^= V[2] ^ tmpblock.lo;
-		V[1] ^= V[3] ^ tmpblock.hi;
-		
-		V[2] = vload4(0U, BLAKE2S_IV);
-		V[3] = vload4(1U, BLAKE2S_IV);
-		
-		tmpblock.lo = V[0];
-		tmpblock.hi = V[1];
-		
-		V[3].s0 ^= BLAKE2S_BLOCK_SIZE << 1;
-		V[3].s2 ^= 0xFFFFFFFFU;
-
-		// Compress block, using the input as the key
-		#pragma unroll
-		for(int x = 0; x < 10; ++x)
-		{	
-			BLAKE_PARALLEL_G1(x, V[0], V[1], V[2], V[3], inout);
-			BLAKE_PARALLEL_G2(x, V[0], V[1].s1230, V[2].s2301, V[3].s3012, inout);
-		}
-		
-		V[0] ^= V[2] ^ tmpblock.lo;
-		V[1] ^= V[3] ^ tmpblock.hi;
-		
-		vstore4(V[0], 0, inout);
-		vstore4(V[1], 1, inout);
-		
-		#else
-		
-        // PRF
-        uint16 V;
-		uint8 tmpblock;
-
-		// Load first block (IV into V.lo) and constants (IV into V.hi)
-		V.lo = V.hi = vload8(0U, BLAKE2S_IV);
-
-		// XOR with initial constant
-		V.s0 ^= 0x01012020;
-
-		// Copy input block for later
-		tmpblock = V.lo;
-
-		// XOR length of message so far (including this block)
-		// There are two uints for this field, but high uint is zero
-		V.sc ^= BLAKE2S_BLOCK_SIZE;
-
-		// Compress state, using the key as the key
-		#pragma unroll
-		for(int x = 0; x < 10; ++x)
-		{
-			BLAKE_PARALLEL_G1(x, V.s0123, V.s4567, V.s89ab, V.scdef, inkey);
-			BLAKE_PARALLEL_G2(x, V.s0123, V.s5674, V.sab89, V.sfcde, inkey);
-		}
-
-		// XOR low part of state with the high part,
-		// then with the original input block.
-		V.lo ^= V.hi ^ tmpblock;
-
-		// Load constants (IV into V.hi)
-		V.hi = vload8(0U, BLAKE2S_IV);
-
-		// Copy input block for later
-		tmpblock = V.lo;
-
-		// XOR length of message into block again
-		V.sc ^= BLAKE2S_BLOCK_SIZE << 1;
-
-		// Last block compression - XOR final constant into state
-		V.se ^= 0xFFFFFFFFU;
-
-		// Compress block, using the input as the key
-		#pragma unroll
-		for(int x = 0; x < 10; ++x)
-		{	
-			BLAKE_PARALLEL_G1(x, V.s0123, V.s4567, V.s89ab, V.scdef, inout);
-			BLAKE_PARALLEL_G2(x, V.s0123, V.s5674, V.sab89, V.sfcde, inout);
-		}
-
-		// XOR low part of state with high part, then with input block
-		V.lo ^= V.hi ^ tmpblock;
-
-		// Store result in input/output buffer
-		vstore8(V.lo, 0, inout);
-		
-		#endif
-		
-        // Calculate the next buffer pointer
-		bufidx = 0;
-
-		for(int x = 0; x < BLAKE2S_OUT_SIZE; ++x)
-			bufidx += input[x];
-
-		// bufidx a uchar now - always mod 255
-		//bufidx &= (FASTKDF_BUFFER_SIZE - 1);
-
-        // Modify the salt buffer
-		XORBytesInPlace(B + bufidx, input, BLAKE2S_OUT_SIZE);
-
-		if(bufidx < BLAKE2S_KEY_SIZE)
-		{
-			// Head modified, tail updated
-			// this was made off the original code... wtf
-			//CopyBytes(B + FASTKDF_BUFFER_SIZE + bufidx, B + bufidx, min(BLAKE2S_OUT_SIZE, BLAKE2S_KEY_SIZE - bufidx));
-			CopyBytes(B + FASTKDF_BUFFER_SIZE + bufidx, B + bufidx, BLAKE2S_KEY_SIZE - bufidx);
-		}
-		else if((FASTKDF_BUFFER_SIZE - bufidx) < BLAKE2S_OUT_SIZE)
-		{
-			// Tail modified, head updated
-			CopyBytes(B, B + FASTKDF_BUFFER_SIZE, BLAKE2S_OUT_SIZE - (FASTKDF_BUFFER_SIZE - bufidx));
-		}
-    }
-
-    // Modify and copy into the output buffer
-
-    // Damned compiler crashes
-    // Fuck you, AMD
-
-	//for(uint i = 0; i < output_len; ++i, ++bufidx)
-	//	output[i] = B[bufidx] ^ A[i];
-
-    uint left = FASTKDF_BUFFER_SIZE - bufidx;
-	//uint left = (~bufidx) + 1
-
-	if(left < 256)
-	{
-		XORBytes(output, B + bufidx, A, left);
-		XORBytes(output + left, B, A + left, 256 - left);
-	}
-	else
-	{
-		XORBytes(output, B + bufidx, A, 256);
-	}
-}
-
-/* FastKDF, a fast buffered key derivation function:
- * FASTKDF_BUFFER_SIZE must be a power of 2;
- * password_len, salt_len and output_len should not exceed FASTKDF_BUFFER_SIZE;
- * prf_output_size must be <= prf_key_size; */
-void fastkdf2(const uchar password[80], const uchar salt[256],  __global uint* restrict output, const uint target)
-{
-
-	/*                    WARNING!
-	 * This algorithm uses byte-wise addressing for memory blocks.
-	 * Or in other words, trying to copy an unaligned memory region
-	 * will significantly slow down the algorithm, when copying uses
-	 * words or bigger entities. It even may corrupt the data, when
-	 * the device does not support it properly.
-	 * Therefore use byte copying, which will not the fastest but at
-	 * least get reliable results. */
-
-	// BLOCK_SIZE            64U
-	// FASTKDF_BUFFER_SIZE  256U
-	// BLAKE2S_BLOCK_SIZE    64U
-	// BLAKE2S_KEY_SIZE      32U
-	// BLAKE2S_OUT_SIZE      32U
-	// salt_len == 256, output_len == 32
-	uchar bufidx = 0;
-	uint8 Abuffer[9], Bbuffer[9] = { (uint8)(0) };
-	uchar *A = (uchar *)Abuffer, *B = (uchar *)Bbuffer;
-	//uchar A[256], B[256];
-	
-	// Initialize the password buffer
-	#pragma unroll 1
-	for(int i = 0; i < (FASTKDF_BUFFER_SIZE >> 3); ++i) ((ulong *)A)[i] = ((ulong *)password)[i % 10];
-
-	((uint16 *)(A + FASTKDF_BUFFER_SIZE))[0] = ((uint16 *)password)[0];
-
-	// Initialize the salt buffer
-	((ulong16 *)B)[0] = ((ulong16 *)B)[2] = ((ulong16 *)salt)[0];
-	((ulong16 *)B)[1] = ((ulong16 *)B)[3] = ((ulong16 *)salt)[1];
-
-    // The primary iteration
-	#pragma unroll 1
-    for(int i = 0; i < 32; ++i)
-    {
-		// Make the key buffer twice the size of the key so it fits a Blake2S block
-		// This way, we don't need a temp buffer in the Blake2S function.
-		uchar input[BLAKE2S_BLOCK_SIZE] __attribute__((aligned)), key[BLAKE2S_BLOCK_SIZE] __attribute__((aligned)) = { 0 };
-		
-		// Copy input and key to their buffers
-		CopyBytes(input, A + bufidx, BLAKE2S_BLOCK_SIZE);
-		CopyBytes(key, B + bufidx, BLAKE2S_KEY_SIZE);
-		
-		uint *inkey = (uint *)key, *inout = (uint *)input;
-		
-		#ifndef __Hawaii__
-		
-        // PRF
-        uint4 V[4];
-		uint8 tmpblock;
-		
-		tmpblock = vload8(0U, BLAKE2S_IV);
-		
-		V[0] = V[2] = tmpblock.lo;
-		V[1] = V[3] = tmpblock.hi;
-		
-		V[0].s0 ^= 0x01012020U;
-		tmpblock.lo = V[0];
-		
-		V[3].s0 ^= BLAKE2S_BLOCK_SIZE;
-
-		// Compress state, using the key as the key
-		#pragma unroll
-		for(int x = 0; x < 10; ++x)
-		{
-			BLAKE_PARALLEL_G1(x, V[0], V[1], V[2], V[3], inkey);
-			BLAKE_PARALLEL_G2(x, V[0], V[1].s1230, V[2].s2301, V[3].s3012, inkey);
-		}
-		
-		V[0] ^= V[2] ^ tmpblock.lo;
-		V[1] ^= V[3] ^ tmpblock.hi;
-		
-		V[2] = vload4(0U, BLAKE2S_IV);
-		V[3] = vload4(1U, BLAKE2S_IV);
-		
-		tmpblock.lo = V[0];
-		tmpblock.hi = V[1];
-		
-		V[3].s0 ^= BLAKE2S_BLOCK_SIZE << 1;
-		V[3].s2 ^= 0xFFFFFFFFU;
-
-		// Compress block, using the input as the key
-		#pragma unroll
-		for(int x = 0; x < 10; ++x)
-		{	
-			BLAKE_PARALLEL_G1(x, V[0], V[1], V[2], V[3], inout);
-			BLAKE_PARALLEL_G2(x, V[0], V[1].s1230, V[2].s2301, V[3].s3012, inout);
-		}
-		
-		V[0] ^= V[2] ^ tmpblock.lo;
-		V[1] ^= V[3] ^ tmpblock.hi;
-		
-		vstore4(V[0], 0, inout);
-		vstore4(V[1], 1, inout);
-		
-		#else
-		
-        // PRF
-        uint16 V;
-		uint8 tmpblock;
-
-		// Load first block (IV into V.lo) and constants (IV into V.hi)
-		V.lo = V.hi = vload8(0U, BLAKE2S_IV);
-
-		// XOR with initial constant
-		V.s0 ^= 0x01012020;
-
-		// Copy input block for later
-		tmpblock = V.lo;
-
-		// XOR length of message so far (including this block)
-		// There are two uints for this field, but high uint is zero
-		V.sc ^= BLAKE2S_BLOCK_SIZE;
-
-		// Compress state, using the key as the key
-		#pragma unroll
-		for(int x = 0; x < 10; ++x)
-		{
-			BLAKE_PARALLEL_G1(x, V.s0123, V.s4567, V.s89ab, V.scdef, inkey);
-			BLAKE_PARALLEL_G2(x, V.s0123, V.s5674, V.sab89, V.sfcde, inkey);
-		}
-
-		// XOR low part of state with the high part,
-		// then with the original input block.
-		V.lo ^= V.hi ^ tmpblock;
-
-		// Load constants (IV into V.hi)
-		V.hi = vload8(0U, BLAKE2S_IV);
-
-		// Copy input block for later
-		tmpblock = V.lo;
-
-		// XOR length of message into block again
-		V.sc ^= BLAKE2S_BLOCK_SIZE << 1;
-
-		// Last block compression - XOR final constant into state
-		V.se ^= 0xFFFFFFFFU;
-
-		// Compress block, using the input as the key
-		#pragma unroll
-		for(int x = 0; x < 10; ++x)
-		{	
-			BLAKE_PARALLEL_G1(x, V.s0123, V.s4567, V.s89ab, V.scdef, inout);
-			BLAKE_PARALLEL_G2(x, V.s0123, V.s5674, V.sab89, V.sfcde, inout);
-		}
-
-		// XOR low part of state with high part, then with input block
-		V.lo ^= V.hi ^ tmpblock;
-
-		// Store result in input/output buffer
-		vstore8(V.lo, 0, inout);
-		#endif
-		
-        // Calculate the next buffer pointer
-		bufidx = 0;
-
-		for(int x = 0; x < BLAKE2S_OUT_SIZE; ++x)
-			bufidx += input[x];
-
-		// bufidx a uchar now - always mod 255
-		//bufidx &= (FASTKDF_BUFFER_SIZE - 1);
-
-        // Modify the salt buffer
-		XORBytesInPlace(B + bufidx, input, BLAKE2S_OUT_SIZE);
-
-		if(bufidx < BLAKE2S_KEY_SIZE)
-		{
-			// Head modified, tail updated
-			// this was made off the original code... wtf
-			//CopyBytes(B + FASTKDF_BUFFER_SIZE + bufidx, B + bufidx, min(BLAKE2S_OUT_SIZE, BLAKE2S_KEY_SIZE - bufidx));
-			CopyBytes(B + FASTKDF_BUFFER_SIZE + bufidx, B + bufidx, BLAKE2S_KEY_SIZE - bufidx);
-		}
-		else if((FASTKDF_BUFFER_SIZE - bufidx) < BLAKE2S_OUT_SIZE)
-		{
-			// Tail modified, head updated
-			CopyBytes(B, B + FASTKDF_BUFFER_SIZE, BLAKE2S_OUT_SIZE - (FASTKDF_BUFFER_SIZE - bufidx));
-		}		
-    }
-
-    // Modify and copy into the output buffer
-
-    // Damned compiler crashes
-    // Fuck you, AMD
-	
-	uchar outbuf[32];
-	
-	for(uint i = 0; i < 32; ++i, ++bufidx)
-		outbuf[i] = B[bufidx] ^ A[i];
-
-    /*uint left = FASTKDF_BUFFER_SIZE - bufidx;
-	//uint left = (~bufidx) + 1
-	uchar outbuf[32];
-
-	if(left < 32)
-	{
-		XORBytes(outbuf, B + bufidx, A, left);
-		XORBytes(outbuf + left, B, A + left, 32 - left);
-	}
-	else
-	{
-		XORBytes(outbuf, B + bufidx, A, 32);
-	}*/
-	
-	if(((uint *)outbuf)[7] <= target) output[atomic_add(output + 0xFF, 1)] = get_global_id(0);
-
-}
-
-/*
- s0 s1 s2 s3
- s4 s5 s6 s7
- s8 s9 sa sb
- sc sd se sf
-shittify:
-s0=s4
-s1=s9
-s2=se
-s3=s3
-s4=s8
-s5=sd
-s6=s2
-s7=s7
-s8=sc
-s9=s1
-sa=s6
-sb=sb
-sc=s0
-sd=s5
-se=sa
-sf=sf
-unshittify:
-s0=sc
-s1=s9
-s2=s6
-s3=s3
-s4=s0
-s5=sd
-s6=sa
-s7=s7
-s8=s4
-s9=s1
-sa=se
-sb=sb
-sc=s8
-sd=s5
-se=s2
-sf=sf
-
-*/
-
-#define SALSA_CORE(state)       do { \
-	state[0] ^= rotate(state[3] + state[2], 7U); \
-	state[1] ^= rotate(state[0] + state[3], 9U); \
-	state[2] ^= rotate(state[1] + state[0], 13U); \
-	state[3] ^= rotate(state[2] + state[1], 18U); \
-	state[2] ^= rotate(state[3].wxyz + state[0].zwxy, 7U); \
-	state[1] ^= rotate(state[2].wxyz + state[3].zwxy, 9U); \
-	state[0] ^= rotate(state[1].wxyz + state[2].zwxy, 13U); \
-	state[3] ^= rotate(state[0].wxyz + state[1].zwxy, 18U); \
-} while(0)
-
-#define SALSA_CORE_SCALAR(state)	do { \
-	state.s4 ^= rotate(state.s0 + state.sc, 7U); state.s8 ^= rotate(state.s4 + state.s0, 9U); state.sc ^= rotate(state.s8 + state.s4, 13U); state.s0 ^= rotate(state.sc + state.s8, 18U); \
-	state.s9 ^= rotate(state.s5 + state.s1, 7U); state.sd ^= rotate(state.s9 + state.s5, 9U); state.s1 ^= rotate(state.sd + state.s9, 13U); state.s5 ^= rotate(state.s1 + state.sd, 18U); \
-	state.se ^= rotate(state.sa + state.s6, 7U); state.s2 ^= rotate(state.se + state.sa, 9U); state.s6 ^= rotate(state.s2 + state.se, 13U); state.sa ^= rotate(state.s6 + state.s2, 18U); \
-	state.s3 ^= rotate(state.sf + state.sb, 7U); state.s7 ^= rotate(state.s3 + state.sf, 9U); state.sb ^= rotate(state.s7 + state.s3, 13U); state.sf ^= rotate(state.sb + state.s7, 18U); \
-	state.s1 ^= rotate(state.s0 + state.s3, 7U); state.s2 ^= rotate(state.s1 + state.s0, 9U); state.s3 ^= rotate(state.s2 + state.s1, 13U); state.s0 ^= rotate(state.s3 + state.s2, 18U); \
-	state.s6 ^= rotate(state.s5 + state.s4, 7U); state.s7 ^= rotate(state.s6 + state.s5, 9U); state.s4 ^= rotate(state.s7 + state.s6, 13U); state.s5 ^= rotate(state.s4 + state.s7, 18U); \
-	state.sb ^= rotate(state.sa + state.s9, 7U); state.s8 ^= rotate(state.sb + state.sa, 9U); state.s9 ^= rotate(state.s8 + state.sb, 13U); state.sa ^= rotate(state.s9 + state.s8, 18U); \
-	state.sc ^= rotate(state.sf + state.se, 7U); state.sd ^= rotate(state.sc + state.sf, 9U); state.se ^= rotate(state.sd + state.sc, 13U); state.sf ^= rotate(state.se + state.sd, 18U); \
-} while(0)
-
-uint16 salsa_small_parallel_rnd(uint16 X)
-{
-#ifndef SHITMAIN
-	uint4 st[4] = {	(uint4)(X.s4, X.s9, X.se, X.s3),
-				 	(uint4)(X.s8, X.sd, X.s2, X.s7),
-				 	(uint4)(X.sc, X.s1, X.s6, X.sb),
-					(uint4)(X.s0, X.s5, X.sa, X.sf)  };   
-#else
-	uint4 st[4];
-	((uint16 *)st)[0] = X;
+/* For compatibility */
+#if (WORKGROUPSIZE) && !(WORKSIZE)
+#define WORKSIZE WORKGROUPSIZE
 #endif
-	
-	#if SALSA_SMALL_UNROLL == 1
 
-	for(int i = 0; i < 10; ++i)
-	{
-		SALSA_CORE(st);
-	}
-
-	#elif SALSA_SMALL_UNROLL == 2
-
-	for(int i = 0; i < 5; ++i)
-	{
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-	}
-
-	#elif SALSA_SMALL_UNROLL == 3
-
-	for(int i = 0; i < 4; ++i)
-	{
-		SALSA_CORE(st);
-		if(i == 3) break;
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-	}
-
-	#elif SALSA_SMALL_UNROLL == 4
-
-	for(int i = 0; i < 3; ++i)
-	{
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-		if(i == 2) break;
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-	}
-
-	#elif SALSA_SMALL_UNROLL == 5
-
-	for(int i = 0; i < 2; ++i)
-	{
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-	}
-
-	#else
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-		SALSA_CORE(st);
-
-	#endif
-
-#ifndef SHITMAIN
-	return(X + (uint16)(
-		st[3].x, st[2].y, st[1].z, st[0].w,
-		st[0].x, st[3].y, st[2].z, st[1].w,
-		st[1].x, st[0].y, st[3].z, st[2].w,
-		st[2].x, st[1].y, st[0].z, st[3].w));
-#else
-	return(X + ((uint16 *)st)[0]);
+/* CodeXL only */
+#if !(WORKSIZE)
+#define WORKSIZE 256
 #endif
-}
-
-uint16 salsa_small_scalar_rnd(uint16 X)
-{
-	uint16 st = X;
-	
-	#if SALSA_SMALL_UNROLL == 1
-	
-	for(int i = 0; i < 10; ++i)
-	{
-		SALSA_CORE_SCALAR(st);
-	}
-	
-	#elif SALSA_SMALL_UNROLL == 2
-	
-	for(int i = 0; i < 5; ++i)
-	{
-		SALSA_CORE_SCALAR(st);
-		SALSA_CORE_SCALAR(st);
-	}
-	
-	#elif SALSA_SMALL_UNROLL == 3
-	
-	for(int i = 0; i < 4; ++i)
-	{
-		SALSA_CORE_SCALAR(st);
-		if(i == 3) break;
-		SALSA_CORE_SCALAR(st);
-		SALSA_CORE_SCALAR(st);
-	}
-	
-	#elif SALSA_SMALL_UNROLL == 4
-	
-	for(int i = 0; i < 3; ++i)
-	{
-		SALSA_CORE_SCALAR(st);
-		SALSA_CORE_SCALAR(st);
-		if(i == 2) break;
-		SALSA_CORE_SCALAR(st);
-		SALSA_CORE_SCALAR(st);
-	}
-	
-	#else
-	
-	for(int i = 0; i < 2; ++i)
-	{
-		SALSA_CORE_SCALAR(st);
-		SALSA_CORE_SCALAR(st);
-		SALSA_CORE_SCALAR(st);
-		SALSA_CORE_SCALAR(st);
-		SALSA_CORE_SCALAR(st);
-	}
-	
-	#endif
-	
-	return(X + st);
-}
 
 
-#define CHACHA_CORE_PARALLEL(state)	do { \
-	state[0] += state[1]; state[3] = rotate(state[3] ^ state[0], 16U); \
-	state[2] += state[3]; state[1] = rotate(state[1] ^ state[2], 12U); \
-	state[0] += state[1]; state[3] = rotate(state[3] ^ state[0], 8U); \
-	state[2] += state[3]; state[1] = rotate(state[1] ^ state[2], 7U); \
-	\
-	state[0] += state[1].yzwx; state[3].wxyz = rotate(state[3].wxyz ^ state[0], 16); \
-	state[2].zwxy += state[3].wxyz; state[1].yzwx = rotate(state[1].yzwx ^ state[2].zwxy, 12U); \
-	state[0] += state[1].yzwx; state[3].wxyz = rotate(state[3].wxyz ^ state[0], 8U); \
-	state[2].zwxy += state[3].wxyz; state[1].yzwx = rotate(state[1].yzwx ^ state[2].zwxy, 7U); \
-} while(0)
 
-#define CHACHA_CORE(state)	do { \
-	state.s0 += state.s4; state.sc = as_uint(as_ushort2(state.sc ^ state.s0).s10); state.s8 += state.sc; state.s4 = rotate(state.s4 ^ state.s8, 12U); state.s0 += state.s4; state.sc = rotate(state.sc ^ state.s0, 8U); state.s8 += state.sc; state.s4 = rotate(state.s4 ^ state.s8, 7U); \
-	state.s1 += state.s5; state.sd = as_uint(as_ushort2(state.sd ^ state.s1).s10); state.s9 += state.sd; state.s5 = rotate(state.s5 ^ state.s9, 12U); state.s1 += state.s5; state.sd = rotate(state.sd ^ state.s1, 8U); state.s9 += state.sd; state.s5 = rotate(state.s5 ^ state.s9, 7U); \
-	state.s2 += state.s6; state.se = as_uint(as_ushort2(state.se ^ state.s2).s10); state.sa += state.se; state.s6 = rotate(state.s6 ^ state.sa, 12U); state.s2 += state.s6; state.se = rotate(state.se ^ state.s2, 8U); state.sa += state.se; state.s6 = rotate(state.s6 ^ state.sa, 7U); \
-	state.s3 += state.s7; state.sf = as_uint(as_ushort2(state.sf ^ state.s3).s10); state.sb += state.sf; state.s7 = rotate(state.s7 ^ state.sb, 12U); state.s3 += state.s7; state.sf = rotate(state.sf ^ state.s3, 8U); state.sb += state.sf; state.s7 = rotate(state.s7 ^ state.sb, 7U); \
-	state.s0 += state.s5; state.sf = as_uint(as_ushort2(state.sf ^ state.s0).s10); state.sa += state.sf; state.s5 = rotate(state.s5 ^ state.sa, 12U); state.s0 += state.s5; state.sf = rotate(state.sf ^ state.s0, 8U); state.sa += state.sf; state.s5 = rotate(state.s5 ^ state.sa, 7U); \
-	state.s1 += state.s6; state.sc = as_uint(as_ushort2(state.sc ^ state.s1).s10); state.sb += state.sc; state.s6 = rotate(state.s6 ^ state.sb, 12U); state.s1 += state.s6; state.sc = rotate(state.sc ^ state.s1, 8U); state.sb += state.sc; state.s6 = rotate(state.s6 ^ state.sb, 7U); \
-	state.s2 += state.s7; state.sd = as_uint(as_ushort2(state.sd ^ state.s2).s10); state.s8 += state.sd; state.s7 = rotate(state.s7 ^ state.s8, 12U); state.s2 += state.s7; state.sd = rotate(state.sd ^ state.s2, 8U); state.s8 += state.sd; state.s7 = rotate(state.s7 ^ state.s8, 7U); \
-	state.s3 += state.s4; state.se = as_uint(as_ushort2(state.se ^ state.s3).s10); state.s9 += state.se; state.s4 = rotate(state.s4 ^ state.s9, 12U); state.s3 += state.s4; state.se = rotate(state.se ^ state.s3, 8U); state.s9 += state.se; state.s4 = rotate(state.s4 ^ state.s9, 7U); \
-} while(0)
 
-uint16 chacha_small_parallel_rnd(uint16 X)
-{
-	uint4 st[4];
 
-	((uint16 *)st)[0] = X;
+__attribute__((reqd_work_group_size(WORKSIZE, 1, 1)))
+__kernel void search(__global const uint4 *restrict input, __global uint *restrict output,
+  __global ulong16 *globalcache, const uint target) {
+    uint i, j, k;
 
-	#if CHACHA_SMALL_UNROLL == 1
+    uint glbid = get_global_id(0);
+    uint grpid = get_group_id(0);
+    __global uint *G = (__global uint *) &globalcache[mul24(grpid, (uint)(WORKSIZE << 8))];
 
-	for(int i = 0; i < 10; ++i)
-	{
-		CHACHA_CORE_PARALLEL(st);
-	}
+    uint lclid = glbid & (WORKSIZE - 1);
 
-	#elif CHACHA_SMALL_UNROLL == 2
-
-	for(int i = 0; i < 5; ++i)
-	{
-		CHACHA_CORE_PARALLEL(st);
-		CHACHA_CORE_PARALLEL(st);
-	}
-
-	#elif CHACHA_SMALL_UNROLL == 3
-
-	for(int i = 0; i < 4; ++i)
-	{
-		CHACHA_CORE_PARALLEL(st);
-		if(i == 3) break;
-		CHACHA_CORE_PARALLEL(st);
-		CHACHA_CORE_PARALLEL(st);
-	}
-
-	#elif CHACHA_SMALL_UNROLL == 4
-
-	for(int i = 0; i < 3; ++i)
-	{
-		CHACHA_CORE_PARALLEL(st);
-		CHACHA_CORE_PARALLEL(st);
-		if(i == 2) break;
-		CHACHA_CORE_PARALLEL(st);
-		CHACHA_CORE_PARALLEL(st);
-	}
-
-	#elif CHACHA_SMALL_UNROLL == 5
-
-	for(int i = 0; i < 2; ++i)
-	{
-		CHACHA_CORE_PARALLEL(st);
-		CHACHA_CORE_PARALLEL(st);
-		CHACHA_CORE_PARALLEL(st);
-		CHACHA_CORE_PARALLEL(st);
-		CHACHA_CORE_PARALLEL(st);
-	}
-	#else
-	
-	CHACHA_CORE_PARALLEL(st);
-	CHACHA_CORE_PARALLEL(st);
-	CHACHA_CORE_PARALLEL(st);
-	CHACHA_CORE_PARALLEL(st);
-	CHACHA_CORE_PARALLEL(st);
-	CHACHA_CORE_PARALLEL(st);
-	CHACHA_CORE_PARALLEL(st);
-	CHACHA_CORE_PARALLEL(st);
-	CHACHA_CORE_PARALLEL(st);
-	CHACHA_CORE_PARALLEL(st);
-
-	#endif
-
-	return(X + ((uint16 *)st)[0]);
-}
-
-uint16 chacha_small_scalar_rnd(uint16 X)
-{   
-	uint16 st = X;
-	
-	#if CHACHA_SMALL_UNROLL == 1
-	
-	for(int i = 0; i < 10; ++i)
-	{
-		CHACHA_CORE(st);
-	}
-	
-	#elif CHACHA_SMALL_UNROLL == 2
-	
-	for(int i = 0; i < 5; ++i)
-	{
-		CHACHA_CORE(st);
-		CHACHA_CORE(st);
-	}
-	
-	#elif CHACHA_SMALL_UNROLL == 3
-	
-	for(int i = 0; i < 4; ++i)
-	{
-		CHACHA_CORE(st);
-		if(i == 3) break;
-		CHACHA_CORE(st);
-		CHACHA_CORE(st);
-	}
-	
-	#elif CHACHA_SMALL_UNROLL == 4
-	
-	for(int i = 0; i < 3; ++i)
-	{
-		CHACHA_CORE(st);
-		CHACHA_CORE(st);
-		if(i == 2) break;
-		CHACHA_CORE(st);
-		CHACHA_CORE(st);
-	}
-	
-	#elif CHACHA_SMALL_UNROLL == 5
-	
-	for(int i = 0; i < 2; ++i)
-	{
-		CHACHA_CORE(st);
-		CHACHA_CORE(st);
-		CHACHA_CORE(st);
-		CHACHA_CORE(st);
-		CHACHA_CORE(st);
-	}
-	
-	#else
-	
-	CHACHA_CORE(st);
-	CHACHA_CORE(st);
-	CHACHA_CORE(st);
-	CHACHA_CORE(st);
-	CHACHA_CORE(st);
-	CHACHA_CORE(st);
-	CHACHA_CORE(st);
-	CHACHA_CORE(st);
-	CHACHA_CORE(st);
-	CHACHA_CORE(st);
-	
-	#endif
-		
-	return(X + st);
-}
-
-void neoscrypt_blkmix_salsa(uint16 XV[4])
-{
-    /* NeoScrypt flow:                   Scrypt flow:
-         Xa ^= Xd;  M(Xa'); Ya = Xa";      Xa ^= Xb;  M(Xa'); Ya = Xa";
-         Xb ^= Xa"; M(Xb'); Yb = Xb";      Xb ^= Xa"; M(Xb'); Yb = Xb";
-         Xc ^= Xb"; M(Xc'); Yc = Xc";      Xa" = Ya;
-         Xd ^= Xc"; M(Xd'); Yd = Xd";      Xb" = Yb;
-         Xa" = Ya; Xb" = Yc;
-         Xc" = Yb; Xd" = Yd; */
 #if 0
-	for(int i = 0; i < 4; ++i) XV[i] = (uint16)(
-		XV[i].s4, XV[i].s9, XV[i].se, XV[i].s3, XV[i].s8, XV[i].sd, XV[i].s2, XV[i].s7, 
-		XV[i].sc, XV[i].s1, XV[i].s6, XV[i].sb, XV[i].s0, XV[i].s5, XV[i].sa, XV[i].sf);   
-#endif
-	XV[0] ^= XV[3];
-
-	XV[0] = salsa_small_parallel_rnd(XV[0]); XV[1] ^= XV[0];
-	XV[1] = salsa_small_parallel_rnd(XV[1]); XV[2] ^= XV[1];
-	XV[2] = salsa_small_parallel_rnd(XV[2]); XV[3] ^= XV[2];
-	XV[3] = salsa_small_parallel_rnd(XV[3]);
-	
-	//XV[0] = salsa_small_scalar_rnd(XV[0]); XV[1] ^= XV[0];
-	//XV[1] = salsa_small_scalar_rnd(XV[1]); XV[2] ^= XV[1];
-	//XV[2] = salsa_small_scalar_rnd(XV[2]); XV[3] ^= XV[2];
-	//XV[3] = salsa_small_scalar_rnd(XV[3]);
-	
-	XV[1] ^= XV[2];
-	XV[2] ^= XV[1];
-	XV[1] ^= XV[2];
-#if 0
-	XV[0] = (uint16)(XV[0].sc, XV[0].s9, XV[0].s6, XV[0].s3, XV[0].s0, XV[0].sd, XV[0].sa, XV[0].s7, XV[0].s4, XV[0].s1, XV[0].se, XV[0].sb, XV[0].s8, XV[0].s5, XV[0].s2, XV[0].sf);
-	XV[1] = (uint16)(XV[1].sc, XV[1].s9, XV[1].s6, XV[1].s3, XV[1].s0, XV[1].sd, XV[1].sa, XV[1].s7, XV[1].s4, XV[1].s1, XV[1].se, XV[1].sb, XV[1].s8, XV[1].s5, XV[1].s2, XV[1].sf);
-	XV[2] = (uint16)(XV[2].sc, XV[2].s9, XV[2].s6, XV[2].s3, XV[2].s0, XV[2].sd, XV[2].sa, XV[2].s7, XV[2].s4, XV[2].s1, XV[2].se, XV[2].sb, XV[2].s8, XV[2].s5, XV[2].s2, XV[2].sf);
-	XV[3] = (uint16)(XV[3].sc, XV[3].s9, XV[3].s6, XV[3].s3, XV[3].s0, XV[3].sd, XV[3].sa, XV[3].s7, XV[3].s4, XV[3].s1, XV[3].se, XV[3].sb, XV[3].s8, XV[3].s5, XV[3].s2, XV[3].sf);
-#endif
-}
-
-void neoscrypt_blkmix_chacha(uint16 XV[4])
-{
-
-    /* NeoScrypt flow:                   Scrypt flow:
-         Xa ^= Xd;  M(Xa'); Ya = Xa";      Xa ^= Xb;  M(Xa'); Ya = Xa";
-         Xb ^= Xa"; M(Xb'); Yb = Xb";      Xb ^= Xa"; M(Xb'); Yb = Xb";
-         Xc ^= Xb"; M(Xc'); Yc = Xc";      Xa" = Ya;
-         Xd ^= Xc"; M(Xd'); Yd = Xd";      Xb" = Yb;
-         Xa" = Ya; Xb" = Yc;
-         Xc" = Yb; Xd" = Yd; */
-
-	XV[0] ^= XV[3];
-	
-	#if 1
-	
-	XV[0] = chacha_small_parallel_rnd(XV[0]); XV[1] ^= XV[0];
-	XV[1] = chacha_small_parallel_rnd(XV[1]); XV[2] ^= XV[1];
-	XV[2] = chacha_small_parallel_rnd(XV[2]); XV[3] ^= XV[2];
-	XV[3] = chacha_small_parallel_rnd(XV[3]);
-	
-	#else
-	
-	XV[0] = chacha_small_scalar_rnd(XV[0]); XV[1] ^= XV[0];
-	XV[1] = chacha_small_scalar_rnd(XV[1]); XV[2] ^= XV[1];
-	XV[2] = chacha_small_scalar_rnd(XV[2]); XV[3] ^= XV[2];
-	XV[3] = chacha_small_scalar_rnd(XV[3]);
-	
-	#endif
-	
-	XV[1] ^= XV[2];
-	XV[2] ^= XV[1];
-	XV[1] ^= XV[2];
-}
-
-#ifdef WIDE_STRIPE
-
-void ScratchpadStore(__global void *V, void *X, uchar idx)
-{
-	((__global ulong16 *)V)[mul24(idx << 1, (int)get_global_size(0))] = ((ulong16 *)X)[0];
-	((__global ulong16 *)V)[mul24((idx << 1), (int)get_global_size(0)) + 1] = ((ulong16 *)X)[1];
-	//const uint idx2 = mul24(idx << 2, (int)get_global_size(0));
-	//#pragma unroll
-	//for(int i = 0; i < 4; ++i) ((__global uint16 *)V)[idx2 + i] = ((uint16 *)X)[i];
-}
-
-void ScratchpadMix(void *X, const __global void *V, uchar idx)
-{
-	((ulong16 *)X)[0] ^= ((__global ulong16 *)V)[mul24(idx << 1, (int)get_global_size(0))];
-	((ulong16 *)X)[1] ^= ((__global ulong16 *)V)[mul24((idx << 1), (int)get_global_size(0)) + 1];
-}
-
+    __private uint XZi[2 * 16 * 5];
+#define XZ0 XZi[0]
+#define XZ1 XZi[1]
+#define XZ2 XZi[2]
+#define XZ3 XZi[3]
+#define XZ4 XZi[4]
+#define XZ5 XZi[5]
+#define XZ6 XZi[6]
+#define XZ7 XZi[7]
+#define XZ8 XZi[8]
+#define XZ9 XZi[9]
+#define XZ10 XZi[10]
+#define XZ11 XZi[11]
+#define XZ12 XZi[12]
+#define XZ13 XZi[13]
+#define XZ14 XZi[14]
+#define XZ15 XZi[15]
+#define XZ16 XZi[16]
+#define XZ17 XZi[17]
+#define XZ18 XZi[18]
+#define XZ19 XZi[19]
+#define XZ20 XZi[20]
+#define XZ21 XZi[21]
+#define XZ22 XZi[22]
+#define XZ23 XZi[23]
+#define XZ24 XZi[24]
+#define XZ25 XZi[25]
+#define XZ26 XZi[26]
+#define XZ27 XZi[27]
+#define XZ28 XZi[28]
+#define XZ29 XZi[29]
+#define XZ30 XZi[30]
+#define XZ31 XZi[31]
+#define XZ32 XZi[32]
+#define XZ33 XZi[33]
+#define XZ34 XZi[34]
+#define XZ35 XZi[35]
+#define XZ36 XZi[36]
+#define XZ37 XZi[37]
+#define XZ38 XZi[38]
+#define XZ39 XZi[39]
+#define XZ40 XZi[40]
+#define XZ41 XZi[41]
+#define XZ42 XZi[42]
+#define XZ43 XZi[43]
+#define XZ44 XZi[44]
+#define XZ45 XZi[45]
+#define XZ46 XZi[46]
+#define XZ47 XZi[47]
+#define XZ48 XZi[48]
+#define XZ49 XZi[49]
+#define XZ50 XZi[50]
+#define XZ51 XZi[51]
+#define XZ52 XZi[52]
+#define XZ53 XZi[53]
+#define XZ54 XZi[54]
+#define XZ55 XZi[55]
+#define XZ56 XZi[56]
+#define XZ57 XZi[57]
+#define XZ58 XZi[58]
+#define XZ59 XZi[59]
+#define XZ60 XZi[60]
+#define XZ61 XZi[61]
+#define XZ62 XZi[62]
+#define XZ63 XZi[63]
+#define XZ64 XZi[64]
+#define XZ65 XZi[65]
+#define XZ66 XZi[66]
+#define XZ67 XZi[67]
+#define XZ68 XZi[68]
+#define XZ69 XZi[69]
+#define XZ70 XZi[70]
+#define XZ71 XZi[71]
+#define XZ72 XZi[72]
+#define XZ73 XZi[73]
+#define XZ74 XZi[74]
+#define XZ75 XZi[75]
+#define XZ76 XZi[76]
+#define XZ77 XZi[77]
+#define XZ78 XZi[78]
+#define XZ79 XZi[79]
+#define XZ80 XZi[80]
+#define XZ81 XZi[81]
+#define XZ82 XZi[82]
+#define XZ83 XZi[83]
+#define XZ84 XZi[84]
+#define XZ85 XZi[85]
+#define XZ86 XZi[86]
+#define XZ87 XZi[87]
+#define XZ88 XZi[88]
+#define XZ89 XZi[89]
+#define XZ90 XZi[90]
+#define XZ91 XZi[91]
+#define XZ92 XZi[92]
+#define XZ93 XZi[93]
+#define XZ94 XZi[94]
+#define XZ95 XZi[95]
+#define XZ96 XZi[96]
+#define XZ97 XZi[97]
+#define XZ98 XZi[98]
+#define XZ99 XZi[99]
+#define XZ100 XZi[100]
+#define XZ101 XZi[101]
+#define XZ102 XZi[102]
+#define XZ103 XZi[103]
+#define XZ104 XZi[104]
+#define XZ105 XZi[105]
+#define XZ106 XZi[106]
+#define XZ107 XZi[107]
+#define XZ108 XZi[108]
+#define XZ109 XZi[109]
+#define XZ110 XZi[110]
+#define XZ111 XZi[111]
+#define XZ112 XZi[112]
+#define XZ113 XZi[113]
+#define XZ114 XZi[114]
+#define XZ115 XZi[115]
+#define XZ116 XZi[116]
+#define XZ117 XZi[117]
+#define XZ118 XZi[118]
+#define XZ119 XZi[119]
+#define XZ120 XZi[120]
+#define XZ121 XZi[121]
+#define XZ122 XZi[122]
+#define XZ123 XZi[123]
+#define XZ124 XZi[124]
+#define XZ125 XZi[125]
+#define XZ126 XZi[126]
+#define XZ127 XZi[127]
+#define XZ128 XZi[128]
+#define XZ129 XZi[129]
+#define XZ130 XZi[130]
+#define XZ131 XZi[131]
+#define XZ132 XZi[132]
+#define XZ133 XZi[133]
+#define XZ134 XZi[134]
+#define XZ135 XZi[135]
+#define XZ136 XZi[136]
+#define XZ137 XZi[137]
+#define XZ138 XZi[138]
+#define XZ139 XZi[139]
+#define XZ140 XZi[140]
+#define XZ141 XZi[141]
+#define XZ142 XZi[142]
+#define XZ143 XZi[143]
+#define XZ144 XZi[144]
+#define XZ145 XZi[145]
+#define XZ146 XZi[146]
+#define XZ147 XZi[147]
+#define XZ148 XZi[148]
+#define XZ149 XZi[149]
+#define XZ150 XZi[150]
+#define XZ151 XZi[151]
+#define XZ152 XZi[152]
+#define XZ153 XZi[153]
+#define XZ154 XZi[154]
+#define XZ155 XZi[155]
+#define XZ156 XZi[156]
+#define XZ157 XZi[157]
+#define XZ158 XZi[158]
+#define XZ159 XZi[159]
 #else
+		uint XZ0;
+		uint XZ1;
+		uint XZ2;
+		uint XZ3;
+		uint XZ4;
+		uint XZ5;
+		uint XZ6;
+		uint XZ7;
+		uint XZ8;
+		uint XZ9;
+		uint XZ10;
+		uint XZ11;
+		uint XZ12;
+		uint XZ13;
+		uint XZ14;
+		uint XZ15;
+		uint XZ16;
+		uint XZ17;
+		uint XZ18;
+		uint XZ19;
+		uint XZ20;
+		uint XZ21;
+		uint XZ22;
+		uint XZ23;
+		uint XZ24;
+		uint XZ25;
+		uint XZ26;
+		uint XZ27;
+		uint XZ28;
+		uint XZ29;
+		uint XZ30;
+		uint XZ31;
+		uint XZ32;
+		uint XZ33;
+		uint XZ34;
+		uint XZ35;
+		uint XZ36;
+		uint XZ37;
+		uint XZ38;
+		uint XZ39;
+		uint XZ40;
+		uint XZ41;
+		uint XZ42;
+		uint XZ43;
+		uint XZ44;
+		uint XZ45;
+		uint XZ46;
+		uint XZ47;
+		uint XZ48;
+		uint XZ49;
+		uint XZ50;
+		uint XZ51;
+		uint XZ52;
+		uint XZ53;
+		uint XZ54;
+		uint XZ55;
+		uint XZ56;
+		uint XZ57;
+		uint XZ58;
+		uint XZ59;
+		uint XZ60;
+		uint XZ61;
+		uint XZ62;
+		uint XZ63;
+		uint XZ64;
+		uint XZ65;
+		uint XZ66;
+		uint XZ67;
+		uint XZ68;
+		uint XZ69;
+		uint XZ70;
+		uint XZ71;
+		uint XZ72;
+		uint XZ73;
+		uint XZ74;
+		uint XZ75;
+		uint XZ76;
+		uint XZ77;
+		uint XZ78;
+		uint XZ79;
+		volatile uint XZ80;
+		volatile uint XZ81;
+		volatile uint XZ82;
+		volatile uint XZ83;
+		volatile uint XZ84;
+		volatile uint XZ85;
+		volatile uint XZ86;
+		volatile uint XZ87;
+		volatile uint XZ88;
+		volatile uint XZ89;
+		volatile uint XZ90;
+		volatile uint XZ91;
+		volatile uint XZ92;
+		volatile uint XZ93;
+		volatile uint XZ94;
+		volatile uint XZ95;
+		volatile uint XZ96;
+		volatile uint XZ97;
+		volatile uint XZ98;
+		volatile uint XZ99;
+		volatile uint XZ100;
+		volatile uint XZ101;
+		volatile uint XZ102;
+		volatile uint XZ103;
+		volatile uint XZ104;
+		volatile uint XZ105;
+		volatile uint XZ106;
+		volatile uint XZ107;
+		volatile uint XZ108;
+		volatile uint XZ109;
+		volatile uint XZ110;
+		volatile uint XZ111;
+		volatile uint XZ112;
+		volatile uint XZ113;
+		volatile uint XZ114;
+		volatile uint XZ115;
+		volatile uint XZ116;
+		volatile uint XZ117;
+		volatile uint XZ118;
+		volatile uint XZ119;
+		volatile uint XZ120;
+		volatile uint XZ121;
+		volatile uint XZ122;
+		volatile uint XZ123;
+		volatile uint XZ124;
+		volatile uint XZ125;
+		volatile uint XZ126;
+		volatile uint XZ127;
+		volatile uint XZ128;
+		volatile uint XZ129;
+		volatile uint XZ130;
+		volatile uint XZ131;
+		volatile uint XZ132;
+		volatile uint XZ133;
+		volatile uint XZ134;
+		volatile uint XZ135;
+		volatile uint XZ136;
+		volatile uint XZ137;
+		volatile uint XZ138;
+		volatile uint XZ139;
+		volatile uint XZ140;
+		volatile uint XZ141;
+		volatile uint XZ142;
+		volatile uint XZ143;
+		volatile uint XZ144;
+		volatile uint XZ145;
+		volatile uint XZ146;
+		volatile uint XZ147;
+		volatile uint XZ148;
+		volatile uint XZ149;
+		volatile uint XZ150;
+		volatile uint XZ151;
+		volatile uint XZ152;
+		volatile uint XZ153;
+		volatile uint XZ154;
+		volatile uint XZ155;
+		volatile uint XZ156;
+		volatile uint XZ157;
+		volatile uint XZ158;
+		volatile uint XZ159;
+#endif
+    // ulong16 *XZ = (ulong16 *)&XZi[0];
 
-void ScratchpadStore(__global void *V, void *X, uchar idx)
-{
-	((__global ulong16 *)V)[mul24(idx << 1, (int)get_global_size(0))] = ((ulong16 *)X)[0];
-	((__global ulong16 *)V)[mul24((idx << 1) + 1, (int)get_global_size(0))] = ((ulong16 *)X)[1];
-}
+#pragma unroll 2
+    for(uint mode = 0; mode < 2; mode++) {
 
-void ScratchpadMix(void *X, const __global void *V, uchar idx)
-{
-	((ulong16 *)X)[0] ^= ((__global ulong16 *)V)[mul24(idx << 1, (int)get_global_size(0))];
-	((ulong16 *)X)[1] ^= ((__global ulong16 *)V)[mul24((idx << 1) + 1, (int)get_global_size(0))];
-}
+        /* X = KDF(password, salt) */
+				/* FastKDF needs 256 + 64 bytes for the password buffer,
+				 * 256 + 32 bytes for the salt buffer, 64 + 64 + 32 bytes for BLAKE2s */
 
+				uint i;
+				volatile uint bufptr, offset, _offset, shifted_bufptr;
+
+				const uint4 mod = (uint4)(input[4].x, input[4].y, input[4].z, glbid);
+
+				// uint4 *XZq = (uint4 *) &XZi[0];
+
+				/* Password buffer */
+				//uchar *Aa = (uchar *) &XZi[0];
+				/* Salt buffer */
+				//uchar *Bb = (uchar *) &XZi[80];
+				/* BLAKE2s temp buffer */
+				//uint8 *T = (uint8 *)  &XZi[152];
+				//uint4 *t = (uint4 *)  &XZi[152];
+				/* BLAKE2s memory space */
+		 
+				/* Mode 0 (extend) and mode 1 (compress) */
+
+				/* Salt buffer */
+				if(!mode) {
+						XZ80 = input[0].s0;
+						XZ81 = input[0].s1;
+						XZ82 = input[0].s2;
+						XZ83 = input[0].s3;
+						XZ84 = input[1].s0;
+						XZ85 = input[1].s1;
+						XZ86 = input[1].s2;
+						XZ87 = input[1].s3;
+						XZ88 = input[2].s0;
+						XZ89 = input[2].s1;
+						XZ90 = input[2].s2;
+						XZ91 = input[2].s3;
+						XZ92 = input[3].s0;
+						XZ93 = input[3].s1;
+						XZ94 = input[3].s2;
+						XZ95 = input[3].s3;
+						XZ96 = mod.s0;
+						XZ97 = mod.s1;
+						XZ98 = mod.s2;
+						XZ99 = mod.s3;
+						XZ100 = input[0].s0;
+						XZ101 = input[0].s1;
+						XZ102 = input[0].s2;
+						XZ103 = input[0].s3;
+						XZ104 = input[1].s0;
+						XZ105 = input[1].s1;
+						XZ106 = input[1].s2;
+						XZ107 = input[1].s3;
+						XZ108 = input[2].s0;
+						XZ109 = input[2].s1;
+						XZ110 = input[2].s2;
+						XZ111 = input[2].s3;
+						XZ112 = input[3].s0;
+						XZ113 = input[3].s1;
+						XZ114 = input[3].s2;
+						XZ115 = input[3].s3;
+						XZ116 = mod.s0;
+						XZ117 = mod.s1;
+						XZ118 = mod.s2;
+						XZ119 = mod.s3;
+						XZ120 = input[0].s0;
+						XZ121 = input[0].s1;
+						XZ122 = input[0].s2;
+						XZ123 = input[0].s3;
+						XZ124 = input[1].s0;
+						XZ125 = input[1].s1;
+						XZ126 = input[1].s2;
+						XZ127 = input[1].s3;
+						XZ128 = input[2].s0;
+						XZ129 = input[2].s1;
+						XZ130 = input[2].s2;
+						XZ131 = input[2].s3;
+						XZ132 = input[3].s0;
+						XZ133 = input[3].s1;
+						XZ134 = input[3].s2;
+						XZ135 = input[3].s3;
+						XZ136 = mod.s0;
+						XZ137 = mod.s1;
+						XZ138 = mod.s2;
+						XZ139 = mod.s3;
+						XZ140 = input[0].s0;
+						XZ141 = input[0].s1;
+						XZ142 = input[0].s2;
+						XZ143 = input[0].s3;
+						XZ144 = input[0].s0;
+						XZ145 = input[0].s1;
+						XZ146 = input[0].s2;
+						XZ147 = input[0].s3;
+						XZ148 = input[1].s0;
+						XZ149 = input[1].s1;
+						XZ150 = input[1].s2;
+						XZ151 = input[1].s3;
+				} else {
+						XZ80 = XZ0;XZ81 = XZ1;XZ82 = XZ2;XZ83 = XZ3;XZ84 = XZ4;XZ85 = XZ5;XZ86 = XZ6;XZ87 = XZ7;
+						XZ88 = XZ8;XZ89 = XZ9;XZ90 = XZ10;XZ91 = XZ11;XZ92 = XZ12;XZ93 = XZ13;XZ94 = XZ14;XZ95 = XZ15;
+						XZ96 = XZ16;XZ97 = XZ17;XZ98 = XZ18;XZ99 = XZ19;XZ100 = XZ20;XZ101 = XZ21;XZ102 = XZ22;XZ103 = XZ23;
+						XZ104 = XZ24;XZ105 = XZ25;XZ106 = XZ26;XZ107 = XZ27;XZ108 = XZ28;XZ109 = XZ29;XZ110 = XZ30;XZ111 = XZ31;
+						XZ112 = XZ32;XZ113 = XZ33;XZ114 = XZ34;XZ115 = XZ35;XZ116 = XZ36;XZ117 = XZ37;XZ118 = XZ38;XZ119 = XZ39;
+						XZ120 = XZ40;XZ121 = XZ41;XZ122 = XZ42;XZ123 = XZ43;XZ124 = XZ44;XZ125 = XZ45;XZ126 = XZ46;XZ127 = XZ47;
+						XZ128 = XZ48;XZ129 = XZ49;XZ130 = XZ50;XZ131 = XZ51;XZ132 = XZ52;XZ133 = XZ53;XZ134 = XZ54;XZ135 = XZ55;
+						XZ136 = XZ56;XZ137 = XZ57;XZ138 = XZ58;XZ139 = XZ59;XZ140 = XZ60;XZ141 = XZ61;XZ142 = XZ62;XZ143 = XZ63;
+ 						XZ144 = XZ0;
+						XZ145 = XZ1;
+						XZ146 = XZ2;
+						XZ147 = XZ3;
+						XZ148 = XZ4;
+						XZ149 = XZ5;
+						XZ150 = XZ6;
+						XZ151 = XZ7;
+				}
+
+				/* Password buffer */
+				XZ0 = input[0].s0;
+				XZ1 = input[0].s1;
+				XZ2 = input[0].s2;
+				XZ3 = input[0].s3;
+				XZ4 = input[1].s0;
+				XZ5 = input[1].s1;
+				XZ6 = input[1].s2;
+				XZ7 = input[1].s3;
+				XZ8 = input[2].s0;
+				XZ9 = input[2].s1;
+				XZ10 = input[2].s2;
+				XZ11 = input[2].s3;
+				XZ12 = input[3].s0;
+				XZ13 = input[3].s1;
+				XZ14 = input[3].s2;
+				XZ15 = input[3].s3;
+				XZ16 = mod.s0;
+				XZ17 = mod.s1;
+				XZ18 = mod.s2;
+				XZ19 = mod.s3;
+				XZ20 = input[0].s0;
+				XZ21 = input[0].s1;
+				XZ22 = input[0].s2;
+				XZ23 = input[0].s3;
+				XZ24 = input[1].s0;
+				XZ25 = input[1].s1;
+				XZ26 = input[1].s2;
+				XZ27 = input[1].s3;
+				XZ28 = input[2].s0;
+				XZ29 = input[2].s1;
+				XZ30 = input[2].s2;
+				XZ31 = input[2].s3;
+				XZ32 = input[3].s0;
+				XZ33 = input[3].s1;
+				XZ34 = input[3].s2;
+				XZ35 = input[3].s3;
+				XZ36 = mod.s0;
+				XZ37 = mod.s1;
+				XZ38 = mod.s2;
+				XZ39 = mod.s3;
+				XZ40 = input[0].s0;
+				XZ41 = input[0].s1;
+				XZ42 = input[0].s2;
+				XZ43 = input[0].s3;
+				XZ44 = input[1].s0;
+				XZ45 = input[1].s1;
+				XZ46 = input[1].s2;
+				XZ47 = input[1].s3;
+				XZ48 = input[2].s0;
+				XZ49 = input[2].s1;
+				XZ50 = input[2].s2;
+				XZ51 = input[2].s3;
+				XZ52 = input[3].s0;
+				XZ53 = input[3].s1;
+				XZ54 = input[3].s2;
+				XZ55 = input[3].s3;
+				XZ56 = mod.s0;
+				XZ57 = mod.s1;
+				XZ58 = mod.s2;
+				XZ59 = mod.s3;
+				XZ60 = input[0].s0;
+				XZ61 = input[0].s1;
+				XZ62 = input[0].s2;
+				XZ63 = input[0].s3;
+				XZ64 = input[0].s0;
+				XZ65 = input[0].s1;
+				XZ66 = input[0].s2;
+				XZ67 = input[0].s3;
+				XZ68 = input[1].s0;
+				XZ69 = input[1].s1;
+				XZ70 = input[1].s2;
+				XZ71 = input[1].s3;
+				XZ72 = input[2].s0;
+				XZ73 = input[2].s1;
+				XZ74 = input[2].s2;
+				XZ75 = input[2].s3;
+				XZ76 = input[3].s0;
+				XZ77 = input[3].s1;
+				XZ78 = input[3].s2;
+				XZ79 = input[3].s3;
+				/* The primary iteration */
+		#pragma unroll 1
+				for(i = 0, bufptr = 0; i < 32; i++) {
+						uint m[16];
+
+						/* BLAKE2s state block */
+						uint16 S;
+
+						offset = bufptr & 0x03;
+						_offset = amd_bitalign(offset, offset, 29U);
+					  shifted_bufptr = bufptr >> 2;
+						//neoscrypt_copy32(m, 80 + (bufptr >> 2), offset); 
+						if (shifted_bufptr < 32) if (shifted_bufptr < 16) if (shifted_bufptr < 8) if (shifted_bufptr < 4) if (shifted_bufptr < 2) if (shifted_bufptr < 1) { m[0] = amd_bitalign(XZ81, XZ80, _offset); m[1] = amd_bitalign(XZ82, XZ81, _offset); m[2] = amd_bitalign(XZ83, XZ82, _offset); m[3] = amd_bitalign(XZ84, XZ83, _offset); m[4] = amd_bitalign(XZ85, XZ84, _offset); m[5] = amd_bitalign(XZ86, XZ85, _offset); m[6] = amd_bitalign(XZ87, XZ86, _offset); m[7] = amd_bitalign(XZ88, XZ87, _offset); }
+						else { m[0] = amd_bitalign(XZ82, XZ81, _offset); m[1] = amd_bitalign(XZ83, XZ82, _offset); m[2] = amd_bitalign(XZ84, XZ83, _offset); m[3] = amd_bitalign(XZ85, XZ84, _offset); m[4] = amd_bitalign(XZ86, XZ85, _offset); m[5] = amd_bitalign(XZ87, XZ86, _offset); m[6] = amd_bitalign(XZ88, XZ87, _offset); m[7] = amd_bitalign(XZ89, XZ88, _offset); }
+						else if (shifted_bufptr < 3) { m[0] = amd_bitalign(XZ83, XZ82, _offset); m[1] = amd_bitalign(XZ84, XZ83, _offset); m[2] = amd_bitalign(XZ85, XZ84, _offset); m[3] = amd_bitalign(XZ86, XZ85, _offset); m[4] = amd_bitalign(XZ87, XZ86, _offset); m[5] = amd_bitalign(XZ88, XZ87, _offset); m[6] = amd_bitalign(XZ89, XZ88, _offset); m[7] = amd_bitalign(XZ90, XZ89, _offset); }
+						else { m[0] = amd_bitalign(XZ84, XZ83, _offset); m[1] = amd_bitalign(XZ85, XZ84, _offset); m[2] = amd_bitalign(XZ86, XZ85, _offset); m[3] = amd_bitalign(XZ87, XZ86, _offset); m[4] = amd_bitalign(XZ88, XZ87, _offset); m[5] = amd_bitalign(XZ89, XZ88, _offset); m[6] = amd_bitalign(XZ90, XZ89, _offset); m[7] = amd_bitalign(XZ91, XZ90, _offset); }
+						else if (shifted_bufptr < 6) if (shifted_bufptr < 5) { m[0] = amd_bitalign(XZ85, XZ84, _offset); m[1] = amd_bitalign(XZ86, XZ85, _offset); m[2] = amd_bitalign(XZ87, XZ86, _offset); m[3] = amd_bitalign(XZ88, XZ87, _offset); m[4] = amd_bitalign(XZ89, XZ88, _offset); m[5] = amd_bitalign(XZ90, XZ89, _offset); m[6] = amd_bitalign(XZ91, XZ90, _offset); m[7] = amd_bitalign(XZ92, XZ91, _offset); }
+						else { m[0] = amd_bitalign(XZ86, XZ85, _offset); m[1] = amd_bitalign(XZ87, XZ86, _offset); m[2] = amd_bitalign(XZ88, XZ87, _offset); m[3] = amd_bitalign(XZ89, XZ88, _offset); m[4] = amd_bitalign(XZ90, XZ89, _offset); m[5] = amd_bitalign(XZ91, XZ90, _offset); m[6] = amd_bitalign(XZ92, XZ91, _offset); m[7] = amd_bitalign(XZ93, XZ92, _offset); }
+						else if (shifted_bufptr < 7) { m[0] = amd_bitalign(XZ87, XZ86, _offset); m[1] = amd_bitalign(XZ88, XZ87, _offset); m[2] = amd_bitalign(XZ89, XZ88, _offset); m[3] = amd_bitalign(XZ90, XZ89, _offset); m[4] = amd_bitalign(XZ91, XZ90, _offset); m[5] = amd_bitalign(XZ92, XZ91, _offset); m[6] = amd_bitalign(XZ93, XZ92, _offset); m[7] = amd_bitalign(XZ94, XZ93, _offset); }
+						else { m[0] = amd_bitalign(XZ88, XZ87, _offset); m[1] = amd_bitalign(XZ89, XZ88, _offset); m[2] = amd_bitalign(XZ90, XZ89, _offset); m[3] = amd_bitalign(XZ91, XZ90, _offset); m[4] = amd_bitalign(XZ92, XZ91, _offset); m[5] = amd_bitalign(XZ93, XZ92, _offset); m[6] = amd_bitalign(XZ94, XZ93, _offset); m[7] = amd_bitalign(XZ95, XZ94, _offset); }
+						else if (shifted_bufptr < 12) if (shifted_bufptr < 10) if (shifted_bufptr < 9) { m[0] = amd_bitalign(XZ89, XZ88, _offset); m[1] = amd_bitalign(XZ90, XZ89, _offset); m[2] = amd_bitalign(XZ91, XZ90, _offset); m[3] = amd_bitalign(XZ92, XZ91, _offset); m[4] = amd_bitalign(XZ93, XZ92, _offset); m[5] = amd_bitalign(XZ94, XZ93, _offset); m[6] = amd_bitalign(XZ95, XZ94, _offset); m[7] = amd_bitalign(XZ96, XZ95, _offset); }
+						else { m[0] = amd_bitalign(XZ90, XZ89, _offset); m[1] = amd_bitalign(XZ91, XZ90, _offset); m[2] = amd_bitalign(XZ92, XZ91, _offset); m[3] = amd_bitalign(XZ93, XZ92, _offset); m[4] = amd_bitalign(XZ94, XZ93, _offset); m[5] = amd_bitalign(XZ95, XZ94, _offset); m[6] = amd_bitalign(XZ96, XZ95, _offset); m[7] = amd_bitalign(XZ97, XZ96, _offset); }
+						else if (shifted_bufptr < 11) { m[0] = amd_bitalign(XZ91, XZ90, _offset); m[1] = amd_bitalign(XZ92, XZ91, _offset); m[2] = amd_bitalign(XZ93, XZ92, _offset); m[3] = amd_bitalign(XZ94, XZ93, _offset); m[4] = amd_bitalign(XZ95, XZ94, _offset); m[5] = amd_bitalign(XZ96, XZ95, _offset); m[6] = amd_bitalign(XZ97, XZ96, _offset); m[7] = amd_bitalign(XZ98, XZ97, _offset); }
+						else { m[0] = amd_bitalign(XZ92, XZ91, _offset); m[1] = amd_bitalign(XZ93, XZ92, _offset); m[2] = amd_bitalign(XZ94, XZ93, _offset); m[3] = amd_bitalign(XZ95, XZ94, _offset); m[4] = amd_bitalign(XZ96, XZ95, _offset); m[5] = amd_bitalign(XZ97, XZ96, _offset); m[6] = amd_bitalign(XZ98, XZ97, _offset); m[7] = amd_bitalign(XZ99, XZ98, _offset); }
+						else if (shifted_bufptr < 14) if (shifted_bufptr < 13) { m[0] = amd_bitalign(XZ93, XZ92, _offset); m[1] = amd_bitalign(XZ94, XZ93, _offset); m[2] = amd_bitalign(XZ95, XZ94, _offset); m[3] = amd_bitalign(XZ96, XZ95, _offset); m[4] = amd_bitalign(XZ97, XZ96, _offset); m[5] = amd_bitalign(XZ98, XZ97, _offset); m[6] = amd_bitalign(XZ99, XZ98, _offset); m[7] = amd_bitalign(XZ100, XZ99, _offset); }
+						else { m[0] = amd_bitalign(XZ94, XZ93, _offset); m[1] = amd_bitalign(XZ95, XZ94, _offset); m[2] = amd_bitalign(XZ96, XZ95, _offset); m[3] = amd_bitalign(XZ97, XZ96, _offset); m[4] = amd_bitalign(XZ98, XZ97, _offset); m[5] = amd_bitalign(XZ99, XZ98, _offset); m[6] = amd_bitalign(XZ100, XZ99, _offset); m[7] = amd_bitalign(XZ101, XZ100, _offset); }
+						else if (shifted_bufptr < 15) { m[0] = amd_bitalign(XZ95, XZ94, _offset); m[1] = amd_bitalign(XZ96, XZ95, _offset); m[2] = amd_bitalign(XZ97, XZ96, _offset); m[3] = amd_bitalign(XZ98, XZ97, _offset); m[4] = amd_bitalign(XZ99, XZ98, _offset); m[5] = amd_bitalign(XZ100, XZ99, _offset); m[6] = amd_bitalign(XZ101, XZ100, _offset); m[7] = amd_bitalign(XZ102, XZ101, _offset); }
+						else { m[0] = amd_bitalign(XZ96, XZ95, _offset); m[1] = amd_bitalign(XZ97, XZ96, _offset); m[2] = amd_bitalign(XZ98, XZ97, _offset); m[3] = amd_bitalign(XZ99, XZ98, _offset); m[4] = amd_bitalign(XZ100, XZ99, _offset); m[5] = amd_bitalign(XZ101, XZ100, _offset); m[6] = amd_bitalign(XZ102, XZ101, _offset); m[7] = amd_bitalign(XZ103, XZ102, _offset); }
+						else if (shifted_bufptr < 24) if (shifted_bufptr < 20) if (shifted_bufptr < 18) if (shifted_bufptr < 17) { m[0] = amd_bitalign(XZ97, XZ96, _offset); m[1] = amd_bitalign(XZ98, XZ97, _offset); m[2] = amd_bitalign(XZ99, XZ98, _offset); m[3] = amd_bitalign(XZ100, XZ99, _offset); m[4] = amd_bitalign(XZ101, XZ100, _offset); m[5] = amd_bitalign(XZ102, XZ101, _offset); m[6] = amd_bitalign(XZ103, XZ102, _offset); m[7] = amd_bitalign(XZ104, XZ103, _offset); }
+						else { m[0] = amd_bitalign(XZ98, XZ97, _offset); m[1] = amd_bitalign(XZ99, XZ98, _offset); m[2] = amd_bitalign(XZ100, XZ99, _offset); m[3] = amd_bitalign(XZ101, XZ100, _offset); m[4] = amd_bitalign(XZ102, XZ101, _offset); m[5] = amd_bitalign(XZ103, XZ102, _offset); m[6] = amd_bitalign(XZ104, XZ103, _offset); m[7] = amd_bitalign(XZ105, XZ104, _offset); }
+						else if (shifted_bufptr < 19) { m[0] = amd_bitalign(XZ99, XZ98, _offset); m[1] = amd_bitalign(XZ100, XZ99, _offset); m[2] = amd_bitalign(XZ101, XZ100, _offset); m[3] = amd_bitalign(XZ102, XZ101, _offset); m[4] = amd_bitalign(XZ103, XZ102, _offset); m[5] = amd_bitalign(XZ104, XZ103, _offset); m[6] = amd_bitalign(XZ105, XZ104, _offset); m[7] = amd_bitalign(XZ106, XZ105, _offset); }
+						else { m[0] = amd_bitalign(XZ100, XZ99, _offset); m[1] = amd_bitalign(XZ101, XZ100, _offset); m[2] = amd_bitalign(XZ102, XZ101, _offset); m[3] = amd_bitalign(XZ103, XZ102, _offset); m[4] = amd_bitalign(XZ104, XZ103, _offset); m[5] = amd_bitalign(XZ105, XZ104, _offset); m[6] = amd_bitalign(XZ106, XZ105, _offset); m[7] = amd_bitalign(XZ107, XZ106, _offset); }
+						else if (shifted_bufptr < 22) if (shifted_bufptr < 21) { m[0] = amd_bitalign(XZ101, XZ100, _offset); m[1] = amd_bitalign(XZ102, XZ101, _offset); m[2] = amd_bitalign(XZ103, XZ102, _offset); m[3] = amd_bitalign(XZ104, XZ103, _offset); m[4] = amd_bitalign(XZ105, XZ104, _offset); m[5] = amd_bitalign(XZ106, XZ105, _offset); m[6] = amd_bitalign(XZ107, XZ106, _offset); m[7] = amd_bitalign(XZ108, XZ107, _offset); }
+						else { m[0] = amd_bitalign(XZ102, XZ101, _offset); m[1] = amd_bitalign(XZ103, XZ102, _offset); m[2] = amd_bitalign(XZ104, XZ103, _offset); m[3] = amd_bitalign(XZ105, XZ104, _offset); m[4] = amd_bitalign(XZ106, XZ105, _offset); m[5] = amd_bitalign(XZ107, XZ106, _offset); m[6] = amd_bitalign(XZ108, XZ107, _offset); m[7] = amd_bitalign(XZ109, XZ108, _offset); }
+						else if (shifted_bufptr < 23) { m[0] = amd_bitalign(XZ103, XZ102, _offset); m[1] = amd_bitalign(XZ104, XZ103, _offset); m[2] = amd_bitalign(XZ105, XZ104, _offset); m[3] = amd_bitalign(XZ106, XZ105, _offset); m[4] = amd_bitalign(XZ107, XZ106, _offset); m[5] = amd_bitalign(XZ108, XZ107, _offset); m[6] = amd_bitalign(XZ109, XZ108, _offset); m[7] = amd_bitalign(XZ110, XZ109, _offset); }
+						else { m[0] = amd_bitalign(XZ104, XZ103, _offset); m[1] = amd_bitalign(XZ105, XZ104, _offset); m[2] = amd_bitalign(XZ106, XZ105, _offset); m[3] = amd_bitalign(XZ107, XZ106, _offset); m[4] = amd_bitalign(XZ108, XZ107, _offset); m[5] = amd_bitalign(XZ109, XZ108, _offset); m[6] = amd_bitalign(XZ110, XZ109, _offset); m[7] = amd_bitalign(XZ111, XZ110, _offset); }
+						else if (shifted_bufptr < 28) if (shifted_bufptr < 26) if (shifted_bufptr < 25) { m[0] = amd_bitalign(XZ105, XZ104, _offset); m[1] = amd_bitalign(XZ106, XZ105, _offset); m[2] = amd_bitalign(XZ107, XZ106, _offset); m[3] = amd_bitalign(XZ108, XZ107, _offset); m[4] = amd_bitalign(XZ109, XZ108, _offset); m[5] = amd_bitalign(XZ110, XZ109, _offset); m[6] = amd_bitalign(XZ111, XZ110, _offset); m[7] = amd_bitalign(XZ112, XZ111, _offset); }
+						else { m[0] = amd_bitalign(XZ106, XZ105, _offset); m[1] = amd_bitalign(XZ107, XZ106, _offset); m[2] = amd_bitalign(XZ108, XZ107, _offset); m[3] = amd_bitalign(XZ109, XZ108, _offset); m[4] = amd_bitalign(XZ110, XZ109, _offset); m[5] = amd_bitalign(XZ111, XZ110, _offset); m[6] = amd_bitalign(XZ112, XZ111, _offset); m[7] = amd_bitalign(XZ113, XZ112, _offset); }
+						else if (shifted_bufptr < 27) { m[0] = amd_bitalign(XZ107, XZ106, _offset); m[1] = amd_bitalign(XZ108, XZ107, _offset); m[2] = amd_bitalign(XZ109, XZ108, _offset); m[3] = amd_bitalign(XZ110, XZ109, _offset); m[4] = amd_bitalign(XZ111, XZ110, _offset); m[5] = amd_bitalign(XZ112, XZ111, _offset); m[6] = amd_bitalign(XZ113, XZ112, _offset); m[7] = amd_bitalign(XZ114, XZ113, _offset); }
+						else { m[0] = amd_bitalign(XZ108, XZ107, _offset); m[1] = amd_bitalign(XZ109, XZ108, _offset); m[2] = amd_bitalign(XZ110, XZ109, _offset); m[3] = amd_bitalign(XZ111, XZ110, _offset); m[4] = amd_bitalign(XZ112, XZ111, _offset); m[5] = amd_bitalign(XZ113, XZ112, _offset); m[6] = amd_bitalign(XZ114, XZ113, _offset); m[7] = amd_bitalign(XZ115, XZ114, _offset); }
+						else if (shifted_bufptr < 30) if (shifted_bufptr < 29) { m[0] = amd_bitalign(XZ109, XZ108, _offset); m[1] = amd_bitalign(XZ110, XZ109, _offset); m[2] = amd_bitalign(XZ111, XZ110, _offset); m[3] = amd_bitalign(XZ112, XZ111, _offset); m[4] = amd_bitalign(XZ113, XZ112, _offset); m[5] = amd_bitalign(XZ114, XZ113, _offset); m[6] = amd_bitalign(XZ115, XZ114, _offset); m[7] = amd_bitalign(XZ116, XZ115, _offset); }
+						else { m[0] = amd_bitalign(XZ110, XZ109, _offset); m[1] = amd_bitalign(XZ111, XZ110, _offset); m[2] = amd_bitalign(XZ112, XZ111, _offset); m[3] = amd_bitalign(XZ113, XZ112, _offset); m[4] = amd_bitalign(XZ114, XZ113, _offset); m[5] = amd_bitalign(XZ115, XZ114, _offset); m[6] = amd_bitalign(XZ116, XZ115, _offset); m[7] = amd_bitalign(XZ117, XZ116, _offset); }
+						else if (shifted_bufptr < 31) { m[0] = amd_bitalign(XZ111, XZ110, _offset); m[1] = amd_bitalign(XZ112, XZ111, _offset); m[2] = amd_bitalign(XZ113, XZ112, _offset); m[3] = amd_bitalign(XZ114, XZ113, _offset); m[4] = amd_bitalign(XZ115, XZ114, _offset); m[5] = amd_bitalign(XZ116, XZ115, _offset); m[6] = amd_bitalign(XZ117, XZ116, _offset); m[7] = amd_bitalign(XZ118, XZ117, _offset); }
+						else { m[0] = amd_bitalign(XZ112, XZ111, _offset); m[1] = amd_bitalign(XZ113, XZ112, _offset); m[2] = amd_bitalign(XZ114, XZ113, _offset); m[3] = amd_bitalign(XZ115, XZ114, _offset); m[4] = amd_bitalign(XZ116, XZ115, _offset); m[5] = amd_bitalign(XZ117, XZ116, _offset); m[6] = amd_bitalign(XZ118, XZ117, _offset); m[7] = amd_bitalign(XZ119, XZ118, _offset); }
+						else if (shifted_bufptr < 48) if (shifted_bufptr < 40) if (shifted_bufptr < 36) if (shifted_bufptr < 34) if (shifted_bufptr < 33) { m[0] = amd_bitalign(XZ113, XZ112, _offset); m[1] = amd_bitalign(XZ114, XZ113, _offset); m[2] = amd_bitalign(XZ115, XZ114, _offset); m[3] = amd_bitalign(XZ116, XZ115, _offset); m[4] = amd_bitalign(XZ117, XZ116, _offset); m[5] = amd_bitalign(XZ118, XZ117, _offset); m[6] = amd_bitalign(XZ119, XZ118, _offset); m[7] = amd_bitalign(XZ120, XZ119, _offset); }
+						else { m[0] = amd_bitalign(XZ114, XZ113, _offset); m[1] = amd_bitalign(XZ115, XZ114, _offset); m[2] = amd_bitalign(XZ116, XZ115, _offset); m[3] = amd_bitalign(XZ117, XZ116, _offset); m[4] = amd_bitalign(XZ118, XZ117, _offset); m[5] = amd_bitalign(XZ119, XZ118, _offset); m[6] = amd_bitalign(XZ120, XZ119, _offset); m[7] = amd_bitalign(XZ121, XZ120, _offset); }
+						else if (shifted_bufptr < 35) { m[0] = amd_bitalign(XZ115, XZ114, _offset); m[1] = amd_bitalign(XZ116, XZ115, _offset); m[2] = amd_bitalign(XZ117, XZ116, _offset); m[3] = amd_bitalign(XZ118, XZ117, _offset); m[4] = amd_bitalign(XZ119, XZ118, _offset); m[5] = amd_bitalign(XZ120, XZ119, _offset); m[6] = amd_bitalign(XZ121, XZ120, _offset); m[7] = amd_bitalign(XZ122, XZ121, _offset); }
+						else { m[0] = amd_bitalign(XZ116, XZ115, _offset); m[1] = amd_bitalign(XZ117, XZ116, _offset); m[2] = amd_bitalign(XZ118, XZ117, _offset); m[3] = amd_bitalign(XZ119, XZ118, _offset); m[4] = amd_bitalign(XZ120, XZ119, _offset); m[5] = amd_bitalign(XZ121, XZ120, _offset); m[6] = amd_bitalign(XZ122, XZ121, _offset); m[7] = amd_bitalign(XZ123, XZ122, _offset); }
+						else if (shifted_bufptr < 38) if (shifted_bufptr < 37) { m[0] = amd_bitalign(XZ117, XZ116, _offset); m[1] = amd_bitalign(XZ118, XZ117, _offset); m[2] = amd_bitalign(XZ119, XZ118, _offset); m[3] = amd_bitalign(XZ120, XZ119, _offset); m[4] = amd_bitalign(XZ121, XZ120, _offset); m[5] = amd_bitalign(XZ122, XZ121, _offset); m[6] = amd_bitalign(XZ123, XZ122, _offset); m[7] = amd_bitalign(XZ124, XZ123, _offset); }
+						else { m[0] = amd_bitalign(XZ118, XZ117, _offset); m[1] = amd_bitalign(XZ119, XZ118, _offset); m[2] = amd_bitalign(XZ120, XZ119, _offset); m[3] = amd_bitalign(XZ121, XZ120, _offset); m[4] = amd_bitalign(XZ122, XZ121, _offset); m[5] = amd_bitalign(XZ123, XZ122, _offset); m[6] = amd_bitalign(XZ124, XZ123, _offset); m[7] = amd_bitalign(XZ125, XZ124, _offset); }
+						else if (shifted_bufptr < 39) { m[0] = amd_bitalign(XZ119, XZ118, _offset); m[1] = amd_bitalign(XZ120, XZ119, _offset); m[2] = amd_bitalign(XZ121, XZ120, _offset); m[3] = amd_bitalign(XZ122, XZ121, _offset); m[4] = amd_bitalign(XZ123, XZ122, _offset); m[5] = amd_bitalign(XZ124, XZ123, _offset); m[6] = amd_bitalign(XZ125, XZ124, _offset); m[7] = amd_bitalign(XZ126, XZ125, _offset); }
+						else { m[0] = amd_bitalign(XZ120, XZ119, _offset); m[1] = amd_bitalign(XZ121, XZ120, _offset); m[2] = amd_bitalign(XZ122, XZ121, _offset); m[3] = amd_bitalign(XZ123, XZ122, _offset); m[4] = amd_bitalign(XZ124, XZ123, _offset); m[5] = amd_bitalign(XZ125, XZ124, _offset); m[6] = amd_bitalign(XZ126, XZ125, _offset); m[7] = amd_bitalign(XZ127, XZ126, _offset); }
+						else if (shifted_bufptr < 44) if (shifted_bufptr < 42) if (shifted_bufptr < 41) { m[0] = amd_bitalign(XZ121, XZ120, _offset); m[1] = amd_bitalign(XZ122, XZ121, _offset); m[2] = amd_bitalign(XZ123, XZ122, _offset); m[3] = amd_bitalign(XZ124, XZ123, _offset); m[4] = amd_bitalign(XZ125, XZ124, _offset); m[5] = amd_bitalign(XZ126, XZ125, _offset); m[6] = amd_bitalign(XZ127, XZ126, _offset); m[7] = amd_bitalign(XZ128, XZ127, _offset); }
+						else { m[0] = amd_bitalign(XZ122, XZ121, _offset); m[1] = amd_bitalign(XZ123, XZ122, _offset); m[2] = amd_bitalign(XZ124, XZ123, _offset); m[3] = amd_bitalign(XZ125, XZ124, _offset); m[4] = amd_bitalign(XZ126, XZ125, _offset); m[5] = amd_bitalign(XZ127, XZ126, _offset); m[6] = amd_bitalign(XZ128, XZ127, _offset); m[7] = amd_bitalign(XZ129, XZ128, _offset); }
+						else if (shifted_bufptr < 43) { m[0] = amd_bitalign(XZ123, XZ122, _offset); m[1] = amd_bitalign(XZ124, XZ123, _offset); m[2] = amd_bitalign(XZ125, XZ124, _offset); m[3] = amd_bitalign(XZ126, XZ125, _offset); m[4] = amd_bitalign(XZ127, XZ126, _offset); m[5] = amd_bitalign(XZ128, XZ127, _offset); m[6] = amd_bitalign(XZ129, XZ128, _offset); m[7] = amd_bitalign(XZ130, XZ129, _offset); }
+						else { m[0] = amd_bitalign(XZ124, XZ123, _offset); m[1] = amd_bitalign(XZ125, XZ124, _offset); m[2] = amd_bitalign(XZ126, XZ125, _offset); m[3] = amd_bitalign(XZ127, XZ126, _offset); m[4] = amd_bitalign(XZ128, XZ127, _offset); m[5] = amd_bitalign(XZ129, XZ128, _offset); m[6] = amd_bitalign(XZ130, XZ129, _offset); m[7] = amd_bitalign(XZ131, XZ130, _offset); }
+						else if (shifted_bufptr < 46) if (shifted_bufptr < 45) { m[0] = amd_bitalign(XZ125, XZ124, _offset); m[1] = amd_bitalign(XZ126, XZ125, _offset); m[2] = amd_bitalign(XZ127, XZ126, _offset); m[3] = amd_bitalign(XZ128, XZ127, _offset); m[4] = amd_bitalign(XZ129, XZ128, _offset); m[5] = amd_bitalign(XZ130, XZ129, _offset); m[6] = amd_bitalign(XZ131, XZ130, _offset); m[7] = amd_bitalign(XZ132, XZ131, _offset); }
+						else { m[0] = amd_bitalign(XZ126, XZ125, _offset); m[1] = amd_bitalign(XZ127, XZ126, _offset); m[2] = amd_bitalign(XZ128, XZ127, _offset); m[3] = amd_bitalign(XZ129, XZ128, _offset); m[4] = amd_bitalign(XZ130, XZ129, _offset); m[5] = amd_bitalign(XZ131, XZ130, _offset); m[6] = amd_bitalign(XZ132, XZ131, _offset); m[7] = amd_bitalign(XZ133, XZ132, _offset); }
+						else if (shifted_bufptr < 47) { m[0] = amd_bitalign(XZ127, XZ126, _offset); m[1] = amd_bitalign(XZ128, XZ127, _offset); m[2] = amd_bitalign(XZ129, XZ128, _offset); m[3] = amd_bitalign(XZ130, XZ129, _offset); m[4] = amd_bitalign(XZ131, XZ130, _offset); m[5] = amd_bitalign(XZ132, XZ131, _offset); m[6] = amd_bitalign(XZ133, XZ132, _offset); m[7] = amd_bitalign(XZ134, XZ133, _offset); }
+						else { m[0] = amd_bitalign(XZ128, XZ127, _offset); m[1] = amd_bitalign(XZ129, XZ128, _offset); m[2] = amd_bitalign(XZ130, XZ129, _offset); m[3] = amd_bitalign(XZ131, XZ130, _offset); m[4] = amd_bitalign(XZ132, XZ131, _offset); m[5] = amd_bitalign(XZ133, XZ132, _offset); m[6] = amd_bitalign(XZ134, XZ133, _offset); m[7] = amd_bitalign(XZ135, XZ134, _offset); }
+						else if (shifted_bufptr < 56) if (shifted_bufptr < 52) if (shifted_bufptr < 50) if (shifted_bufptr < 49) { m[0] = amd_bitalign(XZ129, XZ128, _offset); m[1] = amd_bitalign(XZ130, XZ129, _offset); m[2] = amd_bitalign(XZ131, XZ130, _offset); m[3] = amd_bitalign(XZ132, XZ131, _offset); m[4] = amd_bitalign(XZ133, XZ132, _offset); m[5] = amd_bitalign(XZ134, XZ133, _offset); m[6] = amd_bitalign(XZ135, XZ134, _offset); m[7] = amd_bitalign(XZ136, XZ135, _offset); }
+						else { m[0] = amd_bitalign(XZ130, XZ129, _offset); m[1] = amd_bitalign(XZ131, XZ130, _offset); m[2] = amd_bitalign(XZ132, XZ131, _offset); m[3] = amd_bitalign(XZ133, XZ132, _offset); m[4] = amd_bitalign(XZ134, XZ133, _offset); m[5] = amd_bitalign(XZ135, XZ134, _offset); m[6] = amd_bitalign(XZ136, XZ135, _offset); m[7] = amd_bitalign(XZ137, XZ136, _offset); }
+						else if (shifted_bufptr < 51) { m[0] = amd_bitalign(XZ131, XZ130, _offset); m[1] = amd_bitalign(XZ132, XZ131, _offset); m[2] = amd_bitalign(XZ133, XZ132, _offset); m[3] = amd_bitalign(XZ134, XZ133, _offset); m[4] = amd_bitalign(XZ135, XZ134, _offset); m[5] = amd_bitalign(XZ136, XZ135, _offset); m[6] = amd_bitalign(XZ137, XZ136, _offset); m[7] = amd_bitalign(XZ138, XZ137, _offset); }
+						else { m[0] = amd_bitalign(XZ132, XZ131, _offset); m[1] = amd_bitalign(XZ133, XZ132, _offset); m[2] = amd_bitalign(XZ134, XZ133, _offset); m[3] = amd_bitalign(XZ135, XZ134, _offset); m[4] = amd_bitalign(XZ136, XZ135, _offset); m[5] = amd_bitalign(XZ137, XZ136, _offset); m[6] = amd_bitalign(XZ138, XZ137, _offset); m[7] = amd_bitalign(XZ139, XZ138, _offset); }
+						else if (shifted_bufptr < 54) if (shifted_bufptr < 53) { m[0] = amd_bitalign(XZ133, XZ132, _offset); m[1] = amd_bitalign(XZ134, XZ133, _offset); m[2] = amd_bitalign(XZ135, XZ134, _offset); m[3] = amd_bitalign(XZ136, XZ135, _offset); m[4] = amd_bitalign(XZ137, XZ136, _offset); m[5] = amd_bitalign(XZ138, XZ137, _offset); m[6] = amd_bitalign(XZ139, XZ138, _offset); m[7] = amd_bitalign(XZ140, XZ139, _offset); }
+						else { m[0] = amd_bitalign(XZ134, XZ133, _offset); m[1] = amd_bitalign(XZ135, XZ134, _offset); m[2] = amd_bitalign(XZ136, XZ135, _offset); m[3] = amd_bitalign(XZ137, XZ136, _offset); m[4] = amd_bitalign(XZ138, XZ137, _offset); m[5] = amd_bitalign(XZ139, XZ138, _offset); m[6] = amd_bitalign(XZ140, XZ139, _offset); m[7] = amd_bitalign(XZ141, XZ140, _offset); }
+						else if (shifted_bufptr < 55) { m[0] = amd_bitalign(XZ135, XZ134, _offset); m[1] = amd_bitalign(XZ136, XZ135, _offset); m[2] = amd_bitalign(XZ137, XZ136, _offset); m[3] = amd_bitalign(XZ138, XZ137, _offset); m[4] = amd_bitalign(XZ139, XZ138, _offset); m[5] = amd_bitalign(XZ140, XZ139, _offset); m[6] = amd_bitalign(XZ141, XZ140, _offset); m[7] = amd_bitalign(XZ142, XZ141, _offset); }
+						else { m[0] = amd_bitalign(XZ136, XZ135, _offset); m[1] = amd_bitalign(XZ137, XZ136, _offset); m[2] = amd_bitalign(XZ138, XZ137, _offset); m[3] = amd_bitalign(XZ139, XZ138, _offset); m[4] = amd_bitalign(XZ140, XZ139, _offset); m[5] = amd_bitalign(XZ141, XZ140, _offset); m[6] = amd_bitalign(XZ142, XZ141, _offset); m[7] = amd_bitalign(XZ143, XZ142, _offset); }
+						else if (shifted_bufptr < 60) if (shifted_bufptr < 58) if (shifted_bufptr < 57) { m[0] = amd_bitalign(XZ137, XZ136, _offset); m[1] = amd_bitalign(XZ138, XZ137, _offset); m[2] = amd_bitalign(XZ139, XZ138, _offset); m[3] = amd_bitalign(XZ140, XZ139, _offset); m[4] = amd_bitalign(XZ141, XZ140, _offset); m[5] = amd_bitalign(XZ142, XZ141, _offset); m[6] = amd_bitalign(XZ143, XZ142, _offset); m[7] = amd_bitalign(XZ144, XZ143, _offset); }
+						else { m[0] = amd_bitalign(XZ138, XZ137, _offset); m[1] = amd_bitalign(XZ139, XZ138, _offset); m[2] = amd_bitalign(XZ140, XZ139, _offset); m[3] = amd_bitalign(XZ141, XZ140, _offset); m[4] = amd_bitalign(XZ142, XZ141, _offset); m[5] = amd_bitalign(XZ143, XZ142, _offset); m[6] = amd_bitalign(XZ144, XZ143, _offset); m[7] = amd_bitalign(XZ145, XZ144, _offset); }
+						else if (shifted_bufptr < 59) { m[0] = amd_bitalign(XZ139, XZ138, _offset); m[1] = amd_bitalign(XZ140, XZ139, _offset); m[2] = amd_bitalign(XZ141, XZ140, _offset); m[3] = amd_bitalign(XZ142, XZ141, _offset); m[4] = amd_bitalign(XZ143, XZ142, _offset); m[5] = amd_bitalign(XZ144, XZ143, _offset); m[6] = amd_bitalign(XZ145, XZ144, _offset); m[7] = amd_bitalign(XZ146, XZ145, _offset); }
+						else { m[0] = amd_bitalign(XZ140, XZ139, _offset); m[1] = amd_bitalign(XZ141, XZ140, _offset); m[2] = amd_bitalign(XZ142, XZ141, _offset); m[3] = amd_bitalign(XZ143, XZ142, _offset); m[4] = amd_bitalign(XZ144, XZ143, _offset); m[5] = amd_bitalign(XZ145, XZ144, _offset); m[6] = amd_bitalign(XZ146, XZ145, _offset); m[7] = amd_bitalign(XZ147, XZ146, _offset); }
+						else if (shifted_bufptr < 62) if (shifted_bufptr < 61) { m[0] = amd_bitalign(XZ141, XZ140, _offset); m[1] = amd_bitalign(XZ142, XZ141, _offset); m[2] = amd_bitalign(XZ143, XZ142, _offset); m[3] = amd_bitalign(XZ144, XZ143, _offset); m[4] = amd_bitalign(XZ145, XZ144, _offset); m[5] = amd_bitalign(XZ146, XZ145, _offset); m[6] = amd_bitalign(XZ147, XZ146, _offset); m[7] = amd_bitalign(XZ148, XZ147, _offset); }
+						else { m[0] = amd_bitalign(XZ142, XZ141, _offset); m[1] = amd_bitalign(XZ143, XZ142, _offset); m[2] = amd_bitalign(XZ144, XZ143, _offset); m[3] = amd_bitalign(XZ145, XZ144, _offset); m[4] = amd_bitalign(XZ146, XZ145, _offset); m[5] = amd_bitalign(XZ147, XZ146, _offset); m[6] = amd_bitalign(XZ148, XZ147, _offset); m[7] = amd_bitalign(XZ149, XZ148, _offset); }
+						else if (shifted_bufptr < 63) { m[0] = amd_bitalign(XZ143, XZ142, _offset); m[1] = amd_bitalign(XZ144, XZ143, _offset); m[2] = amd_bitalign(XZ145, XZ144, _offset); m[3] = amd_bitalign(XZ146, XZ145, _offset); m[4] = amd_bitalign(XZ147, XZ146, _offset); m[5] = amd_bitalign(XZ148, XZ147, _offset); m[6] = amd_bitalign(XZ149, XZ148, _offset); m[7] = amd_bitalign(XZ150, XZ149, _offset); }
+						else { m[0] = amd_bitalign(XZ144, XZ143, _offset); m[1] = amd_bitalign(XZ145, XZ144, _offset); m[2] = amd_bitalign(XZ146, XZ145, _offset); m[3] = amd_bitalign(XZ147, XZ146, _offset); m[4] = amd_bitalign(XZ148, XZ147, _offset); m[5] = amd_bitalign(XZ149, XZ148, _offset); m[6] = amd_bitalign(XZ150, XZ149, _offset); m[7] = amd_bitalign(XZ151, XZ150, _offset); }
+
+  					m[8] = m[9] = m[10] = m[11] = m[12] = m[13] = m[14] = m[15] = 0;
+
+						// T[0] = blake2s_IV4[0];
+						XZ152 = blake2s_IV4[0].s0;
+						XZ153 = blake2s_IV4[0].s1;
+						XZ154 = blake2s_IV4[0].s2;
+						XZ155 = blake2s_IV4[0].s3;
+						XZ156 = blake2s_IV4[0].s4;
+						XZ157 = blake2s_IV4[0].s5;
+						XZ158 = blake2s_IV4[0].s6;
+						XZ159 = blake2s_IV4[0].s7;
+						S.lo = S.hi = (uint8){
+								XZ152,
+								XZ153,
+								XZ154,
+								XZ155,
+								XZ156,
+								XZ157,
+								XZ158,
+								XZ159,
+						};
+
+						S.s0 ^= 0x01012020;
+						S.sc ^= 64;
+
+		#pragma unroll
+						for(uint j = 0; j < 10; j++) {
+								G1(j, S.s0123, S.s4567, S.s89ab, S.scdef);
+								G2(j, S.s0123, S.s5674, S.sab89, S.sfcde);
+						}
+
+						S.lo ^= S.hi ^ (uint8){
+								XZ152,
+								XZ153,
+								XZ154,
+								XZ155,
+								XZ156,
+								XZ157,
+								XZ158,
+								XZ159,
+						};
+						S.s0 ^= 0x01012020;
+						S.hi = (uint8){
+								XZ152,
+								XZ153,
+								XZ154,
+								XZ155,
+								XZ156,
+								XZ157,
+								XZ158,
+								XZ159,
+						};
+						XZ152 = S.lo.s0;
+						XZ153 = S.lo.s1;
+						XZ154 = S.lo.s2;
+						XZ155 = S.lo.s3;
+						XZ156 = S.lo.s4;
+						XZ157 = S.lo.s5;
+						XZ158 = S.lo.s6;
+						XZ159 = S.lo.s7;
+						S.sc ^= 128;
+						S.se ^= 0xFFFFFFFFU;
+
+						// neoscrypt_copy64(m, (bufptr >> 2), offset); 
+                        if (shifted_bufptr < 48)
+							shifted_bufptr %= 20;
+						if (shifted_bufptr < 32) if (shifted_bufptr < 16) if (shifted_bufptr < 8) if (shifted_bufptr < 4) if (shifted_bufptr < 2) if (shifted_bufptr < 1) { m[0] = amd_bitalign(XZ1, XZ0, _offset); m[1] = amd_bitalign(XZ2, XZ1, _offset); m[2] = amd_bitalign(XZ3, XZ2, _offset); m[3] = amd_bitalign(XZ4, XZ3, _offset); m[4] = amd_bitalign(XZ5, XZ4, _offset); m[5] = amd_bitalign(XZ6, XZ5, _offset); m[6] = amd_bitalign(XZ7, XZ6, _offset); m[7] = amd_bitalign(XZ8, XZ7, _offset); m[8] = amd_bitalign(XZ9, XZ8, _offset); m[9] = amd_bitalign(XZ10, XZ9, _offset); m[10] = amd_bitalign(XZ11, XZ10, _offset); m[11] = amd_bitalign(XZ12, XZ11, _offset); m[12] = amd_bitalign(XZ13, XZ12, _offset); m[13] = amd_bitalign(XZ14, XZ13, _offset); m[14] = amd_bitalign(XZ15, XZ14, _offset); m[15] = amd_bitalign(XZ16, XZ15, _offset); }
+						else { m[0] = amd_bitalign(XZ2, XZ1, _offset); m[1] = amd_bitalign(XZ3, XZ2, _offset); m[2] = amd_bitalign(XZ4, XZ3, _offset); m[3] = amd_bitalign(XZ5, XZ4, _offset); m[4] = amd_bitalign(XZ6, XZ5, _offset); m[5] = amd_bitalign(XZ7, XZ6, _offset); m[6] = amd_bitalign(XZ8, XZ7, _offset); m[7] = amd_bitalign(XZ9, XZ8, _offset); m[8] = amd_bitalign(XZ10, XZ9, _offset); m[9] = amd_bitalign(XZ11, XZ10, _offset); m[10] = amd_bitalign(XZ12, XZ11, _offset); m[11] = amd_bitalign(XZ13, XZ12, _offset); m[12] = amd_bitalign(XZ14, XZ13, _offset); m[13] = amd_bitalign(XZ15, XZ14, _offset); m[14] = amd_bitalign(XZ16, XZ15, _offset); m[15] = amd_bitalign(XZ17, XZ16, _offset); }
+						else if (shifted_bufptr < 3) { m[0] = amd_bitalign(XZ3, XZ2, _offset); m[1] = amd_bitalign(XZ4, XZ3, _offset); m[2] = amd_bitalign(XZ5, XZ4, _offset); m[3] = amd_bitalign(XZ6, XZ5, _offset); m[4] = amd_bitalign(XZ7, XZ6, _offset); m[5] = amd_bitalign(XZ8, XZ7, _offset); m[6] = amd_bitalign(XZ9, XZ8, _offset); m[7] = amd_bitalign(XZ10, XZ9, _offset); m[8] = amd_bitalign(XZ11, XZ10, _offset); m[9] = amd_bitalign(XZ12, XZ11, _offset); m[10] = amd_bitalign(XZ13, XZ12, _offset); m[11] = amd_bitalign(XZ14, XZ13, _offset); m[12] = amd_bitalign(XZ15, XZ14, _offset); m[13] = amd_bitalign(XZ16, XZ15, _offset); m[14] = amd_bitalign(XZ17, XZ16, _offset); m[15] = amd_bitalign(XZ18, XZ17, _offset); }
+						else { m[0] = amd_bitalign(XZ4, XZ3, _offset); m[1] = amd_bitalign(XZ5, XZ4, _offset); m[2] = amd_bitalign(XZ6, XZ5, _offset); m[3] = amd_bitalign(XZ7, XZ6, _offset); m[4] = amd_bitalign(XZ8, XZ7, _offset); m[5] = amd_bitalign(XZ9, XZ8, _offset); m[6] = amd_bitalign(XZ10, XZ9, _offset); m[7] = amd_bitalign(XZ11, XZ10, _offset); m[8] = amd_bitalign(XZ12, XZ11, _offset); m[9] = amd_bitalign(XZ13, XZ12, _offset); m[10] = amd_bitalign(XZ14, XZ13, _offset); m[11] = amd_bitalign(XZ15, XZ14, _offset); m[12] = amd_bitalign(XZ16, XZ15, _offset); m[13] = amd_bitalign(XZ17, XZ16, _offset); m[14] = amd_bitalign(XZ18, XZ17, _offset); m[15] = amd_bitalign(XZ19, XZ18, _offset); }
+						else if (shifted_bufptr < 6) if (shifted_bufptr < 5) { m[0] = amd_bitalign(XZ5, XZ4, _offset); m[1] = amd_bitalign(XZ6, XZ5, _offset); m[2] = amd_bitalign(XZ7, XZ6, _offset); m[3] = amd_bitalign(XZ8, XZ7, _offset); m[4] = amd_bitalign(XZ9, XZ8, _offset); m[5] = amd_bitalign(XZ10, XZ9, _offset); m[6] = amd_bitalign(XZ11, XZ10, _offset); m[7] = amd_bitalign(XZ12, XZ11, _offset); m[8] = amd_bitalign(XZ13, XZ12, _offset); m[9] = amd_bitalign(XZ14, XZ13, _offset); m[10] = amd_bitalign(XZ15, XZ14, _offset); m[11] = amd_bitalign(XZ16, XZ15, _offset); m[12] = amd_bitalign(XZ17, XZ16, _offset); m[13] = amd_bitalign(XZ18, XZ17, _offset); m[14] = amd_bitalign(XZ19, XZ18, _offset); m[15] = amd_bitalign(XZ20, XZ19, _offset); }
+						else { m[0] = amd_bitalign(XZ6, XZ5, _offset); m[1] = amd_bitalign(XZ7, XZ6, _offset); m[2] = amd_bitalign(XZ8, XZ7, _offset); m[3] = amd_bitalign(XZ9, XZ8, _offset); m[4] = amd_bitalign(XZ10, XZ9, _offset); m[5] = amd_bitalign(XZ11, XZ10, _offset); m[6] = amd_bitalign(XZ12, XZ11, _offset); m[7] = amd_bitalign(XZ13, XZ12, _offset); m[8] = amd_bitalign(XZ14, XZ13, _offset); m[9] = amd_bitalign(XZ15, XZ14, _offset); m[10] = amd_bitalign(XZ16, XZ15, _offset); m[11] = amd_bitalign(XZ17, XZ16, _offset); m[12] = amd_bitalign(XZ18, XZ17, _offset); m[13] = amd_bitalign(XZ19, XZ18, _offset); m[14] = amd_bitalign(XZ20, XZ19, _offset); m[15] = amd_bitalign(XZ21, XZ20, _offset); }
+						else if (shifted_bufptr < 7) { m[0] = amd_bitalign(XZ7, XZ6, _offset); m[1] = amd_bitalign(XZ8, XZ7, _offset); m[2] = amd_bitalign(XZ9, XZ8, _offset); m[3] = amd_bitalign(XZ10, XZ9, _offset); m[4] = amd_bitalign(XZ11, XZ10, _offset); m[5] = amd_bitalign(XZ12, XZ11, _offset); m[6] = amd_bitalign(XZ13, XZ12, _offset); m[7] = amd_bitalign(XZ14, XZ13, _offset); m[8] = amd_bitalign(XZ15, XZ14, _offset); m[9] = amd_bitalign(XZ16, XZ15, _offset); m[10] = amd_bitalign(XZ17, XZ16, _offset); m[11] = amd_bitalign(XZ18, XZ17, _offset); m[12] = amd_bitalign(XZ19, XZ18, _offset); m[13] = amd_bitalign(XZ20, XZ19, _offset); m[14] = amd_bitalign(XZ21, XZ20, _offset); m[15] = amd_bitalign(XZ22, XZ21, _offset); }
+						else { m[0] = amd_bitalign(XZ8, XZ7, _offset); m[1] = amd_bitalign(XZ9, XZ8, _offset); m[2] = amd_bitalign(XZ10, XZ9, _offset); m[3] = amd_bitalign(XZ11, XZ10, _offset); m[4] = amd_bitalign(XZ12, XZ11, _offset); m[5] = amd_bitalign(XZ13, XZ12, _offset); m[6] = amd_bitalign(XZ14, XZ13, _offset); m[7] = amd_bitalign(XZ15, XZ14, _offset); m[8] = amd_bitalign(XZ16, XZ15, _offset); m[9] = amd_bitalign(XZ17, XZ16, _offset); m[10] = amd_bitalign(XZ18, XZ17, _offset); m[11] = amd_bitalign(XZ19, XZ18, _offset); m[12] = amd_bitalign(XZ20, XZ19, _offset); m[13] = amd_bitalign(XZ21, XZ20, _offset); m[14] = amd_bitalign(XZ22, XZ21, _offset); m[15] = amd_bitalign(XZ23, XZ22, _offset); }
+						else if (shifted_bufptr < 12) if (shifted_bufptr < 10) if (shifted_bufptr < 9) { m[0] = amd_bitalign(XZ9, XZ8, _offset); m[1] = amd_bitalign(XZ10, XZ9, _offset); m[2] = amd_bitalign(XZ11, XZ10, _offset); m[3] = amd_bitalign(XZ12, XZ11, _offset); m[4] = amd_bitalign(XZ13, XZ12, _offset); m[5] = amd_bitalign(XZ14, XZ13, _offset); m[6] = amd_bitalign(XZ15, XZ14, _offset); m[7] = amd_bitalign(XZ16, XZ15, _offset); m[8] = amd_bitalign(XZ17, XZ16, _offset); m[9] = amd_bitalign(XZ18, XZ17, _offset); m[10] = amd_bitalign(XZ19, XZ18, _offset); m[11] = amd_bitalign(XZ20, XZ19, _offset); m[12] = amd_bitalign(XZ21, XZ20, _offset); m[13] = amd_bitalign(XZ22, XZ21, _offset); m[14] = amd_bitalign(XZ23, XZ22, _offset); m[15] = amd_bitalign(XZ24, XZ23, _offset); }
+						else { m[0] = amd_bitalign(XZ10, XZ9, _offset); m[1] = amd_bitalign(XZ11, XZ10, _offset); m[2] = amd_bitalign(XZ12, XZ11, _offset); m[3] = amd_bitalign(XZ13, XZ12, _offset); m[4] = amd_bitalign(XZ14, XZ13, _offset); m[5] = amd_bitalign(XZ15, XZ14, _offset); m[6] = amd_bitalign(XZ16, XZ15, _offset); m[7] = amd_bitalign(XZ17, XZ16, _offset); m[8] = amd_bitalign(XZ18, XZ17, _offset); m[9] = amd_bitalign(XZ19, XZ18, _offset); m[10] = amd_bitalign(XZ20, XZ19, _offset); m[11] = amd_bitalign(XZ21, XZ20, _offset); m[12] = amd_bitalign(XZ22, XZ21, _offset); m[13] = amd_bitalign(XZ23, XZ22, _offset); m[14] = amd_bitalign(XZ24, XZ23, _offset); m[15] = amd_bitalign(XZ25, XZ24, _offset); }
+						else if (shifted_bufptr < 11) { m[0] = amd_bitalign(XZ11, XZ10, _offset); m[1] = amd_bitalign(XZ12, XZ11, _offset); m[2] = amd_bitalign(XZ13, XZ12, _offset); m[3] = amd_bitalign(XZ14, XZ13, _offset); m[4] = amd_bitalign(XZ15, XZ14, _offset); m[5] = amd_bitalign(XZ16, XZ15, _offset); m[6] = amd_bitalign(XZ17, XZ16, _offset); m[7] = amd_bitalign(XZ18, XZ17, _offset); m[8] = amd_bitalign(XZ19, XZ18, _offset); m[9] = amd_bitalign(XZ20, XZ19, _offset); m[10] = amd_bitalign(XZ21, XZ20, _offset); m[11] = amd_bitalign(XZ22, XZ21, _offset); m[12] = amd_bitalign(XZ23, XZ22, _offset); m[13] = amd_bitalign(XZ24, XZ23, _offset); m[14] = amd_bitalign(XZ25, XZ24, _offset); m[15] = amd_bitalign(XZ26, XZ25, _offset); }
+						else { m[0] = amd_bitalign(XZ12, XZ11, _offset); m[1] = amd_bitalign(XZ13, XZ12, _offset); m[2] = amd_bitalign(XZ14, XZ13, _offset); m[3] = amd_bitalign(XZ15, XZ14, _offset); m[4] = amd_bitalign(XZ16, XZ15, _offset); m[5] = amd_bitalign(XZ17, XZ16, _offset); m[6] = amd_bitalign(XZ18, XZ17, _offset); m[7] = amd_bitalign(XZ19, XZ18, _offset); m[8] = amd_bitalign(XZ20, XZ19, _offset); m[9] = amd_bitalign(XZ21, XZ20, _offset); m[10] = amd_bitalign(XZ22, XZ21, _offset); m[11] = amd_bitalign(XZ23, XZ22, _offset); m[12] = amd_bitalign(XZ24, XZ23, _offset); m[13] = amd_bitalign(XZ25, XZ24, _offset); m[14] = amd_bitalign(XZ26, XZ25, _offset); m[15] = amd_bitalign(XZ27, XZ26, _offset); }
+						else if (shifted_bufptr < 14) if (shifted_bufptr < 13) { m[0] = amd_bitalign(XZ13, XZ12, _offset); m[1] = amd_bitalign(XZ14, XZ13, _offset); m[2] = amd_bitalign(XZ15, XZ14, _offset); m[3] = amd_bitalign(XZ16, XZ15, _offset); m[4] = amd_bitalign(XZ17, XZ16, _offset); m[5] = amd_bitalign(XZ18, XZ17, _offset); m[6] = amd_bitalign(XZ19, XZ18, _offset); m[7] = amd_bitalign(XZ20, XZ19, _offset); m[8] = amd_bitalign(XZ21, XZ20, _offset); m[9] = amd_bitalign(XZ22, XZ21, _offset); m[10] = amd_bitalign(XZ23, XZ22, _offset); m[11] = amd_bitalign(XZ24, XZ23, _offset); m[12] = amd_bitalign(XZ25, XZ24, _offset); m[13] = amd_bitalign(XZ26, XZ25, _offset); m[14] = amd_bitalign(XZ27, XZ26, _offset); m[15] = amd_bitalign(XZ28, XZ27, _offset); }
+						else { m[0] = amd_bitalign(XZ14, XZ13, _offset); m[1] = amd_bitalign(XZ15, XZ14, _offset); m[2] = amd_bitalign(XZ16, XZ15, _offset); m[3] = amd_bitalign(XZ17, XZ16, _offset); m[4] = amd_bitalign(XZ18, XZ17, _offset); m[5] = amd_bitalign(XZ19, XZ18, _offset); m[6] = amd_bitalign(XZ20, XZ19, _offset); m[7] = amd_bitalign(XZ21, XZ20, _offset); m[8] = amd_bitalign(XZ22, XZ21, _offset); m[9] = amd_bitalign(XZ23, XZ22, _offset); m[10] = amd_bitalign(XZ24, XZ23, _offset); m[11] = amd_bitalign(XZ25, XZ24, _offset); m[12] = amd_bitalign(XZ26, XZ25, _offset); m[13] = amd_bitalign(XZ27, XZ26, _offset); m[14] = amd_bitalign(XZ28, XZ27, _offset); m[15] = amd_bitalign(XZ29, XZ28, _offset); }
+						else if (shifted_bufptr < 15) { m[0] = amd_bitalign(XZ15, XZ14, _offset); m[1] = amd_bitalign(XZ16, XZ15, _offset); m[2] = amd_bitalign(XZ17, XZ16, _offset); m[3] = amd_bitalign(XZ18, XZ17, _offset); m[4] = amd_bitalign(XZ19, XZ18, _offset); m[5] = amd_bitalign(XZ20, XZ19, _offset); m[6] = amd_bitalign(XZ21, XZ20, _offset); m[7] = amd_bitalign(XZ22, XZ21, _offset); m[8] = amd_bitalign(XZ23, XZ22, _offset); m[9] = amd_bitalign(XZ24, XZ23, _offset); m[10] = amd_bitalign(XZ25, XZ24, _offset); m[11] = amd_bitalign(XZ26, XZ25, _offset); m[12] = amd_bitalign(XZ27, XZ26, _offset); m[13] = amd_bitalign(XZ28, XZ27, _offset); m[14] = amd_bitalign(XZ29, XZ28, _offset); m[15] = amd_bitalign(XZ30, XZ29, _offset); }
+						else { m[0] = amd_bitalign(XZ16, XZ15, _offset); m[1] = amd_bitalign(XZ17, XZ16, _offset); m[2] = amd_bitalign(XZ18, XZ17, _offset); m[3] = amd_bitalign(XZ19, XZ18, _offset); m[4] = amd_bitalign(XZ20, XZ19, _offset); m[5] = amd_bitalign(XZ21, XZ20, _offset); m[6] = amd_bitalign(XZ22, XZ21, _offset); m[7] = amd_bitalign(XZ23, XZ22, _offset); m[8] = amd_bitalign(XZ24, XZ23, _offset); m[9] = amd_bitalign(XZ25, XZ24, _offset); m[10] = amd_bitalign(XZ26, XZ25, _offset); m[11] = amd_bitalign(XZ27, XZ26, _offset); m[12] = amd_bitalign(XZ28, XZ27, _offset); m[13] = amd_bitalign(XZ29, XZ28, _offset); m[14] = amd_bitalign(XZ30, XZ29, _offset); m[15] = amd_bitalign(XZ31, XZ30, _offset); }
+						else if (shifted_bufptr < 18) if (shifted_bufptr < 17) { m[0] = amd_bitalign(XZ17, XZ16, _offset); m[1] = amd_bitalign(XZ18, XZ17, _offset); m[2] = amd_bitalign(XZ19, XZ18, _offset); m[3] = amd_bitalign(XZ20, XZ19, _offset); m[4] = amd_bitalign(XZ21, XZ20, _offset); m[5] = amd_bitalign(XZ22, XZ21, _offset); m[6] = amd_bitalign(XZ23, XZ22, _offset); m[7] = amd_bitalign(XZ24, XZ23, _offset); m[8] = amd_bitalign(XZ25, XZ24, _offset); m[9] = amd_bitalign(XZ26, XZ25, _offset); m[10] = amd_bitalign(XZ27, XZ26, _offset); m[11] = amd_bitalign(XZ28, XZ27, _offset); m[12] = amd_bitalign(XZ29, XZ28, _offset); m[13] = amd_bitalign(XZ30, XZ29, _offset); m[14] = amd_bitalign(XZ31, XZ30, _offset); m[15] = amd_bitalign(XZ32, XZ31, _offset); }
+						else { m[0] = amd_bitalign(XZ18, XZ17, _offset); m[1] = amd_bitalign(XZ19, XZ18, _offset); m[2] = amd_bitalign(XZ20, XZ19, _offset); m[3] = amd_bitalign(XZ21, XZ20, _offset); m[4] = amd_bitalign(XZ22, XZ21, _offset); m[5] = amd_bitalign(XZ23, XZ22, _offset); m[6] = amd_bitalign(XZ24, XZ23, _offset); m[7] = amd_bitalign(XZ25, XZ24, _offset); m[8] = amd_bitalign(XZ26, XZ25, _offset); m[9] = amd_bitalign(XZ27, XZ26, _offset); m[10] = amd_bitalign(XZ28, XZ27, _offset); m[11] = amd_bitalign(XZ29, XZ28, _offset); m[12] = amd_bitalign(XZ30, XZ29, _offset); m[13] = amd_bitalign(XZ31, XZ30, _offset); m[14] = amd_bitalign(XZ32, XZ31, _offset); m[15] = amd_bitalign(XZ33, XZ32, _offset); }
+						else if (shifted_bufptr < 19) { m[0] = amd_bitalign(XZ19, XZ18, _offset); m[1] = amd_bitalign(XZ20, XZ19, _offset); m[2] = amd_bitalign(XZ21, XZ20, _offset); m[3] = amd_bitalign(XZ22, XZ21, _offset); m[4] = amd_bitalign(XZ23, XZ22, _offset); m[5] = amd_bitalign(XZ24, XZ23, _offset); m[6] = amd_bitalign(XZ25, XZ24, _offset); m[7] = amd_bitalign(XZ26, XZ25, _offset); m[8] = amd_bitalign(XZ27, XZ26, _offset); m[9] = amd_bitalign(XZ28, XZ27, _offset); m[10] = amd_bitalign(XZ29, XZ28, _offset); m[11] = amd_bitalign(XZ30, XZ29, _offset); m[12] = amd_bitalign(XZ31, XZ30, _offset); m[13] = amd_bitalign(XZ32, XZ31, _offset); m[14] = amd_bitalign(XZ33, XZ32, _offset); m[15] = amd_bitalign(XZ34, XZ33, _offset); }
+                        else { m[0] = amd_bitalign(XZ20, XZ19, _offset); m[1] = amd_bitalign(XZ21, XZ20, _offset); m[2] = amd_bitalign(XZ22, XZ21, _offset); m[3] = amd_bitalign(XZ23, XZ22, _offset); m[4] = amd_bitalign(XZ24, XZ23, _offset); m[5] = amd_bitalign(XZ25, XZ24, _offset); m[6] = amd_bitalign(XZ26, XZ25, _offset); m[7] = amd_bitalign(XZ27, XZ26, _offset); m[8] = amd_bitalign(XZ28, XZ27, _offset); m[9] = amd_bitalign(XZ29, XZ28, _offset); m[10] = amd_bitalign(XZ30, XZ29, _offset); m[11] = amd_bitalign(XZ31, XZ30, _offset); m[12] = amd_bitalign(XZ32, XZ31, _offset); m[13] = amd_bitalign(XZ33, XZ32, _offset); m[14] = amd_bitalign(XZ34, XZ33, _offset); m[15] = amd_bitalign(XZ35, XZ34, _offset); }
+						//
+                        else if (shifted_bufptr < 56) if (shifted_bufptr < 52) if (shifted_bufptr < 50) if (shifted_bufptr < 49) { m[0] = amd_bitalign(XZ49, XZ48, _offset); m[1] = amd_bitalign(XZ50, XZ49, _offset); m[2] = amd_bitalign(XZ51, XZ50, _offset); m[3] = amd_bitalign(XZ52, XZ51, _offset); m[4] = amd_bitalign(XZ53, XZ52, _offset); m[5] = amd_bitalign(XZ54, XZ53, _offset); m[6] = amd_bitalign(XZ55, XZ54, _offset); m[7] = amd_bitalign(XZ56, XZ55, _offset); m[8] = amd_bitalign(XZ57, XZ56, _offset); m[9] = amd_bitalign(XZ58, XZ57, _offset); m[10] = amd_bitalign(XZ59, XZ58, _offset); m[11] = amd_bitalign(XZ60, XZ59, _offset); m[12] = amd_bitalign(XZ61, XZ60, _offset); m[13] = amd_bitalign(XZ62, XZ61, _offset); m[14] = amd_bitalign(XZ63, XZ62, _offset); m[15] = amd_bitalign(XZ64, XZ63, _offset); }
+						else { m[0] = amd_bitalign(XZ50, XZ49, _offset); m[1] = amd_bitalign(XZ51, XZ50, _offset); m[2] = amd_bitalign(XZ52, XZ51, _offset); m[3] = amd_bitalign(XZ53, XZ52, _offset); m[4] = amd_bitalign(XZ54, XZ53, _offset); m[5] = amd_bitalign(XZ55, XZ54, _offset); m[6] = amd_bitalign(XZ56, XZ55, _offset); m[7] = amd_bitalign(XZ57, XZ56, _offset); m[8] = amd_bitalign(XZ58, XZ57, _offset); m[9] = amd_bitalign(XZ59, XZ58, _offset); m[10] = amd_bitalign(XZ60, XZ59, _offset); m[11] = amd_bitalign(XZ61, XZ60, _offset); m[12] = amd_bitalign(XZ62, XZ61, _offset); m[13] = amd_bitalign(XZ63, XZ62, _offset); m[14] = amd_bitalign(XZ64, XZ63, _offset); m[15] = amd_bitalign(XZ65, XZ64, _offset); }
+						else if (shifted_bufptr < 51) { m[0] = amd_bitalign(XZ51, XZ50, _offset); m[1] = amd_bitalign(XZ52, XZ51, _offset); m[2] = amd_bitalign(XZ53, XZ52, _offset); m[3] = amd_bitalign(XZ54, XZ53, _offset); m[4] = amd_bitalign(XZ55, XZ54, _offset); m[5] = amd_bitalign(XZ56, XZ55, _offset); m[6] = amd_bitalign(XZ57, XZ56, _offset); m[7] = amd_bitalign(XZ58, XZ57, _offset); m[8] = amd_bitalign(XZ59, XZ58, _offset); m[9] = amd_bitalign(XZ60, XZ59, _offset); m[10] = amd_bitalign(XZ61, XZ60, _offset); m[11] = amd_bitalign(XZ62, XZ61, _offset); m[12] = amd_bitalign(XZ63, XZ62, _offset); m[13] = amd_bitalign(XZ64, XZ63, _offset); m[14] = amd_bitalign(XZ65, XZ64, _offset); m[15] = amd_bitalign(XZ66, XZ65, _offset); }
+						else { m[0] = amd_bitalign(XZ52, XZ51, _offset); m[1] = amd_bitalign(XZ53, XZ52, _offset); m[2] = amd_bitalign(XZ54, XZ53, _offset); m[3] = amd_bitalign(XZ55, XZ54, _offset); m[4] = amd_bitalign(XZ56, XZ55, _offset); m[5] = amd_bitalign(XZ57, XZ56, _offset); m[6] = amd_bitalign(XZ58, XZ57, _offset); m[7] = amd_bitalign(XZ59, XZ58, _offset); m[8] = amd_bitalign(XZ60, XZ59, _offset); m[9] = amd_bitalign(XZ61, XZ60, _offset); m[10] = amd_bitalign(XZ62, XZ61, _offset); m[11] = amd_bitalign(XZ63, XZ62, _offset); m[12] = amd_bitalign(XZ64, XZ63, _offset); m[13] = amd_bitalign(XZ65, XZ64, _offset); m[14] = amd_bitalign(XZ66, XZ65, _offset); m[15] = amd_bitalign(XZ67, XZ66, _offset); }
+						else if (shifted_bufptr < 54) if (shifted_bufptr < 53) { m[0] = amd_bitalign(XZ53, XZ52, _offset); m[1] = amd_bitalign(XZ54, XZ53, _offset); m[2] = amd_bitalign(XZ55, XZ54, _offset); m[3] = amd_bitalign(XZ56, XZ55, _offset); m[4] = amd_bitalign(XZ57, XZ56, _offset); m[5] = amd_bitalign(XZ58, XZ57, _offset); m[6] = amd_bitalign(XZ59, XZ58, _offset); m[7] = amd_bitalign(XZ60, XZ59, _offset); m[8] = amd_bitalign(XZ61, XZ60, _offset); m[9] = amd_bitalign(XZ62, XZ61, _offset); m[10] = amd_bitalign(XZ63, XZ62, _offset); m[11] = amd_bitalign(XZ64, XZ63, _offset); m[12] = amd_bitalign(XZ65, XZ64, _offset); m[13] = amd_bitalign(XZ66, XZ65, _offset); m[14] = amd_bitalign(XZ67, XZ66, _offset); m[15] = amd_bitalign(XZ68, XZ67, _offset); }
+						else { m[0] = amd_bitalign(XZ54, XZ53, _offset); m[1] = amd_bitalign(XZ55, XZ54, _offset); m[2] = amd_bitalign(XZ56, XZ55, _offset); m[3] = amd_bitalign(XZ57, XZ56, _offset); m[4] = amd_bitalign(XZ58, XZ57, _offset); m[5] = amd_bitalign(XZ59, XZ58, _offset); m[6] = amd_bitalign(XZ60, XZ59, _offset); m[7] = amd_bitalign(XZ61, XZ60, _offset); m[8] = amd_bitalign(XZ62, XZ61, _offset); m[9] = amd_bitalign(XZ63, XZ62, _offset); m[10] = amd_bitalign(XZ64, XZ63, _offset); m[11] = amd_bitalign(XZ65, XZ64, _offset); m[12] = amd_bitalign(XZ66, XZ65, _offset); m[13] = amd_bitalign(XZ67, XZ66, _offset); m[14] = amd_bitalign(XZ68, XZ67, _offset); m[15] = amd_bitalign(XZ69, XZ68, _offset); }
+						else if (shifted_bufptr < 55) { m[0] = amd_bitalign(XZ55, XZ54, _offset); m[1] = amd_bitalign(XZ56, XZ55, _offset); m[2] = amd_bitalign(XZ57, XZ56, _offset); m[3] = amd_bitalign(XZ58, XZ57, _offset); m[4] = amd_bitalign(XZ59, XZ58, _offset); m[5] = amd_bitalign(XZ60, XZ59, _offset); m[6] = amd_bitalign(XZ61, XZ60, _offset); m[7] = amd_bitalign(XZ62, XZ61, _offset); m[8] = amd_bitalign(XZ63, XZ62, _offset); m[9] = amd_bitalign(XZ64, XZ63, _offset); m[10] = amd_bitalign(XZ65, XZ64, _offset); m[11] = amd_bitalign(XZ66, XZ65, _offset); m[12] = amd_bitalign(XZ67, XZ66, _offset); m[13] = amd_bitalign(XZ68, XZ67, _offset); m[14] = amd_bitalign(XZ69, XZ68, _offset); m[15] = amd_bitalign(XZ70, XZ69, _offset); }
+						else { m[0] = amd_bitalign(XZ56, XZ55, _offset); m[1] = amd_bitalign(XZ57, XZ56, _offset); m[2] = amd_bitalign(XZ58, XZ57, _offset); m[3] = amd_bitalign(XZ59, XZ58, _offset); m[4] = amd_bitalign(XZ60, XZ59, _offset); m[5] = amd_bitalign(XZ61, XZ60, _offset); m[6] = amd_bitalign(XZ62, XZ61, _offset); m[7] = amd_bitalign(XZ63, XZ62, _offset); m[8] = amd_bitalign(XZ64, XZ63, _offset); m[9] = amd_bitalign(XZ65, XZ64, _offset); m[10] = amd_bitalign(XZ66, XZ65, _offset); m[11] = amd_bitalign(XZ67, XZ66, _offset); m[12] = amd_bitalign(XZ68, XZ67, _offset); m[13] = amd_bitalign(XZ69, XZ68, _offset); m[14] = amd_bitalign(XZ70, XZ69, _offset); m[15] = amd_bitalign(XZ71, XZ70, _offset); }
+						else if (shifted_bufptr < 60) if (shifted_bufptr < 58) if (shifted_bufptr < 57) { m[0] = amd_bitalign(XZ57, XZ56, _offset); m[1] = amd_bitalign(XZ58, XZ57, _offset); m[2] = amd_bitalign(XZ59, XZ58, _offset); m[3] = amd_bitalign(XZ60, XZ59, _offset); m[4] = amd_bitalign(XZ61, XZ60, _offset); m[5] = amd_bitalign(XZ62, XZ61, _offset); m[6] = amd_bitalign(XZ63, XZ62, _offset); m[7] = amd_bitalign(XZ64, XZ63, _offset); m[8] = amd_bitalign(XZ65, XZ64, _offset); m[9] = amd_bitalign(XZ66, XZ65, _offset); m[10] = amd_bitalign(XZ67, XZ66, _offset); m[11] = amd_bitalign(XZ68, XZ67, _offset); m[12] = amd_bitalign(XZ69, XZ68, _offset); m[13] = amd_bitalign(XZ70, XZ69, _offset); m[14] = amd_bitalign(XZ71, XZ70, _offset); m[15] = amd_bitalign(XZ72, XZ71, _offset); }
+						else { m[0] = amd_bitalign(XZ58, XZ57, _offset); m[1] = amd_bitalign(XZ59, XZ58, _offset); m[2] = amd_bitalign(XZ60, XZ59, _offset); m[3] = amd_bitalign(XZ61, XZ60, _offset); m[4] = amd_bitalign(XZ62, XZ61, _offset); m[5] = amd_bitalign(XZ63, XZ62, _offset); m[6] = amd_bitalign(XZ64, XZ63, _offset); m[7] = amd_bitalign(XZ65, XZ64, _offset); m[8] = amd_bitalign(XZ66, XZ65, _offset); m[9] = amd_bitalign(XZ67, XZ66, _offset); m[10] = amd_bitalign(XZ68, XZ67, _offset); m[11] = amd_bitalign(XZ69, XZ68, _offset); m[12] = amd_bitalign(XZ70, XZ69, _offset); m[13] = amd_bitalign(XZ71, XZ70, _offset); m[14] = amd_bitalign(XZ72, XZ71, _offset); m[15] = amd_bitalign(XZ73, XZ72, _offset); }
+						else if (shifted_bufptr < 59) { m[0] = amd_bitalign(XZ59, XZ58, _offset); m[1] = amd_bitalign(XZ60, XZ59, _offset); m[2] = amd_bitalign(XZ61, XZ60, _offset); m[3] = amd_bitalign(XZ62, XZ61, _offset); m[4] = amd_bitalign(XZ63, XZ62, _offset); m[5] = amd_bitalign(XZ64, XZ63, _offset); m[6] = amd_bitalign(XZ65, XZ64, _offset); m[7] = amd_bitalign(XZ66, XZ65, _offset); m[8] = amd_bitalign(XZ67, XZ66, _offset); m[9] = amd_bitalign(XZ68, XZ67, _offset); m[10] = amd_bitalign(XZ69, XZ68, _offset); m[11] = amd_bitalign(XZ70, XZ69, _offset); m[12] = amd_bitalign(XZ71, XZ70, _offset); m[13] = amd_bitalign(XZ72, XZ71, _offset); m[14] = amd_bitalign(XZ73, XZ72, _offset); m[15] = amd_bitalign(XZ74, XZ73, _offset); }
+						else { m[0] = amd_bitalign(XZ60, XZ59, _offset); m[1] = amd_bitalign(XZ61, XZ60, _offset); m[2] = amd_bitalign(XZ62, XZ61, _offset); m[3] = amd_bitalign(XZ63, XZ62, _offset); m[4] = amd_bitalign(XZ64, XZ63, _offset); m[5] = amd_bitalign(XZ65, XZ64, _offset); m[6] = amd_bitalign(XZ66, XZ65, _offset); m[7] = amd_bitalign(XZ67, XZ66, _offset); m[8] = amd_bitalign(XZ68, XZ67, _offset); m[9] = amd_bitalign(XZ69, XZ68, _offset); m[10] = amd_bitalign(XZ70, XZ69, _offset); m[11] = amd_bitalign(XZ71, XZ70, _offset); m[12] = amd_bitalign(XZ72, XZ71, _offset); m[13] = amd_bitalign(XZ73, XZ72, _offset); m[14] = amd_bitalign(XZ74, XZ73, _offset); m[15] = amd_bitalign(XZ75, XZ74, _offset); }
+						else if (shifted_bufptr < 62) if (shifted_bufptr < 61) { m[0] = amd_bitalign(XZ61, XZ60, _offset); m[1] = amd_bitalign(XZ62, XZ61, _offset); m[2] = amd_bitalign(XZ63, XZ62, _offset); m[3] = amd_bitalign(XZ64, XZ63, _offset); m[4] = amd_bitalign(XZ65, XZ64, _offset); m[5] = amd_bitalign(XZ66, XZ65, _offset); m[6] = amd_bitalign(XZ67, XZ66, _offset); m[7] = amd_bitalign(XZ68, XZ67, _offset); m[8] = amd_bitalign(XZ69, XZ68, _offset); m[9] = amd_bitalign(XZ70, XZ69, _offset); m[10] = amd_bitalign(XZ71, XZ70, _offset); m[11] = amd_bitalign(XZ72, XZ71, _offset); m[12] = amd_bitalign(XZ73, XZ72, _offset); m[13] = amd_bitalign(XZ74, XZ73, _offset); m[14] = amd_bitalign(XZ75, XZ74, _offset); m[15] = amd_bitalign(XZ76, XZ75, _offset); }
+						else { m[0] = amd_bitalign(XZ62, XZ61, _offset); m[1] = amd_bitalign(XZ63, XZ62, _offset); m[2] = amd_bitalign(XZ64, XZ63, _offset); m[3] = amd_bitalign(XZ65, XZ64, _offset); m[4] = amd_bitalign(XZ66, XZ65, _offset); m[5] = amd_bitalign(XZ67, XZ66, _offset); m[6] = amd_bitalign(XZ68, XZ67, _offset); m[7] = amd_bitalign(XZ69, XZ68, _offset); m[8] = amd_bitalign(XZ70, XZ69, _offset); m[9] = amd_bitalign(XZ71, XZ70, _offset); m[10] = amd_bitalign(XZ72, XZ71, _offset); m[11] = amd_bitalign(XZ73, XZ72, _offset); m[12] = amd_bitalign(XZ74, XZ73, _offset); m[13] = amd_bitalign(XZ75, XZ74, _offset); m[14] = amd_bitalign(XZ76, XZ75, _offset); m[15] = amd_bitalign(XZ77, XZ76, _offset); }
+						else if (shifted_bufptr < 63) { m[0] = amd_bitalign(XZ63, XZ62, _offset); m[1] = amd_bitalign(XZ64, XZ63, _offset); m[2] = amd_bitalign(XZ65, XZ64, _offset); m[3] = amd_bitalign(XZ66, XZ65, _offset); m[4] = amd_bitalign(XZ67, XZ66, _offset); m[5] = amd_bitalign(XZ68, XZ67, _offset); m[6] = amd_bitalign(XZ69, XZ68, _offset); m[7] = amd_bitalign(XZ70, XZ69, _offset); m[8] = amd_bitalign(XZ71, XZ70, _offset); m[9] = amd_bitalign(XZ72, XZ71, _offset); m[10] = amd_bitalign(XZ73, XZ72, _offset); m[11] = amd_bitalign(XZ74, XZ73, _offset); m[12] = amd_bitalign(XZ75, XZ74, _offset); m[13] = amd_bitalign(XZ76, XZ75, _offset); m[14] = amd_bitalign(XZ77, XZ76, _offset); m[15] = amd_bitalign(XZ78, XZ77, _offset); }
+						else { m[0] = amd_bitalign(XZ64, XZ63, _offset); m[1] = amd_bitalign(XZ65, XZ64, _offset); m[2] = amd_bitalign(XZ66, XZ65, _offset); m[3] = amd_bitalign(XZ67, XZ66, _offset); m[4] = amd_bitalign(XZ68, XZ67, _offset); m[5] = amd_bitalign(XZ69, XZ68, _offset); m[6] = amd_bitalign(XZ70, XZ69, _offset); m[7] = amd_bitalign(XZ71, XZ70, _offset); m[8] = amd_bitalign(XZ72, XZ71, _offset); m[9] = amd_bitalign(XZ73, XZ72, _offset); m[10] = amd_bitalign(XZ74, XZ73, _offset); m[11] = amd_bitalign(XZ75, XZ74, _offset); m[12] = amd_bitalign(XZ76, XZ75, _offset); m[13] = amd_bitalign(XZ77, XZ76, _offset); m[14] = amd_bitalign(XZ78, XZ77, _offset); m[15] = amd_bitalign(XZ79, XZ78, _offset); }
+						
+		#pragma unroll
+						for(uint j = 0; j < 10; j++) {
+								G1(j, S.s0123, S.s4567, S.s89ab, S.scdef);
+								G2(j, S.s0123, S.s5674, S.sab89, S.sfcde);
+						}
+
+						uint8 temp_ui8 = S.lo ^ S.hi;
+						XZ152 ^= temp_ui8.s0;
+						XZ153 ^= temp_ui8.s1;
+						XZ154 ^= temp_ui8.s2;
+						XZ155 ^= temp_ui8.s3;
+						XZ156 ^= temp_ui8.s4;
+						XZ157 ^= temp_ui8.s5;
+						XZ158 ^= temp_ui8.s6;
+						XZ159 ^= temp_ui8.s7;
+						
+						/* Calculate the next buffer pointer */
+						uint4 temp;
+						temp  = (uint4)(XZ152, XZ153, XZ154, XZ155);
+						temp += rotate((uint4)(XZ152, XZ153, XZ154, XZ155), (uint4)(24, 24, 24, 24));
+						temp += rotate((uint4)(XZ152, XZ153, XZ154, XZ155), (uint4)(16, 16, 16, 16));
+						temp += rotate((uint4)(XZ152, XZ153, XZ154, XZ155), (uint4)( 8,  8,  8,  8));
+						temp += (uint4)(XZ156, XZ157, XZ158, XZ159);
+						temp += rotate((uint4)(XZ156, XZ157, XZ158, XZ159), (uint4)(24, 24, 24, 24));
+						temp += rotate((uint4)(XZ156, XZ157, XZ158, XZ159), (uint4)(16, 16, 16, 16));
+						temp += rotate((uint4)(XZ156, XZ157, XZ158, XZ159), (uint4)( 8,  8,  8,  8));
+
+						bufptr = convert_uchar(temp.x + temp.y + temp.z + temp.w);
+
+						/* Modify the salt buffer */
+						offset = bufptr & 0x03;
+						_offset = 32U - amd_bitalign(offset, offset, 29U); 
+						shifted_bufptr = bufptr >> 2;
+						// neoscrypt_xor32_au(80 + (bufptr >> 2), 152, offset);
+						volatile uint temp0 = amd_bitalign(XZ152, 0U,                    _offset);
+						volatile uint temp1 = amd_bitalign(XZ153, XZ152, _offset);
+						volatile uint temp2 = amd_bitalign(XZ154, XZ153, _offset);
+						volatile uint temp3 = amd_bitalign(XZ155, XZ154, _offset);
+						volatile uint temp4 = amd_bitalign(XZ156, XZ155, _offset);
+						volatile uint temp5 = amd_bitalign(XZ157, XZ156, _offset);
+						volatile uint temp6 = amd_bitalign(XZ158, XZ157, _offset);
+						volatile uint temp7 = amd_bitalign(XZ159, XZ158, _offset);
+						volatile uint temp8 = amd_bitalign(0U,              XZ159, _offset);
+						if (shifted_bufptr < 32) if (shifted_bufptr < 16) if (shifted_bufptr < 8) if (shifted_bufptr < 4) if (shifted_bufptr < 2) if (shifted_bufptr < 1) if (offset) { XZ80 ^= temp0; XZ81 ^= temp1; XZ82 ^= temp2; XZ83 ^= temp3; XZ84 ^= temp4; XZ85 ^= temp5; XZ86 ^= temp6; XZ87 ^= temp7; XZ88 ^= temp8; } else { XZ80 ^= XZ152; XZ81 ^= XZ153; XZ82 ^= XZ154; XZ83 ^= XZ155; XZ84 ^= XZ156; XZ85 ^= XZ157; XZ86 ^= XZ158; XZ87 ^= XZ159; }
+						else if (offset) { XZ81 ^= temp0; XZ82 ^= temp1; XZ83 ^= temp2; XZ84 ^= temp3; XZ85 ^= temp4; XZ86 ^= temp5; XZ87 ^= temp6; XZ88 ^= temp7; XZ89 ^= temp8; } else { XZ81 ^= XZ152; XZ82 ^= XZ153; XZ83 ^= XZ154; XZ84 ^= XZ155; XZ85 ^= XZ156; XZ86 ^= XZ157; XZ87 ^= XZ158; XZ88 ^= XZ159; }
+						else if (shifted_bufptr < 3) if (offset) { XZ82 ^= temp0; XZ83 ^= temp1; XZ84 ^= temp2; XZ85 ^= temp3; XZ86 ^= temp4; XZ87 ^= temp5; XZ88 ^= temp6; XZ89 ^= temp7; XZ90 ^= temp8; } else { XZ82 ^= XZ152; XZ83 ^= XZ153; XZ84 ^= XZ154; XZ85 ^= XZ155; XZ86 ^= XZ156; XZ87 ^= XZ157; XZ88 ^= XZ158; XZ89 ^= XZ159; }
+						else if (offset) { XZ83 ^= temp0; XZ84 ^= temp1; XZ85 ^= temp2; XZ86 ^= temp3; XZ87 ^= temp4; XZ88 ^= temp5; XZ89 ^= temp6; XZ90 ^= temp7; XZ91 ^= temp8; } else { XZ83 ^= XZ152; XZ84 ^= XZ153; XZ85 ^= XZ154; XZ86 ^= XZ155; XZ87 ^= XZ156; XZ88 ^= XZ157; XZ89 ^= XZ158; XZ90 ^= XZ159; }
+						else if (shifted_bufptr < 6) if (shifted_bufptr < 5) if (offset) { XZ84 ^= temp0; XZ85 ^= temp1; XZ86 ^= temp2; XZ87 ^= temp3; XZ88 ^= temp4; XZ89 ^= temp5; XZ90 ^= temp6; XZ91 ^= temp7; XZ92 ^= temp8; } else { XZ84 ^= XZ152; XZ85 ^= XZ153; XZ86 ^= XZ154; XZ87 ^= XZ155; XZ88 ^= XZ156; XZ89 ^= XZ157; XZ90 ^= XZ158; XZ91 ^= XZ159; }
+						else if (offset) { XZ85 ^= temp0; XZ86 ^= temp1; XZ87 ^= temp2; XZ88 ^= temp3; XZ89 ^= temp4; XZ90 ^= temp5; XZ91 ^= temp6; XZ92 ^= temp7; XZ93 ^= temp8; } else { XZ85 ^= XZ152; XZ86 ^= XZ153; XZ87 ^= XZ154; XZ88 ^= XZ155; XZ89 ^= XZ156; XZ90 ^= XZ157; XZ91 ^= XZ158; XZ92 ^= XZ159; }
+						else if (shifted_bufptr < 7) if (offset) { XZ86 ^= temp0; XZ87 ^= temp1; XZ88 ^= temp2; XZ89 ^= temp3; XZ90 ^= temp4; XZ91 ^= temp5; XZ92 ^= temp6; XZ93 ^= temp7; XZ94 ^= temp8; } else { XZ86 ^= XZ152; XZ87 ^= XZ153; XZ88 ^= XZ154; XZ89 ^= XZ155; XZ90 ^= XZ156; XZ91 ^= XZ157; XZ92 ^= XZ158; XZ93 ^= XZ159; }
+						else if (offset) { XZ87 ^= temp0; XZ88 ^= temp1; XZ89 ^= temp2; XZ90 ^= temp3; XZ91 ^= temp4; XZ92 ^= temp5; XZ93 ^= temp6; XZ94 ^= temp7; XZ95 ^= temp8; } else { XZ87 ^= XZ152; XZ88 ^= XZ153; XZ89 ^= XZ154; XZ90 ^= XZ155; XZ91 ^= XZ156; XZ92 ^= XZ157; XZ93 ^= XZ158; XZ94 ^= XZ159; }
+						else if (shifted_bufptr < 12) if (shifted_bufptr < 10) if (shifted_bufptr < 9) if (offset) { XZ88 ^= temp0; XZ89 ^= temp1; XZ90 ^= temp2; XZ91 ^= temp3; XZ92 ^= temp4; XZ93 ^= temp5; XZ94 ^= temp6; XZ95 ^= temp7; XZ96 ^= temp8; } else { XZ88 ^= XZ152; XZ89 ^= XZ153; XZ90 ^= XZ154; XZ91 ^= XZ155; XZ92 ^= XZ156; XZ93 ^= XZ157; XZ94 ^= XZ158; XZ95 ^= XZ159; }
+						else if (offset) { XZ89 ^= temp0; XZ90 ^= temp1; XZ91 ^= temp2; XZ92 ^= temp3; XZ93 ^= temp4; XZ94 ^= temp5; XZ95 ^= temp6; XZ96 ^= temp7; XZ97 ^= temp8; } else { XZ89 ^= XZ152; XZ90 ^= XZ153; XZ91 ^= XZ154; XZ92 ^= XZ155; XZ93 ^= XZ156; XZ94 ^= XZ157; XZ95 ^= XZ158; XZ96 ^= XZ159; }
+						else if (shifted_bufptr < 11) if (offset) { XZ90 ^= temp0; XZ91 ^= temp1; XZ92 ^= temp2; XZ93 ^= temp3; XZ94 ^= temp4; XZ95 ^= temp5; XZ96 ^= temp6; XZ97 ^= temp7; XZ98 ^= temp8; } else { XZ90 ^= XZ152; XZ91 ^= XZ153; XZ92 ^= XZ154; XZ93 ^= XZ155; XZ94 ^= XZ156; XZ95 ^= XZ157; XZ96 ^= XZ158; XZ97 ^= XZ159; }
+						else if (offset) { XZ91 ^= temp0; XZ92 ^= temp1; XZ93 ^= temp2; XZ94 ^= temp3; XZ95 ^= temp4; XZ96 ^= temp5; XZ97 ^= temp6; XZ98 ^= temp7; XZ99 ^= temp8; } else { XZ91 ^= XZ152; XZ92 ^= XZ153; XZ93 ^= XZ154; XZ94 ^= XZ155; XZ95 ^= XZ156; XZ96 ^= XZ157; XZ97 ^= XZ158; XZ98 ^= XZ159; }
+						else if (shifted_bufptr < 14) if (shifted_bufptr < 13) if (offset) { XZ92 ^= temp0; XZ93 ^= temp1; XZ94 ^= temp2; XZ95 ^= temp3; XZ96 ^= temp4; XZ97 ^= temp5; XZ98 ^= temp6; XZ99 ^= temp7; XZ100 ^= temp8; } else { XZ92 ^= XZ152; XZ93 ^= XZ153; XZ94 ^= XZ154; XZ95 ^= XZ155; XZ96 ^= XZ156; XZ97 ^= XZ157; XZ98 ^= XZ158; XZ99 ^= XZ159; }
+						else if (offset) { XZ93 ^= temp0; XZ94 ^= temp1; XZ95 ^= temp2; XZ96 ^= temp3; XZ97 ^= temp4; XZ98 ^= temp5; XZ99 ^= temp6; XZ100 ^= temp7; XZ101 ^= temp8; } else { XZ93 ^= XZ152; XZ94 ^= XZ153; XZ95 ^= XZ154; XZ96 ^= XZ155; XZ97 ^= XZ156; XZ98 ^= XZ157; XZ99 ^= XZ158; XZ100 ^= XZ159; }
+						else if (shifted_bufptr < 15) if (offset) { XZ94 ^= temp0; XZ95 ^= temp1; XZ96 ^= temp2; XZ97 ^= temp3; XZ98 ^= temp4; XZ99 ^= temp5; XZ100 ^= temp6; XZ101 ^= temp7; XZ102 ^= temp8; } else { XZ94 ^= XZ152; XZ95 ^= XZ153; XZ96 ^= XZ154; XZ97 ^= XZ155; XZ98 ^= XZ156; XZ99 ^= XZ157; XZ100 ^= XZ158; XZ101 ^= XZ159; }
+						else if (offset) { XZ95 ^= temp0; XZ96 ^= temp1; XZ97 ^= temp2; XZ98 ^= temp3; XZ99 ^= temp4; XZ100 ^= temp5; XZ101 ^= temp6; XZ102 ^= temp7; XZ103 ^= temp8; } else { XZ95 ^= XZ152; XZ96 ^= XZ153; XZ97 ^= XZ154; XZ98 ^= XZ155; XZ99 ^= XZ156; XZ100 ^= XZ157; XZ101 ^= XZ158; XZ102 ^= XZ159; }
+						else if (shifted_bufptr < 24) if (shifted_bufptr < 20) if (shifted_bufptr < 18) if (shifted_bufptr < 17) if (offset) { XZ96 ^= temp0; XZ97 ^= temp1; XZ98 ^= temp2; XZ99 ^= temp3; XZ100 ^= temp4; XZ101 ^= temp5; XZ102 ^= temp6; XZ103 ^= temp7; XZ104 ^= temp8; } else { XZ96 ^= XZ152; XZ97 ^= XZ153; XZ98 ^= XZ154; XZ99 ^= XZ155; XZ100 ^= XZ156; XZ101 ^= XZ157; XZ102 ^= XZ158; XZ103 ^= XZ159; }
+						else if (offset) { XZ97 ^= temp0; XZ98 ^= temp1; XZ99 ^= temp2; XZ100 ^= temp3; XZ101 ^= temp4; XZ102 ^= temp5; XZ103 ^= temp6; XZ104 ^= temp7; XZ105 ^= temp8; } else { XZ97 ^= XZ152; XZ98 ^= XZ153; XZ99 ^= XZ154; XZ100 ^= XZ155; XZ101 ^= XZ156; XZ102 ^= XZ157; XZ103 ^= XZ158; XZ104 ^= XZ159; }
+						else if (shifted_bufptr < 19) if (offset) { XZ98 ^= temp0; XZ99 ^= temp1; XZ100 ^= temp2; XZ101 ^= temp3; XZ102 ^= temp4; XZ103 ^= temp5; XZ104 ^= temp6; XZ105 ^= temp7; XZ106 ^= temp8; } else { XZ98 ^= XZ152; XZ99 ^= XZ153; XZ100 ^= XZ154; XZ101 ^= XZ155; XZ102 ^= XZ156; XZ103 ^= XZ157; XZ104 ^= XZ158; XZ105 ^= XZ159; }
+						else if (offset) { XZ99 ^= temp0; XZ100 ^= temp1; XZ101 ^= temp2; XZ102 ^= temp3; XZ103 ^= temp4; XZ104 ^= temp5; XZ105 ^= temp6; XZ106 ^= temp7; XZ107 ^= temp8; } else { XZ99 ^= XZ152; XZ100 ^= XZ153; XZ101 ^= XZ154; XZ102 ^= XZ155; XZ103 ^= XZ156; XZ104 ^= XZ157; XZ105 ^= XZ158; XZ106 ^= XZ159; }
+						else if (shifted_bufptr < 22) if (shifted_bufptr < 21) if (offset) { XZ100 ^= temp0; XZ101 ^= temp1; XZ102 ^= temp2; XZ103 ^= temp3; XZ104 ^= temp4; XZ105 ^= temp5; XZ106 ^= temp6; XZ107 ^= temp7; XZ108 ^= temp8; } else { XZ100 ^= XZ152; XZ101 ^= XZ153; XZ102 ^= XZ154; XZ103 ^= XZ155; XZ104 ^= XZ156; XZ105 ^= XZ157; XZ106 ^= XZ158; XZ107 ^= XZ159; }
+						else if (offset) { XZ101 ^= temp0; XZ102 ^= temp1; XZ103 ^= temp2; XZ104 ^= temp3; XZ105 ^= temp4; XZ106 ^= temp5; XZ107 ^= temp6; XZ108 ^= temp7; XZ109 ^= temp8; } else { XZ101 ^= XZ152; XZ102 ^= XZ153; XZ103 ^= XZ154; XZ104 ^= XZ155; XZ105 ^= XZ156; XZ106 ^= XZ157; XZ107 ^= XZ158; XZ108 ^= XZ159; }
+						else if (shifted_bufptr < 23) if (offset) { XZ102 ^= temp0; XZ103 ^= temp1; XZ104 ^= temp2; XZ105 ^= temp3; XZ106 ^= temp4; XZ107 ^= temp5; XZ108 ^= temp6; XZ109 ^= temp7; XZ110 ^= temp8; } else { XZ102 ^= XZ152; XZ103 ^= XZ153; XZ104 ^= XZ154; XZ105 ^= XZ155; XZ106 ^= XZ156; XZ107 ^= XZ157; XZ108 ^= XZ158; XZ109 ^= XZ159; }
+						else if (offset) { XZ103 ^= temp0; XZ104 ^= temp1; XZ105 ^= temp2; XZ106 ^= temp3; XZ107 ^= temp4; XZ108 ^= temp5; XZ109 ^= temp6; XZ110 ^= temp7; XZ111 ^= temp8; } else { XZ103 ^= XZ152; XZ104 ^= XZ153; XZ105 ^= XZ154; XZ106 ^= XZ155; XZ107 ^= XZ156; XZ108 ^= XZ157; XZ109 ^= XZ158; XZ110 ^= XZ159; }
+						else if (shifted_bufptr < 28) if (shifted_bufptr < 26) if (shifted_bufptr < 25) if (offset) { XZ104 ^= temp0; XZ105 ^= temp1; XZ106 ^= temp2; XZ107 ^= temp3; XZ108 ^= temp4; XZ109 ^= temp5; XZ110 ^= temp6; XZ111 ^= temp7; XZ112 ^= temp8; } else { XZ104 ^= XZ152; XZ105 ^= XZ153; XZ106 ^= XZ154; XZ107 ^= XZ155; XZ108 ^= XZ156; XZ109 ^= XZ157; XZ110 ^= XZ158; XZ111 ^= XZ159; }
+						else if (offset) { XZ105 ^= temp0; XZ106 ^= temp1; XZ107 ^= temp2; XZ108 ^= temp3; XZ109 ^= temp4; XZ110 ^= temp5; XZ111 ^= temp6; XZ112 ^= temp7; XZ113 ^= temp8; } else { XZ105 ^= XZ152; XZ106 ^= XZ153; XZ107 ^= XZ154; XZ108 ^= XZ155; XZ109 ^= XZ156; XZ110 ^= XZ157; XZ111 ^= XZ158; XZ112 ^= XZ159; }
+						else if (shifted_bufptr < 27) if (offset) { XZ106 ^= temp0; XZ107 ^= temp1; XZ108 ^= temp2; XZ109 ^= temp3; XZ110 ^= temp4; XZ111 ^= temp5; XZ112 ^= temp6; XZ113 ^= temp7; XZ114 ^= temp8; } else { XZ106 ^= XZ152; XZ107 ^= XZ153; XZ108 ^= XZ154; XZ109 ^= XZ155; XZ110 ^= XZ156; XZ111 ^= XZ157; XZ112 ^= XZ158; XZ113 ^= XZ159; }
+						else if (offset) { XZ107 ^= temp0; XZ108 ^= temp1; XZ109 ^= temp2; XZ110 ^= temp3; XZ111 ^= temp4; XZ112 ^= temp5; XZ113 ^= temp6; XZ114 ^= temp7; XZ115 ^= temp8; } else { XZ107 ^= XZ152; XZ108 ^= XZ153; XZ109 ^= XZ154; XZ110 ^= XZ155; XZ111 ^= XZ156; XZ112 ^= XZ157; XZ113 ^= XZ158; XZ114 ^= XZ159; }
+						else if (shifted_bufptr < 30) if (shifted_bufptr < 29) if (offset) { XZ108 ^= temp0; XZ109 ^= temp1; XZ110 ^= temp2; XZ111 ^= temp3; XZ112 ^= temp4; XZ113 ^= temp5; XZ114 ^= temp6; XZ115 ^= temp7; XZ116 ^= temp8; } else { XZ108 ^= XZ152; XZ109 ^= XZ153; XZ110 ^= XZ154; XZ111 ^= XZ155; XZ112 ^= XZ156; XZ113 ^= XZ157; XZ114 ^= XZ158; XZ115 ^= XZ159; }
+						else if (offset) { XZ109 ^= temp0; XZ110 ^= temp1; XZ111 ^= temp2; XZ112 ^= temp3; XZ113 ^= temp4; XZ114 ^= temp5; XZ115 ^= temp6; XZ116 ^= temp7; XZ117 ^= temp8; } else { XZ109 ^= XZ152; XZ110 ^= XZ153; XZ111 ^= XZ154; XZ112 ^= XZ155; XZ113 ^= XZ156; XZ114 ^= XZ157; XZ115 ^= XZ158; XZ116 ^= XZ159; }
+						else if (shifted_bufptr < 31) if (offset) { XZ110 ^= temp0; XZ111 ^= temp1; XZ112 ^= temp2; XZ113 ^= temp3; XZ114 ^= temp4; XZ115 ^= temp5; XZ116 ^= temp6; XZ117 ^= temp7; XZ118 ^= temp8; } else { XZ110 ^= XZ152; XZ111 ^= XZ153; XZ112 ^= XZ154; XZ113 ^= XZ155; XZ114 ^= XZ156; XZ115 ^= XZ157; XZ116 ^= XZ158; XZ117 ^= XZ159; }
+						else if (offset) { XZ111 ^= temp0; XZ112 ^= temp1; XZ113 ^= temp2; XZ114 ^= temp3; XZ115 ^= temp4; XZ116 ^= temp5; XZ117 ^= temp6; XZ118 ^= temp7; XZ119 ^= temp8; } else { XZ111 ^= XZ152; XZ112 ^= XZ153; XZ113 ^= XZ154; XZ114 ^= XZ155; XZ115 ^= XZ156; XZ116 ^= XZ157; XZ117 ^= XZ158; XZ118 ^= XZ159; }
+						else if (shifted_bufptr < 48) if (shifted_bufptr < 40) if (shifted_bufptr < 36) if (shifted_bufptr < 34) if (shifted_bufptr < 33) if (offset) { XZ112 ^= temp0; XZ113 ^= temp1; XZ114 ^= temp2; XZ115 ^= temp3; XZ116 ^= temp4; XZ117 ^= temp5; XZ118 ^= temp6; XZ119 ^= temp7; XZ120 ^= temp8; } else { XZ112 ^= XZ152; XZ113 ^= XZ153; XZ114 ^= XZ154; XZ115 ^= XZ155; XZ116 ^= XZ156; XZ117 ^= XZ157; XZ118 ^= XZ158; XZ119 ^= XZ159; }
+						else if (offset) { XZ113 ^= temp0; XZ114 ^= temp1; XZ115 ^= temp2; XZ116 ^= temp3; XZ117 ^= temp4; XZ118 ^= temp5; XZ119 ^= temp6; XZ120 ^= temp7; XZ121 ^= temp8; } else { XZ113 ^= XZ152; XZ114 ^= XZ153; XZ115 ^= XZ154; XZ116 ^= XZ155; XZ117 ^= XZ156; XZ118 ^= XZ157; XZ119 ^= XZ158; XZ120 ^= XZ159; }
+						else if (shifted_bufptr < 35) if (offset) { XZ114 ^= temp0; XZ115 ^= temp1; XZ116 ^= temp2; XZ117 ^= temp3; XZ118 ^= temp4; XZ119 ^= temp5; XZ120 ^= temp6; XZ121 ^= temp7; XZ122 ^= temp8; } else { XZ114 ^= XZ152; XZ115 ^= XZ153; XZ116 ^= XZ154; XZ117 ^= XZ155; XZ118 ^= XZ156; XZ119 ^= XZ157; XZ120 ^= XZ158; XZ121 ^= XZ159; }
+						else if (offset) { XZ115 ^= temp0; XZ116 ^= temp1; XZ117 ^= temp2; XZ118 ^= temp3; XZ119 ^= temp4; XZ120 ^= temp5; XZ121 ^= temp6; XZ122 ^= temp7; XZ123 ^= temp8; } else { XZ115 ^= XZ152; XZ116 ^= XZ153; XZ117 ^= XZ154; XZ118 ^= XZ155; XZ119 ^= XZ156; XZ120 ^= XZ157; XZ121 ^= XZ158; XZ122 ^= XZ159; }
+						else if (shifted_bufptr < 38) if (shifted_bufptr < 37) if (offset) { XZ116 ^= temp0; XZ117 ^= temp1; XZ118 ^= temp2; XZ119 ^= temp3; XZ120 ^= temp4; XZ121 ^= temp5; XZ122 ^= temp6; XZ123 ^= temp7; XZ124 ^= temp8; } else { XZ116 ^= XZ152; XZ117 ^= XZ153; XZ118 ^= XZ154; XZ119 ^= XZ155; XZ120 ^= XZ156; XZ121 ^= XZ157; XZ122 ^= XZ158; XZ123 ^= XZ159; }
+						else if (offset) { XZ117 ^= temp0; XZ118 ^= temp1; XZ119 ^= temp2; XZ120 ^= temp3; XZ121 ^= temp4; XZ122 ^= temp5; XZ123 ^= temp6; XZ124 ^= temp7; XZ125 ^= temp8; } else { XZ117 ^= XZ152; XZ118 ^= XZ153; XZ119 ^= XZ154; XZ120 ^= XZ155; XZ121 ^= XZ156; XZ122 ^= XZ157; XZ123 ^= XZ158; XZ124 ^= XZ159; }
+						else if (shifted_bufptr < 39) if (offset) { XZ118 ^= temp0; XZ119 ^= temp1; XZ120 ^= temp2; XZ121 ^= temp3; XZ122 ^= temp4; XZ123 ^= temp5; XZ124 ^= temp6; XZ125 ^= temp7; XZ126 ^= temp8; } else { XZ118 ^= XZ152; XZ119 ^= XZ153; XZ120 ^= XZ154; XZ121 ^= XZ155; XZ122 ^= XZ156; XZ123 ^= XZ157; XZ124 ^= XZ158; XZ125 ^= XZ159; }
+						else if (offset) { XZ119 ^= temp0; XZ120 ^= temp1; XZ121 ^= temp2; XZ122 ^= temp3; XZ123 ^= temp4; XZ124 ^= temp5; XZ125 ^= temp6; XZ126 ^= temp7; XZ127 ^= temp8; } else { XZ119 ^= XZ152; XZ120 ^= XZ153; XZ121 ^= XZ154; XZ122 ^= XZ155; XZ123 ^= XZ156; XZ124 ^= XZ157; XZ125 ^= XZ158; XZ126 ^= XZ159; }
+						else if (shifted_bufptr < 44) if (shifted_bufptr < 42) if (shifted_bufptr < 41) if (offset) { XZ120 ^= temp0; XZ121 ^= temp1; XZ122 ^= temp2; XZ123 ^= temp3; XZ124 ^= temp4; XZ125 ^= temp5; XZ126 ^= temp6; XZ127 ^= temp7; XZ128 ^= temp8; } else { XZ120 ^= XZ152; XZ121 ^= XZ153; XZ122 ^= XZ154; XZ123 ^= XZ155; XZ124 ^= XZ156; XZ125 ^= XZ157; XZ126 ^= XZ158; XZ127 ^= XZ159; }
+						else if (offset) { XZ121 ^= temp0; XZ122 ^= temp1; XZ123 ^= temp2; XZ124 ^= temp3; XZ125 ^= temp4; XZ126 ^= temp5; XZ127 ^= temp6; XZ128 ^= temp7; XZ129 ^= temp8; } else { XZ121 ^= XZ152; XZ122 ^= XZ153; XZ123 ^= XZ154; XZ124 ^= XZ155; XZ125 ^= XZ156; XZ126 ^= XZ157; XZ127 ^= XZ158; XZ128 ^= XZ159; }
+						else if (shifted_bufptr < 43) if (offset) { XZ122 ^= temp0; XZ123 ^= temp1; XZ124 ^= temp2; XZ125 ^= temp3; XZ126 ^= temp4; XZ127 ^= temp5; XZ128 ^= temp6; XZ129 ^= temp7; XZ130 ^= temp8; } else { XZ122 ^= XZ152; XZ123 ^= XZ153; XZ124 ^= XZ154; XZ125 ^= XZ155; XZ126 ^= XZ156; XZ127 ^= XZ157; XZ128 ^= XZ158; XZ129 ^= XZ159; }
+						else if (offset) { XZ123 ^= temp0; XZ124 ^= temp1; XZ125 ^= temp2; XZ126 ^= temp3; XZ127 ^= temp4; XZ128 ^= temp5; XZ129 ^= temp6; XZ130 ^= temp7; XZ131 ^= temp8; } else { XZ123 ^= XZ152; XZ124 ^= XZ153; XZ125 ^= XZ154; XZ126 ^= XZ155; XZ127 ^= XZ156; XZ128 ^= XZ157; XZ129 ^= XZ158; XZ130 ^= XZ159; }
+						else if (shifted_bufptr < 46) if (shifted_bufptr < 45) if (offset) { XZ124 ^= temp0; XZ125 ^= temp1; XZ126 ^= temp2; XZ127 ^= temp3; XZ128 ^= temp4; XZ129 ^= temp5; XZ130 ^= temp6; XZ131 ^= temp7; XZ132 ^= temp8; } else { XZ124 ^= XZ152; XZ125 ^= XZ153; XZ126 ^= XZ154; XZ127 ^= XZ155; XZ128 ^= XZ156; XZ129 ^= XZ157; XZ130 ^= XZ158; XZ131 ^= XZ159; }
+						else if (offset) { XZ125 ^= temp0; XZ126 ^= temp1; XZ127 ^= temp2; XZ128 ^= temp3; XZ129 ^= temp4; XZ130 ^= temp5; XZ131 ^= temp6; XZ132 ^= temp7; XZ133 ^= temp8; } else { XZ125 ^= XZ152; XZ126 ^= XZ153; XZ127 ^= XZ154; XZ128 ^= XZ155; XZ129 ^= XZ156; XZ130 ^= XZ157; XZ131 ^= XZ158; XZ132 ^= XZ159; }
+						else if (shifted_bufptr < 47) if (offset) { XZ126 ^= temp0; XZ127 ^= temp1; XZ128 ^= temp2; XZ129 ^= temp3; XZ130 ^= temp4; XZ131 ^= temp5; XZ132 ^= temp6; XZ133 ^= temp7; XZ134 ^= temp8; } else { XZ126 ^= XZ152; XZ127 ^= XZ153; XZ128 ^= XZ154; XZ129 ^= XZ155; XZ130 ^= XZ156; XZ131 ^= XZ157; XZ132 ^= XZ158; XZ133 ^= XZ159; }
+						else if (offset) { XZ127 ^= temp0; XZ128 ^= temp1; XZ129 ^= temp2; XZ130 ^= temp3; XZ131 ^= temp4; XZ132 ^= temp5; XZ133 ^= temp6; XZ134 ^= temp7; XZ135 ^= temp8; } else { XZ127 ^= XZ152; XZ128 ^= XZ153; XZ129 ^= XZ154; XZ130 ^= XZ155; XZ131 ^= XZ156; XZ132 ^= XZ157; XZ133 ^= XZ158; XZ134 ^= XZ159; }
+						else if (shifted_bufptr < 56) if (shifted_bufptr < 52) if (shifted_bufptr < 50) if (shifted_bufptr < 49) if (offset) { XZ128 ^= temp0; XZ129 ^= temp1; XZ130 ^= temp2; XZ131 ^= temp3; XZ132 ^= temp4; XZ133 ^= temp5; XZ134 ^= temp6; XZ135 ^= temp7; XZ136 ^= temp8; } else { XZ128 ^= XZ152; XZ129 ^= XZ153; XZ130 ^= XZ154; XZ131 ^= XZ155; XZ132 ^= XZ156; XZ133 ^= XZ157; XZ134 ^= XZ158; XZ135 ^= XZ159; }
+						else if (offset) { XZ129 ^= temp0; XZ130 ^= temp1; XZ131 ^= temp2; XZ132 ^= temp3; XZ133 ^= temp4; XZ134 ^= temp5; XZ135 ^= temp6; XZ136 ^= temp7; XZ137 ^= temp8; } else { XZ129 ^= XZ152; XZ130 ^= XZ153; XZ131 ^= XZ154; XZ132 ^= XZ155; XZ133 ^= XZ156; XZ134 ^= XZ157; XZ135 ^= XZ158; XZ136 ^= XZ159; }
+						else if (shifted_bufptr < 51) if (offset) { XZ130 ^= temp0; XZ131 ^= temp1; XZ132 ^= temp2; XZ133 ^= temp3; XZ134 ^= temp4; XZ135 ^= temp5; XZ136 ^= temp6; XZ137 ^= temp7; XZ138 ^= temp8; } else { XZ130 ^= XZ152; XZ131 ^= XZ153; XZ132 ^= XZ154; XZ133 ^= XZ155; XZ134 ^= XZ156; XZ135 ^= XZ157; XZ136 ^= XZ158; XZ137 ^= XZ159; }
+						else if (offset) { XZ131 ^= temp0; XZ132 ^= temp1; XZ133 ^= temp2; XZ134 ^= temp3; XZ135 ^= temp4; XZ136 ^= temp5; XZ137 ^= temp6; XZ138 ^= temp7; XZ139 ^= temp8; } else { XZ131 ^= XZ152; XZ132 ^= XZ153; XZ133 ^= XZ154; XZ134 ^= XZ155; XZ135 ^= XZ156; XZ136 ^= XZ157; XZ137 ^= XZ158; XZ138 ^= XZ159; }
+						else if (shifted_bufptr < 54) if (shifted_bufptr < 53) if (offset) { XZ132 ^= temp0; XZ133 ^= temp1; XZ134 ^= temp2; XZ135 ^= temp3; XZ136 ^= temp4; XZ137 ^= temp5; XZ138 ^= temp6; XZ139 ^= temp7; XZ140 ^= temp8; } else { XZ132 ^= XZ152; XZ133 ^= XZ153; XZ134 ^= XZ154; XZ135 ^= XZ155; XZ136 ^= XZ156; XZ137 ^= XZ157; XZ138 ^= XZ158; XZ139 ^= XZ159; }
+						else if (offset) { XZ133 ^= temp0; XZ134 ^= temp1; XZ135 ^= temp2; XZ136 ^= temp3; XZ137 ^= temp4; XZ138 ^= temp5; XZ139 ^= temp6; XZ140 ^= temp7; XZ141 ^= temp8; } else { XZ133 ^= XZ152; XZ134 ^= XZ153; XZ135 ^= XZ154; XZ136 ^= XZ155; XZ137 ^= XZ156; XZ138 ^= XZ157; XZ139 ^= XZ158; XZ140 ^= XZ159; }
+						else if (shifted_bufptr < 55) if (offset) { XZ134 ^= temp0; XZ135 ^= temp1; XZ136 ^= temp2; XZ137 ^= temp3; XZ138 ^= temp4; XZ139 ^= temp5; XZ140 ^= temp6; XZ141 ^= temp7; XZ142 ^= temp8; } else { XZ134 ^= XZ152; XZ135 ^= XZ153; XZ136 ^= XZ154; XZ137 ^= XZ155; XZ138 ^= XZ156; XZ139 ^= XZ157; XZ140 ^= XZ158; XZ141 ^= XZ159; }
+						else if (offset) { XZ135 ^= temp0; XZ136 ^= temp1; XZ137 ^= temp2; XZ138 ^= temp3; XZ139 ^= temp4; XZ140 ^= temp5; XZ141 ^= temp6; XZ142 ^= temp7; XZ143 ^= temp8; } else { XZ135 ^= XZ152; XZ136 ^= XZ153; XZ137 ^= XZ154; XZ138 ^= XZ155; XZ139 ^= XZ156; XZ140 ^= XZ157; XZ141 ^= XZ158; XZ142 ^= XZ159; }
+						else if (shifted_bufptr < 60) if (shifted_bufptr < 58) if (shifted_bufptr < 57) if (offset) { XZ136 ^= temp0; XZ137 ^= temp1; XZ138 ^= temp2; XZ139 ^= temp3; XZ140 ^= temp4; XZ141 ^= temp5; XZ142 ^= temp6; XZ143 ^= temp7; XZ144 ^= temp8; } else { XZ136 ^= XZ152; XZ137 ^= XZ153; XZ138 ^= XZ154; XZ139 ^= XZ155; XZ140 ^= XZ156; XZ141 ^= XZ157; XZ142 ^= XZ158; XZ143 ^= XZ159; }
+						else if (offset) { XZ137 ^= temp0; XZ138 ^= temp1; XZ139 ^= temp2; XZ140 ^= temp3; XZ141 ^= temp4; XZ142 ^= temp5; XZ143 ^= temp6; XZ144 ^= temp7; XZ145 ^= temp8; } else { XZ137 ^= XZ152; XZ138 ^= XZ153; XZ139 ^= XZ154; XZ140 ^= XZ155; XZ141 ^= XZ156; XZ142 ^= XZ157; XZ143 ^= XZ158; XZ144 ^= XZ159; }
+						else if (shifted_bufptr < 59) if (offset) { XZ138 ^= temp0; XZ139 ^= temp1; XZ140 ^= temp2; XZ141 ^= temp3; XZ142 ^= temp4; XZ143 ^= temp5; XZ144 ^= temp6; XZ145 ^= temp7; XZ146 ^= temp8; } else { XZ138 ^= XZ152; XZ139 ^= XZ153; XZ140 ^= XZ154; XZ141 ^= XZ155; XZ142 ^= XZ156; XZ143 ^= XZ157; XZ144 ^= XZ158; XZ145 ^= XZ159; }
+						else if (offset) { XZ139 ^= temp0; XZ140 ^= temp1; XZ141 ^= temp2; XZ142 ^= temp3; XZ143 ^= temp4; XZ144 ^= temp5; XZ145 ^= temp6; XZ146 ^= temp7; XZ147 ^= temp8; } else { XZ139 ^= XZ152; XZ140 ^= XZ153; XZ141 ^= XZ154; XZ142 ^= XZ155; XZ143 ^= XZ156; XZ144 ^= XZ157; XZ145 ^= XZ158; XZ146 ^= XZ159; }
+						else if (shifted_bufptr < 62) if (shifted_bufptr < 61) if (offset) { XZ140 ^= temp0; XZ141 ^= temp1; XZ142 ^= temp2; XZ143 ^= temp3; XZ144 ^= temp4; XZ145 ^= temp5; XZ146 ^= temp6; XZ147 ^= temp7; XZ148 ^= temp8; } else { XZ140 ^= XZ152; XZ141 ^= XZ153; XZ142 ^= XZ154; XZ143 ^= XZ155; XZ144 ^= XZ156; XZ145 ^= XZ157; XZ146 ^= XZ158; XZ147 ^= XZ159; }
+						else if (offset) { XZ141 ^= temp0; XZ142 ^= temp1; XZ143 ^= temp2; XZ144 ^= temp3; XZ145 ^= temp4; XZ146 ^= temp5; XZ147 ^= temp6; XZ148 ^= temp7; XZ149 ^= temp8; } else { XZ141 ^= XZ152; XZ142 ^= XZ153; XZ143 ^= XZ154; XZ144 ^= XZ155; XZ145 ^= XZ156; XZ146 ^= XZ157; XZ147 ^= XZ158; XZ148 ^= XZ159; }
+						else if (shifted_bufptr < 63) if (offset) { XZ142 ^= temp0; XZ143 ^= temp1; XZ144 ^= temp2; XZ145 ^= temp3; XZ146 ^= temp4; XZ147 ^= temp5; XZ148 ^= temp6; XZ149 ^= temp7; XZ150 ^= temp8; } else { XZ142 ^= XZ152; XZ143 ^= XZ153; XZ144 ^= XZ154; XZ145 ^= XZ155; XZ146 ^= XZ156; XZ147 ^= XZ157; XZ148 ^= XZ158; XZ149 ^= XZ159; }
+						else if (offset) { XZ143 ^= temp0; XZ144 ^= temp1; XZ145 ^= temp2; XZ146 ^= temp3; XZ147 ^= temp4; XZ148 ^= temp5; XZ149 ^= temp6; XZ150 ^= temp7; XZ151 ^= temp8; } else { XZ143 ^= XZ152; XZ144 ^= XZ153; XZ145 ^= XZ154; XZ146 ^= XZ155; XZ147 ^= XZ156; XZ148 ^= XZ157; XZ149 ^= XZ158; XZ150 ^= XZ159; }
+
+						if(bufptr < 32U) {
+	    					/* Head modified, 4-byte aligned copy to tail */
+								if (shifted_bufptr < 4) if (shifted_bufptr < 2) if (shifted_bufptr < 1) { XZ144 = XZ80; XZ145 = XZ81; XZ146 = XZ82; XZ147 = XZ83; XZ148 = XZ84; XZ149 = XZ85; XZ150 = XZ86; XZ151 = XZ87; }
+								else { XZ145 = XZ81; XZ146 = XZ82; XZ147 = XZ83; XZ148 = XZ84; XZ149 = XZ85; XZ150 = XZ86; XZ151 = XZ87; }
+								else if (shifted_bufptr < 3) { XZ146 = XZ82; XZ147 = XZ83; XZ148 = XZ84; XZ149 = XZ85; XZ150 = XZ86; XZ151 = XZ87; }
+								else { XZ147 = XZ83; XZ148 = XZ84; XZ149 = XZ85; XZ150 = XZ86; XZ151 = XZ87; }
+								else if (shifted_bufptr < 6) if (shifted_bufptr < 5) { XZ148 = XZ84; XZ149 = XZ85; XZ150 = XZ86; XZ151 = XZ87; }
+								else { XZ149 = XZ85; XZ150 = XZ86; XZ151 = XZ87; }
+								else if (shifted_bufptr < 7) { XZ150 = XZ86; XZ151 = XZ87; }
+								else { XZ151 = XZ87; }
+						} else if(bufptr > 224U) {
+    						/* Tail modified, 4-byte aligned copy to head */
+							// neoscrypt_copy4(80, 80 + 64, bufptr - 224U + (4U - offset));
+							if (shifted_bufptr < 60) if (shifted_bufptr < 58)                          { XZ80 = XZ144; XZ81 = XZ145; }
+							else if (shifted_bufptr < 59)                                              { XZ80 = XZ144; XZ81 = XZ145; XZ82 = XZ146; }
+							else                                                                       { XZ80 = XZ144; XZ81 = XZ145; XZ82 = XZ146; XZ83 = XZ147; }
+							else if (shifted_bufptr < 62) if (shifted_bufptr < 61)                     { XZ80 = XZ144; XZ81 = XZ145; XZ82 = XZ146; XZ83 = XZ147; XZ84 = XZ148; }
+							else                                                                       { XZ80 = XZ144; XZ81 = XZ145; XZ82 = XZ146; XZ83 = XZ147; XZ84 = XZ148; XZ85 = XZ149; }
+							else if (shifted_bufptr < 63)                                              { XZ80 = XZ144; XZ81 = XZ145; XZ82 = XZ146; XZ83 = XZ147; XZ84 = XZ148; XZ85 = XZ149; XZ86 = XZ150; }
+							else                                                                       { XZ80 = XZ144; XZ81 = XZ145; XZ82 = XZ146; XZ83 = XZ147; XZ84 = XZ148; XZ85 = XZ149; XZ86 = XZ150; XZ87 = XZ151; }
+						}
+				}
+
+				/* XOR into the password */
+				offset = bufptr & 0x03;
+				_offset = amd_bitalign(offset, offset, 29U); 
+				shifted_bufptr = bufptr >> 2;
+				if(mode) {
+						// neoscrypt_xor32_ua(0, 80 + (bufptr >> 2), offset);
+						if (shifted_bufptr < 32) if (shifted_bufptr < 16) if (shifted_bufptr < 8) if (shifted_bufptr < 4) if (shifted_bufptr < 2) if (shifted_bufptr < 1) { XZ0 ^= amd_bitalign(XZ81, XZ80, _offset); XZ1 ^= amd_bitalign(XZ82, XZ81, _offset); XZ2 ^= amd_bitalign(XZ83, XZ82, _offset); XZ3 ^= amd_bitalign(XZ84, XZ83, _offset); XZ4 ^= amd_bitalign(XZ85, XZ84, _offset); XZ5 ^= amd_bitalign(XZ86, XZ85, _offset); XZ6 ^= amd_bitalign(XZ87, XZ86, _offset); XZ7 ^= amd_bitalign(XZ88, XZ87, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ82, XZ81, _offset); XZ1 ^= amd_bitalign(XZ83, XZ82, _offset); XZ2 ^= amd_bitalign(XZ84, XZ83, _offset); XZ3 ^= amd_bitalign(XZ85, XZ84, _offset); XZ4 ^= amd_bitalign(XZ86, XZ85, _offset); XZ5 ^= amd_bitalign(XZ87, XZ86, _offset); XZ6 ^= amd_bitalign(XZ88, XZ87, _offset); XZ7 ^= amd_bitalign(XZ89, XZ88, _offset); }
+						else if (shifted_bufptr < 3) { XZ0 ^= amd_bitalign(XZ83, XZ82, _offset); XZ1 ^= amd_bitalign(XZ84, XZ83, _offset); XZ2 ^= amd_bitalign(XZ85, XZ84, _offset); XZ3 ^= amd_bitalign(XZ86, XZ85, _offset); XZ4 ^= amd_bitalign(XZ87, XZ86, _offset); XZ5 ^= amd_bitalign(XZ88, XZ87, _offset); XZ6 ^= amd_bitalign(XZ89, XZ88, _offset); XZ7 ^= amd_bitalign(XZ90, XZ89, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ84, XZ83, _offset); XZ1 ^= amd_bitalign(XZ85, XZ84, _offset); XZ2 ^= amd_bitalign(XZ86, XZ85, _offset); XZ3 ^= amd_bitalign(XZ87, XZ86, _offset); XZ4 ^= amd_bitalign(XZ88, XZ87, _offset); XZ5 ^= amd_bitalign(XZ89, XZ88, _offset); XZ6 ^= amd_bitalign(XZ90, XZ89, _offset); XZ7 ^= amd_bitalign(XZ91, XZ90, _offset); }
+						else if (shifted_bufptr < 6) if (shifted_bufptr < 5) { XZ0 ^= amd_bitalign(XZ85, XZ84, _offset); XZ1 ^= amd_bitalign(XZ86, XZ85, _offset); XZ2 ^= amd_bitalign(XZ87, XZ86, _offset); XZ3 ^= amd_bitalign(XZ88, XZ87, _offset); XZ4 ^= amd_bitalign(XZ89, XZ88, _offset); XZ5 ^= amd_bitalign(XZ90, XZ89, _offset); XZ6 ^= amd_bitalign(XZ91, XZ90, _offset); XZ7 ^= amd_bitalign(XZ92, XZ91, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ86, XZ85, _offset); XZ1 ^= amd_bitalign(XZ87, XZ86, _offset); XZ2 ^= amd_bitalign(XZ88, XZ87, _offset); XZ3 ^= amd_bitalign(XZ89, XZ88, _offset); XZ4 ^= amd_bitalign(XZ90, XZ89, _offset); XZ5 ^= amd_bitalign(XZ91, XZ90, _offset); XZ6 ^= amd_bitalign(XZ92, XZ91, _offset); XZ7 ^= amd_bitalign(XZ93, XZ92, _offset); }
+						else if (shifted_bufptr < 7) { XZ0 ^= amd_bitalign(XZ87, XZ86, _offset); XZ1 ^= amd_bitalign(XZ88, XZ87, _offset); XZ2 ^= amd_bitalign(XZ89, XZ88, _offset); XZ3 ^= amd_bitalign(XZ90, XZ89, _offset); XZ4 ^= amd_bitalign(XZ91, XZ90, _offset); XZ5 ^= amd_bitalign(XZ92, XZ91, _offset); XZ6 ^= amd_bitalign(XZ93, XZ92, _offset); XZ7 ^= amd_bitalign(XZ94, XZ93, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ88, XZ87, _offset); XZ1 ^= amd_bitalign(XZ89, XZ88, _offset); XZ2 ^= amd_bitalign(XZ90, XZ89, _offset); XZ3 ^= amd_bitalign(XZ91, XZ90, _offset); XZ4 ^= amd_bitalign(XZ92, XZ91, _offset); XZ5 ^= amd_bitalign(XZ93, XZ92, _offset); XZ6 ^= amd_bitalign(XZ94, XZ93, _offset); XZ7 ^= amd_bitalign(XZ95, XZ94, _offset); }
+						else if (shifted_bufptr < 12) if (shifted_bufptr < 10) if (shifted_bufptr < 9) { XZ0 ^= amd_bitalign(XZ89, XZ88, _offset); XZ1 ^= amd_bitalign(XZ90, XZ89, _offset); XZ2 ^= amd_bitalign(XZ91, XZ90, _offset); XZ3 ^= amd_bitalign(XZ92, XZ91, _offset); XZ4 ^= amd_bitalign(XZ93, XZ92, _offset); XZ5 ^= amd_bitalign(XZ94, XZ93, _offset); XZ6 ^= amd_bitalign(XZ95, XZ94, _offset); XZ7 ^= amd_bitalign(XZ96, XZ95, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ90, XZ89, _offset); XZ1 ^= amd_bitalign(XZ91, XZ90, _offset); XZ2 ^= amd_bitalign(XZ92, XZ91, _offset); XZ3 ^= amd_bitalign(XZ93, XZ92, _offset); XZ4 ^= amd_bitalign(XZ94, XZ93, _offset); XZ5 ^= amd_bitalign(XZ95, XZ94, _offset); XZ6 ^= amd_bitalign(XZ96, XZ95, _offset); XZ7 ^= amd_bitalign(XZ97, XZ96, _offset); }
+						else if (shifted_bufptr < 11) { XZ0 ^= amd_bitalign(XZ91, XZ90, _offset); XZ1 ^= amd_bitalign(XZ92, XZ91, _offset); XZ2 ^= amd_bitalign(XZ93, XZ92, _offset); XZ3 ^= amd_bitalign(XZ94, XZ93, _offset); XZ4 ^= amd_bitalign(XZ95, XZ94, _offset); XZ5 ^= amd_bitalign(XZ96, XZ95, _offset); XZ6 ^= amd_bitalign(XZ97, XZ96, _offset); XZ7 ^= amd_bitalign(XZ98, XZ97, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ92, XZ91, _offset); XZ1 ^= amd_bitalign(XZ93, XZ92, _offset); XZ2 ^= amd_bitalign(XZ94, XZ93, _offset); XZ3 ^= amd_bitalign(XZ95, XZ94, _offset); XZ4 ^= amd_bitalign(XZ96, XZ95, _offset); XZ5 ^= amd_bitalign(XZ97, XZ96, _offset); XZ6 ^= amd_bitalign(XZ98, XZ97, _offset); XZ7 ^= amd_bitalign(XZ99, XZ98, _offset); }
+						else if (shifted_bufptr < 14) if (shifted_bufptr < 13) { XZ0 ^= amd_bitalign(XZ93, XZ92, _offset); XZ1 ^= amd_bitalign(XZ94, XZ93, _offset); XZ2 ^= amd_bitalign(XZ95, XZ94, _offset); XZ3 ^= amd_bitalign(XZ96, XZ95, _offset); XZ4 ^= amd_bitalign(XZ97, XZ96, _offset); XZ5 ^= amd_bitalign(XZ98, XZ97, _offset); XZ6 ^= amd_bitalign(XZ99, XZ98, _offset); XZ7 ^= amd_bitalign(XZ100, XZ99, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ94, XZ93, _offset); XZ1 ^= amd_bitalign(XZ95, XZ94, _offset); XZ2 ^= amd_bitalign(XZ96, XZ95, _offset); XZ3 ^= amd_bitalign(XZ97, XZ96, _offset); XZ4 ^= amd_bitalign(XZ98, XZ97, _offset); XZ5 ^= amd_bitalign(XZ99, XZ98, _offset); XZ6 ^= amd_bitalign(XZ100, XZ99, _offset); XZ7 ^= amd_bitalign(XZ101, XZ100, _offset); }
+						else if (shifted_bufptr < 15) { XZ0 ^= amd_bitalign(XZ95, XZ94, _offset); XZ1 ^= amd_bitalign(XZ96, XZ95, _offset); XZ2 ^= amd_bitalign(XZ97, XZ96, _offset); XZ3 ^= amd_bitalign(XZ98, XZ97, _offset); XZ4 ^= amd_bitalign(XZ99, XZ98, _offset); XZ5 ^= amd_bitalign(XZ100, XZ99, _offset); XZ6 ^= amd_bitalign(XZ101, XZ100, _offset); XZ7 ^= amd_bitalign(XZ102, XZ101, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ96, XZ95, _offset); XZ1 ^= amd_bitalign(XZ97, XZ96, _offset); XZ2 ^= amd_bitalign(XZ98, XZ97, _offset); XZ3 ^= amd_bitalign(XZ99, XZ98, _offset); XZ4 ^= amd_bitalign(XZ100, XZ99, _offset); XZ5 ^= amd_bitalign(XZ101, XZ100, _offset); XZ6 ^= amd_bitalign(XZ102, XZ101, _offset); XZ7 ^= amd_bitalign(XZ103, XZ102, _offset); }
+						else if (shifted_bufptr < 24) if (shifted_bufptr < 20) if (shifted_bufptr < 18) if (shifted_bufptr < 17) { XZ0 ^= amd_bitalign(XZ97, XZ96, _offset); XZ1 ^= amd_bitalign(XZ98, XZ97, _offset); XZ2 ^= amd_bitalign(XZ99, XZ98, _offset); XZ3 ^= amd_bitalign(XZ100, XZ99, _offset); XZ4 ^= amd_bitalign(XZ101, XZ100, _offset); XZ5 ^= amd_bitalign(XZ102, XZ101, _offset); XZ6 ^= amd_bitalign(XZ103, XZ102, _offset); XZ7 ^= amd_bitalign(XZ104, XZ103, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ98, XZ97, _offset); XZ1 ^= amd_bitalign(XZ99, XZ98, _offset); XZ2 ^= amd_bitalign(XZ100, XZ99, _offset); XZ3 ^= amd_bitalign(XZ101, XZ100, _offset); XZ4 ^= amd_bitalign(XZ102, XZ101, _offset); XZ5 ^= amd_bitalign(XZ103, XZ102, _offset); XZ6 ^= amd_bitalign(XZ104, XZ103, _offset); XZ7 ^= amd_bitalign(XZ105, XZ104, _offset); }
+						else if (shifted_bufptr < 19) { XZ0 ^= amd_bitalign(XZ99, XZ98, _offset); XZ1 ^= amd_bitalign(XZ100, XZ99, _offset); XZ2 ^= amd_bitalign(XZ101, XZ100, _offset); XZ3 ^= amd_bitalign(XZ102, XZ101, _offset); XZ4 ^= amd_bitalign(XZ103, XZ102, _offset); XZ5 ^= amd_bitalign(XZ104, XZ103, _offset); XZ6 ^= amd_bitalign(XZ105, XZ104, _offset); XZ7 ^= amd_bitalign(XZ106, XZ105, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ100, XZ99, _offset); XZ1 ^= amd_bitalign(XZ101, XZ100, _offset); XZ2 ^= amd_bitalign(XZ102, XZ101, _offset); XZ3 ^= amd_bitalign(XZ103, XZ102, _offset); XZ4 ^= amd_bitalign(XZ104, XZ103, _offset); XZ5 ^= amd_bitalign(XZ105, XZ104, _offset); XZ6 ^= amd_bitalign(XZ106, XZ105, _offset); XZ7 ^= amd_bitalign(XZ107, XZ106, _offset); }
+						else if (shifted_bufptr < 22) if (shifted_bufptr < 21) { XZ0 ^= amd_bitalign(XZ101, XZ100, _offset); XZ1 ^= amd_bitalign(XZ102, XZ101, _offset); XZ2 ^= amd_bitalign(XZ103, XZ102, _offset); XZ3 ^= amd_bitalign(XZ104, XZ103, _offset); XZ4 ^= amd_bitalign(XZ105, XZ104, _offset); XZ5 ^= amd_bitalign(XZ106, XZ105, _offset); XZ6 ^= amd_bitalign(XZ107, XZ106, _offset); XZ7 ^= amd_bitalign(XZ108, XZ107, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ102, XZ101, _offset); XZ1 ^= amd_bitalign(XZ103, XZ102, _offset); XZ2 ^= amd_bitalign(XZ104, XZ103, _offset); XZ3 ^= amd_bitalign(XZ105, XZ104, _offset); XZ4 ^= amd_bitalign(XZ106, XZ105, _offset); XZ5 ^= amd_bitalign(XZ107, XZ106, _offset); XZ6 ^= amd_bitalign(XZ108, XZ107, _offset); XZ7 ^= amd_bitalign(XZ109, XZ108, _offset); }
+						else if (shifted_bufptr < 23) { XZ0 ^= amd_bitalign(XZ103, XZ102, _offset); XZ1 ^= amd_bitalign(XZ104, XZ103, _offset); XZ2 ^= amd_bitalign(XZ105, XZ104, _offset); XZ3 ^= amd_bitalign(XZ106, XZ105, _offset); XZ4 ^= amd_bitalign(XZ107, XZ106, _offset); XZ5 ^= amd_bitalign(XZ108, XZ107, _offset); XZ6 ^= amd_bitalign(XZ109, XZ108, _offset); XZ7 ^= amd_bitalign(XZ110, XZ109, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ104, XZ103, _offset); XZ1 ^= amd_bitalign(XZ105, XZ104, _offset); XZ2 ^= amd_bitalign(XZ106, XZ105, _offset); XZ3 ^= amd_bitalign(XZ107, XZ106, _offset); XZ4 ^= amd_bitalign(XZ108, XZ107, _offset); XZ5 ^= amd_bitalign(XZ109, XZ108, _offset); XZ6 ^= amd_bitalign(XZ110, XZ109, _offset); XZ7 ^= amd_bitalign(XZ111, XZ110, _offset); }
+						else if (shifted_bufptr < 28) if (shifted_bufptr < 26) if (shifted_bufptr < 25) { XZ0 ^= amd_bitalign(XZ105, XZ104, _offset); XZ1 ^= amd_bitalign(XZ106, XZ105, _offset); XZ2 ^= amd_bitalign(XZ107, XZ106, _offset); XZ3 ^= amd_bitalign(XZ108, XZ107, _offset); XZ4 ^= amd_bitalign(XZ109, XZ108, _offset); XZ5 ^= amd_bitalign(XZ110, XZ109, _offset); XZ6 ^= amd_bitalign(XZ111, XZ110, _offset); XZ7 ^= amd_bitalign(XZ112, XZ111, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ106, XZ105, _offset); XZ1 ^= amd_bitalign(XZ107, XZ106, _offset); XZ2 ^= amd_bitalign(XZ108, XZ107, _offset); XZ3 ^= amd_bitalign(XZ109, XZ108, _offset); XZ4 ^= amd_bitalign(XZ110, XZ109, _offset); XZ5 ^= amd_bitalign(XZ111, XZ110, _offset); XZ6 ^= amd_bitalign(XZ112, XZ111, _offset); XZ7 ^= amd_bitalign(XZ113, XZ112, _offset); }
+						else if (shifted_bufptr < 27) { XZ0 ^= amd_bitalign(XZ107, XZ106, _offset); XZ1 ^= amd_bitalign(XZ108, XZ107, _offset); XZ2 ^= amd_bitalign(XZ109, XZ108, _offset); XZ3 ^= amd_bitalign(XZ110, XZ109, _offset); XZ4 ^= amd_bitalign(XZ111, XZ110, _offset); XZ5 ^= amd_bitalign(XZ112, XZ111, _offset); XZ6 ^= amd_bitalign(XZ113, XZ112, _offset); XZ7 ^= amd_bitalign(XZ114, XZ113, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ108, XZ107, _offset); XZ1 ^= amd_bitalign(XZ109, XZ108, _offset); XZ2 ^= amd_bitalign(XZ110, XZ109, _offset); XZ3 ^= amd_bitalign(XZ111, XZ110, _offset); XZ4 ^= amd_bitalign(XZ112, XZ111, _offset); XZ5 ^= amd_bitalign(XZ113, XZ112, _offset); XZ6 ^= amd_bitalign(XZ114, XZ113, _offset); XZ7 ^= amd_bitalign(XZ115, XZ114, _offset); }
+						else if (shifted_bufptr < 30) if (shifted_bufptr < 29) { XZ0 ^= amd_bitalign(XZ109, XZ108, _offset); XZ1 ^= amd_bitalign(XZ110, XZ109, _offset); XZ2 ^= amd_bitalign(XZ111, XZ110, _offset); XZ3 ^= amd_bitalign(XZ112, XZ111, _offset); XZ4 ^= amd_bitalign(XZ113, XZ112, _offset); XZ5 ^= amd_bitalign(XZ114, XZ113, _offset); XZ6 ^= amd_bitalign(XZ115, XZ114, _offset); XZ7 ^= amd_bitalign(XZ116, XZ115, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ110, XZ109, _offset); XZ1 ^= amd_bitalign(XZ111, XZ110, _offset); XZ2 ^= amd_bitalign(XZ112, XZ111, _offset); XZ3 ^= amd_bitalign(XZ113, XZ112, _offset); XZ4 ^= amd_bitalign(XZ114, XZ113, _offset); XZ5 ^= amd_bitalign(XZ115, XZ114, _offset); XZ6 ^= amd_bitalign(XZ116, XZ115, _offset); XZ7 ^= amd_bitalign(XZ117, XZ116, _offset); }
+						else if (shifted_bufptr < 31) { XZ0 ^= amd_bitalign(XZ111, XZ110, _offset); XZ1 ^= amd_bitalign(XZ112, XZ111, _offset); XZ2 ^= amd_bitalign(XZ113, XZ112, _offset); XZ3 ^= amd_bitalign(XZ114, XZ113, _offset); XZ4 ^= amd_bitalign(XZ115, XZ114, _offset); XZ5 ^= amd_bitalign(XZ116, XZ115, _offset); XZ6 ^= amd_bitalign(XZ117, XZ116, _offset); XZ7 ^= amd_bitalign(XZ118, XZ117, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ112, XZ111, _offset); XZ1 ^= amd_bitalign(XZ113, XZ112, _offset); XZ2 ^= amd_bitalign(XZ114, XZ113, _offset); XZ3 ^= amd_bitalign(XZ115, XZ114, _offset); XZ4 ^= amd_bitalign(XZ116, XZ115, _offset); XZ5 ^= amd_bitalign(XZ117, XZ116, _offset); XZ6 ^= amd_bitalign(XZ118, XZ117, _offset); XZ7 ^= amd_bitalign(XZ119, XZ118, _offset); }
+						else if (shifted_bufptr < 48) if (shifted_bufptr < 40) if (shifted_bufptr < 36) if (shifted_bufptr < 34) if (shifted_bufptr < 33) { XZ0 ^= amd_bitalign(XZ113, XZ112, _offset); XZ1 ^= amd_bitalign(XZ114, XZ113, _offset); XZ2 ^= amd_bitalign(XZ115, XZ114, _offset); XZ3 ^= amd_bitalign(XZ116, XZ115, _offset); XZ4 ^= amd_bitalign(XZ117, XZ116, _offset); XZ5 ^= amd_bitalign(XZ118, XZ117, _offset); XZ6 ^= amd_bitalign(XZ119, XZ118, _offset); XZ7 ^= amd_bitalign(XZ120, XZ119, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ114, XZ113, _offset); XZ1 ^= amd_bitalign(XZ115, XZ114, _offset); XZ2 ^= amd_bitalign(XZ116, XZ115, _offset); XZ3 ^= amd_bitalign(XZ117, XZ116, _offset); XZ4 ^= amd_bitalign(XZ118, XZ117, _offset); XZ5 ^= amd_bitalign(XZ119, XZ118, _offset); XZ6 ^= amd_bitalign(XZ120, XZ119, _offset); XZ7 ^= amd_bitalign(XZ121, XZ120, _offset); }
+						else if (shifted_bufptr < 35) { XZ0 ^= amd_bitalign(XZ115, XZ114, _offset); XZ1 ^= amd_bitalign(XZ116, XZ115, _offset); XZ2 ^= amd_bitalign(XZ117, XZ116, _offset); XZ3 ^= amd_bitalign(XZ118, XZ117, _offset); XZ4 ^= amd_bitalign(XZ119, XZ118, _offset); XZ5 ^= amd_bitalign(XZ120, XZ119, _offset); XZ6 ^= amd_bitalign(XZ121, XZ120, _offset); XZ7 ^= amd_bitalign(XZ122, XZ121, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ116, XZ115, _offset); XZ1 ^= amd_bitalign(XZ117, XZ116, _offset); XZ2 ^= amd_bitalign(XZ118, XZ117, _offset); XZ3 ^= amd_bitalign(XZ119, XZ118, _offset); XZ4 ^= amd_bitalign(XZ120, XZ119, _offset); XZ5 ^= amd_bitalign(XZ121, XZ120, _offset); XZ6 ^= amd_bitalign(XZ122, XZ121, _offset); XZ7 ^= amd_bitalign(XZ123, XZ122, _offset); }
+						else if (shifted_bufptr < 38) if (shifted_bufptr < 37) { XZ0 ^= amd_bitalign(XZ117, XZ116, _offset); XZ1 ^= amd_bitalign(XZ118, XZ117, _offset); XZ2 ^= amd_bitalign(XZ119, XZ118, _offset); XZ3 ^= amd_bitalign(XZ120, XZ119, _offset); XZ4 ^= amd_bitalign(XZ121, XZ120, _offset); XZ5 ^= amd_bitalign(XZ122, XZ121, _offset); XZ6 ^= amd_bitalign(XZ123, XZ122, _offset); XZ7 ^= amd_bitalign(XZ124, XZ123, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ118, XZ117, _offset); XZ1 ^= amd_bitalign(XZ119, XZ118, _offset); XZ2 ^= amd_bitalign(XZ120, XZ119, _offset); XZ3 ^= amd_bitalign(XZ121, XZ120, _offset); XZ4 ^= amd_bitalign(XZ122, XZ121, _offset); XZ5 ^= amd_bitalign(XZ123, XZ122, _offset); XZ6 ^= amd_bitalign(XZ124, XZ123, _offset); XZ7 ^= amd_bitalign(XZ125, XZ124, _offset); }
+						else if (shifted_bufptr < 39) { XZ0 ^= amd_bitalign(XZ119, XZ118, _offset); XZ1 ^= amd_bitalign(XZ120, XZ119, _offset); XZ2 ^= amd_bitalign(XZ121, XZ120, _offset); XZ3 ^= amd_bitalign(XZ122, XZ121, _offset); XZ4 ^= amd_bitalign(XZ123, XZ122, _offset); XZ5 ^= amd_bitalign(XZ124, XZ123, _offset); XZ6 ^= amd_bitalign(XZ125, XZ124, _offset); XZ7 ^= amd_bitalign(XZ126, XZ125, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ120, XZ119, _offset); XZ1 ^= amd_bitalign(XZ121, XZ120, _offset); XZ2 ^= amd_bitalign(XZ122, XZ121, _offset); XZ3 ^= amd_bitalign(XZ123, XZ122, _offset); XZ4 ^= amd_bitalign(XZ124, XZ123, _offset); XZ5 ^= amd_bitalign(XZ125, XZ124, _offset); XZ6 ^= amd_bitalign(XZ126, XZ125, _offset); XZ7 ^= amd_bitalign(XZ127, XZ126, _offset); }
+						else if (shifted_bufptr < 44) if (shifted_bufptr < 42) if (shifted_bufptr < 41) { XZ0 ^= amd_bitalign(XZ121, XZ120, _offset); XZ1 ^= amd_bitalign(XZ122, XZ121, _offset); XZ2 ^= amd_bitalign(XZ123, XZ122, _offset); XZ3 ^= amd_bitalign(XZ124, XZ123, _offset); XZ4 ^= amd_bitalign(XZ125, XZ124, _offset); XZ5 ^= amd_bitalign(XZ126, XZ125, _offset); XZ6 ^= amd_bitalign(XZ127, XZ126, _offset); XZ7 ^= amd_bitalign(XZ128, XZ127, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ122, XZ121, _offset); XZ1 ^= amd_bitalign(XZ123, XZ122, _offset); XZ2 ^= amd_bitalign(XZ124, XZ123, _offset); XZ3 ^= amd_bitalign(XZ125, XZ124, _offset); XZ4 ^= amd_bitalign(XZ126, XZ125, _offset); XZ5 ^= amd_bitalign(XZ127, XZ126, _offset); XZ6 ^= amd_bitalign(XZ128, XZ127, _offset); XZ7 ^= amd_bitalign(XZ129, XZ128, _offset); }
+						else if (shifted_bufptr < 43) { XZ0 ^= amd_bitalign(XZ123, XZ122, _offset); XZ1 ^= amd_bitalign(XZ124, XZ123, _offset); XZ2 ^= amd_bitalign(XZ125, XZ124, _offset); XZ3 ^= amd_bitalign(XZ126, XZ125, _offset); XZ4 ^= amd_bitalign(XZ127, XZ126, _offset); XZ5 ^= amd_bitalign(XZ128, XZ127, _offset); XZ6 ^= amd_bitalign(XZ129, XZ128, _offset); XZ7 ^= amd_bitalign(XZ130, XZ129, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ124, XZ123, _offset); XZ1 ^= amd_bitalign(XZ125, XZ124, _offset); XZ2 ^= amd_bitalign(XZ126, XZ125, _offset); XZ3 ^= amd_bitalign(XZ127, XZ126, _offset); XZ4 ^= amd_bitalign(XZ128, XZ127, _offset); XZ5 ^= amd_bitalign(XZ129, XZ128, _offset); XZ6 ^= amd_bitalign(XZ130, XZ129, _offset); XZ7 ^= amd_bitalign(XZ131, XZ130, _offset); }
+						else if (shifted_bufptr < 46) if (shifted_bufptr < 45) { XZ0 ^= amd_bitalign(XZ125, XZ124, _offset); XZ1 ^= amd_bitalign(XZ126, XZ125, _offset); XZ2 ^= amd_bitalign(XZ127, XZ126, _offset); XZ3 ^= amd_bitalign(XZ128, XZ127, _offset); XZ4 ^= amd_bitalign(XZ129, XZ128, _offset); XZ5 ^= amd_bitalign(XZ130, XZ129, _offset); XZ6 ^= amd_bitalign(XZ131, XZ130, _offset); XZ7 ^= amd_bitalign(XZ132, XZ131, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ126, XZ125, _offset); XZ1 ^= amd_bitalign(XZ127, XZ126, _offset); XZ2 ^= amd_bitalign(XZ128, XZ127, _offset); XZ3 ^= amd_bitalign(XZ129, XZ128, _offset); XZ4 ^= amd_bitalign(XZ130, XZ129, _offset); XZ5 ^= amd_bitalign(XZ131, XZ130, _offset); XZ6 ^= amd_bitalign(XZ132, XZ131, _offset); XZ7 ^= amd_bitalign(XZ133, XZ132, _offset); }
+						else if (shifted_bufptr < 47) { XZ0 ^= amd_bitalign(XZ127, XZ126, _offset); XZ1 ^= amd_bitalign(XZ128, XZ127, _offset); XZ2 ^= amd_bitalign(XZ129, XZ128, _offset); XZ3 ^= amd_bitalign(XZ130, XZ129, _offset); XZ4 ^= amd_bitalign(XZ131, XZ130, _offset); XZ5 ^= amd_bitalign(XZ132, XZ131, _offset); XZ6 ^= amd_bitalign(XZ133, XZ132, _offset); XZ7 ^= amd_bitalign(XZ134, XZ133, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ128, XZ127, _offset); XZ1 ^= amd_bitalign(XZ129, XZ128, _offset); XZ2 ^= amd_bitalign(XZ130, XZ129, _offset); XZ3 ^= amd_bitalign(XZ131, XZ130, _offset); XZ4 ^= amd_bitalign(XZ132, XZ131, _offset); XZ5 ^= amd_bitalign(XZ133, XZ132, _offset); XZ6 ^= amd_bitalign(XZ134, XZ133, _offset); XZ7 ^= amd_bitalign(XZ135, XZ134, _offset); }
+						else if (shifted_bufptr < 56) if (shifted_bufptr < 52) if (shifted_bufptr < 50) if (shifted_bufptr < 49) { XZ0 ^= amd_bitalign(XZ129, XZ128, _offset); XZ1 ^= amd_bitalign(XZ130, XZ129, _offset); XZ2 ^= amd_bitalign(XZ131, XZ130, _offset); XZ3 ^= amd_bitalign(XZ132, XZ131, _offset); XZ4 ^= amd_bitalign(XZ133, XZ132, _offset); XZ5 ^= amd_bitalign(XZ134, XZ133, _offset); XZ6 ^= amd_bitalign(XZ135, XZ134, _offset); XZ7 ^= amd_bitalign(XZ136, XZ135, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ130, XZ129, _offset); XZ1 ^= amd_bitalign(XZ131, XZ130, _offset); XZ2 ^= amd_bitalign(XZ132, XZ131, _offset); XZ3 ^= amd_bitalign(XZ133, XZ132, _offset); XZ4 ^= amd_bitalign(XZ134, XZ133, _offset); XZ5 ^= amd_bitalign(XZ135, XZ134, _offset); XZ6 ^= amd_bitalign(XZ136, XZ135, _offset); XZ7 ^= amd_bitalign(XZ137, XZ136, _offset); }
+						else if (shifted_bufptr < 51) { XZ0 ^= amd_bitalign(XZ131, XZ130, _offset); XZ1 ^= amd_bitalign(XZ132, XZ131, _offset); XZ2 ^= amd_bitalign(XZ133, XZ132, _offset); XZ3 ^= amd_bitalign(XZ134, XZ133, _offset); XZ4 ^= amd_bitalign(XZ135, XZ134, _offset); XZ5 ^= amd_bitalign(XZ136, XZ135, _offset); XZ6 ^= amd_bitalign(XZ137, XZ136, _offset); XZ7 ^= amd_bitalign(XZ138, XZ137, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ132, XZ131, _offset); XZ1 ^= amd_bitalign(XZ133, XZ132, _offset); XZ2 ^= amd_bitalign(XZ134, XZ133, _offset); XZ3 ^= amd_bitalign(XZ135, XZ134, _offset); XZ4 ^= amd_bitalign(XZ136, XZ135, _offset); XZ5 ^= amd_bitalign(XZ137, XZ136, _offset); XZ6 ^= amd_bitalign(XZ138, XZ137, _offset); XZ7 ^= amd_bitalign(XZ139, XZ138, _offset); }
+						else if (shifted_bufptr < 54) if (shifted_bufptr < 53) { XZ0 ^= amd_bitalign(XZ133, XZ132, _offset); XZ1 ^= amd_bitalign(XZ134, XZ133, _offset); XZ2 ^= amd_bitalign(XZ135, XZ134, _offset); XZ3 ^= amd_bitalign(XZ136, XZ135, _offset); XZ4 ^= amd_bitalign(XZ137, XZ136, _offset); XZ5 ^= amd_bitalign(XZ138, XZ137, _offset); XZ6 ^= amd_bitalign(XZ139, XZ138, _offset); XZ7 ^= amd_bitalign(XZ140, XZ139, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ134, XZ133, _offset); XZ1 ^= amd_bitalign(XZ135, XZ134, _offset); XZ2 ^= amd_bitalign(XZ136, XZ135, _offset); XZ3 ^= amd_bitalign(XZ137, XZ136, _offset); XZ4 ^= amd_bitalign(XZ138, XZ137, _offset); XZ5 ^= amd_bitalign(XZ139, XZ138, _offset); XZ6 ^= amd_bitalign(XZ140, XZ139, _offset); XZ7 ^= amd_bitalign(XZ141, XZ140, _offset); }
+						else if (shifted_bufptr < 55) { XZ0 ^= amd_bitalign(XZ135, XZ134, _offset); XZ1 ^= amd_bitalign(XZ136, XZ135, _offset); XZ2 ^= amd_bitalign(XZ137, XZ136, _offset); XZ3 ^= amd_bitalign(XZ138, XZ137, _offset); XZ4 ^= amd_bitalign(XZ139, XZ138, _offset); XZ5 ^= amd_bitalign(XZ140, XZ139, _offset); XZ6 ^= amd_bitalign(XZ141, XZ140, _offset); XZ7 ^= amd_bitalign(XZ142, XZ141, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ136, XZ135, _offset); XZ1 ^= amd_bitalign(XZ137, XZ136, _offset); XZ2 ^= amd_bitalign(XZ138, XZ137, _offset); XZ3 ^= amd_bitalign(XZ139, XZ138, _offset); XZ4 ^= amd_bitalign(XZ140, XZ139, _offset); XZ5 ^= amd_bitalign(XZ141, XZ140, _offset); XZ6 ^= amd_bitalign(XZ142, XZ141, _offset); XZ7 ^= amd_bitalign(XZ143, XZ142, _offset); }
+						else if (shifted_bufptr < 60) if (shifted_bufptr < 58) if (shifted_bufptr < 57) { XZ0 ^= amd_bitalign(XZ137, XZ136, _offset); XZ1 ^= amd_bitalign(XZ138, XZ137, _offset); XZ2 ^= amd_bitalign(XZ139, XZ138, _offset); XZ3 ^= amd_bitalign(XZ140, XZ139, _offset); XZ4 ^= amd_bitalign(XZ141, XZ140, _offset); XZ5 ^= amd_bitalign(XZ142, XZ141, _offset); XZ6 ^= amd_bitalign(XZ143, XZ142, _offset); XZ7 ^= amd_bitalign(XZ144, XZ143, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ138, XZ137, _offset); XZ1 ^= amd_bitalign(XZ139, XZ138, _offset); XZ2 ^= amd_bitalign(XZ140, XZ139, _offset); XZ3 ^= amd_bitalign(XZ141, XZ140, _offset); XZ4 ^= amd_bitalign(XZ142, XZ141, _offset); XZ5 ^= amd_bitalign(XZ143, XZ142, _offset); XZ6 ^= amd_bitalign(XZ144, XZ143, _offset); XZ7 ^= amd_bitalign(XZ145, XZ144, _offset); }
+						else if (shifted_bufptr < 59) { XZ0 ^= amd_bitalign(XZ139, XZ138, _offset); XZ1 ^= amd_bitalign(XZ140, XZ139, _offset); XZ2 ^= amd_bitalign(XZ141, XZ140, _offset); XZ3 ^= amd_bitalign(XZ142, XZ141, _offset); XZ4 ^= amd_bitalign(XZ143, XZ142, _offset); XZ5 ^= amd_bitalign(XZ144, XZ143, _offset); XZ6 ^= amd_bitalign(XZ145, XZ144, _offset); XZ7 ^= amd_bitalign(XZ146, XZ145, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ140, XZ139, _offset); XZ1 ^= amd_bitalign(XZ141, XZ140, _offset); XZ2 ^= amd_bitalign(XZ142, XZ141, _offset); XZ3 ^= amd_bitalign(XZ143, XZ142, _offset); XZ4 ^= amd_bitalign(XZ144, XZ143, _offset); XZ5 ^= amd_bitalign(XZ145, XZ144, _offset); XZ6 ^= amd_bitalign(XZ146, XZ145, _offset); XZ7 ^= amd_bitalign(XZ147, XZ146, _offset); }
+						else if (shifted_bufptr < 62) if (shifted_bufptr < 61) { XZ0 ^= amd_bitalign(XZ141, XZ140, _offset); XZ1 ^= amd_bitalign(XZ142, XZ141, _offset); XZ2 ^= amd_bitalign(XZ143, XZ142, _offset); XZ3 ^= amd_bitalign(XZ144, XZ143, _offset); XZ4 ^= amd_bitalign(XZ145, XZ144, _offset); XZ5 ^= amd_bitalign(XZ146, XZ145, _offset); XZ6 ^= amd_bitalign(XZ147, XZ146, _offset); XZ7 ^= amd_bitalign(XZ148, XZ147, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ142, XZ141, _offset); XZ1 ^= amd_bitalign(XZ143, XZ142, _offset); XZ2 ^= amd_bitalign(XZ144, XZ143, _offset); XZ3 ^= amd_bitalign(XZ145, XZ144, _offset); XZ4 ^= amd_bitalign(XZ146, XZ145, _offset); XZ5 ^= amd_bitalign(XZ147, XZ146, _offset); XZ6 ^= amd_bitalign(XZ148, XZ147, _offset); XZ7 ^= amd_bitalign(XZ149, XZ148, _offset); }
+						else if (shifted_bufptr < 63) { XZ0 ^= amd_bitalign(XZ143, XZ142, _offset); XZ1 ^= amd_bitalign(XZ144, XZ143, _offset); XZ2 ^= amd_bitalign(XZ145, XZ144, _offset); XZ3 ^= amd_bitalign(XZ146, XZ145, _offset); XZ4 ^= amd_bitalign(XZ147, XZ146, _offset); XZ5 ^= amd_bitalign(XZ148, XZ147, _offset); XZ6 ^= amd_bitalign(XZ149, XZ148, _offset); XZ7 ^= amd_bitalign(XZ150, XZ149, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ144, XZ143, _offset); XZ1 ^= amd_bitalign(XZ145, XZ144, _offset); XZ2 ^= amd_bitalign(XZ146, XZ145, _offset); XZ3 ^= amd_bitalign(XZ147, XZ146, _offset); XZ4 ^= amd_bitalign(XZ148, XZ147, _offset); XZ5 ^= amd_bitalign(XZ149, XZ148, _offset); XZ6 ^= amd_bitalign(XZ150, XZ149, _offset); XZ7 ^= amd_bitalign(XZ151, XZ150, _offset); }
+				} else {
+						//i = (256 - bufptr + 31) >> 5;
+						//neoscrypt_xor32_ua_it(0, 80 + (bufptr >> 2), offset, i);
+						//neoscrypt_xor32_ua_it(i << 3, 80 + ((bufptr & 0x1fU) >> 2), offset, 8U - i);
+						if (shifted_bufptr < 32) if (shifted_bufptr < 16) if (shifted_bufptr < 8) if (shifted_bufptr < 4) if (shifted_bufptr < 2) if (shifted_bufptr < 1) { XZ0 ^= amd_bitalign(XZ81, XZ80, _offset); XZ1 ^= amd_bitalign(XZ82, XZ81, _offset); XZ2 ^= amd_bitalign(XZ83, XZ82, _offset); XZ3 ^= amd_bitalign(XZ84, XZ83, _offset); XZ4 ^= amd_bitalign(XZ85, XZ84, _offset); XZ5 ^= amd_bitalign(XZ86, XZ85, _offset); XZ6 ^= amd_bitalign(XZ87, XZ86, _offset); XZ7 ^= amd_bitalign(XZ88, XZ87, _offset); XZ8 ^= amd_bitalign(XZ89, XZ88, _offset); XZ9 ^= amd_bitalign(XZ90, XZ89, _offset); XZ10 ^= amd_bitalign(XZ91, XZ90, _offset); XZ11 ^= amd_bitalign(XZ92, XZ91, _offset); XZ12 ^= amd_bitalign(XZ93, XZ92, _offset); XZ13 ^= amd_bitalign(XZ94, XZ93, _offset); XZ14 ^= amd_bitalign(XZ95, XZ94, _offset); XZ15 ^= amd_bitalign(XZ96, XZ95, _offset); XZ16 ^= amd_bitalign(XZ97, XZ96, _offset); XZ17 ^= amd_bitalign(XZ98, XZ97, _offset); XZ18 ^= amd_bitalign(XZ99, XZ98, _offset); XZ19 ^= amd_bitalign(XZ100, XZ99, _offset); XZ20 ^= amd_bitalign(XZ101, XZ100, _offset); XZ21 ^= amd_bitalign(XZ102, XZ101, _offset); XZ22 ^= amd_bitalign(XZ103, XZ102, _offset); XZ23 ^= amd_bitalign(XZ104, XZ103, _offset); XZ24 ^= amd_bitalign(XZ105, XZ104, _offset); XZ25 ^= amd_bitalign(XZ106, XZ105, _offset); XZ26 ^= amd_bitalign(XZ107, XZ106, _offset); XZ27 ^= amd_bitalign(XZ108, XZ107, _offset); XZ28 ^= amd_bitalign(XZ109, XZ108, _offset); XZ29 ^= amd_bitalign(XZ110, XZ109, _offset); XZ30 ^= amd_bitalign(XZ111, XZ110, _offset); XZ31 ^= amd_bitalign(XZ112, XZ111, _offset); XZ32 ^= amd_bitalign(XZ113, XZ112, _offset); XZ33 ^= amd_bitalign(XZ114, XZ113, _offset); XZ34 ^= amd_bitalign(XZ115, XZ114, _offset); XZ35 ^= amd_bitalign(XZ116, XZ115, _offset); XZ36 ^= amd_bitalign(XZ117, XZ116, _offset); XZ37 ^= amd_bitalign(XZ118, XZ117, _offset); XZ38 ^= amd_bitalign(XZ119, XZ118, _offset); XZ39 ^= amd_bitalign(XZ120, XZ119, _offset); XZ40 ^= amd_bitalign(XZ121, XZ120, _offset); XZ41 ^= amd_bitalign(XZ122, XZ121, _offset); XZ42 ^= amd_bitalign(XZ123, XZ122, _offset); XZ43 ^= amd_bitalign(XZ124, XZ123, _offset); XZ44 ^= amd_bitalign(XZ125, XZ124, _offset); XZ45 ^= amd_bitalign(XZ126, XZ125, _offset); XZ46 ^= amd_bitalign(XZ127, XZ126, _offset); XZ47 ^= amd_bitalign(XZ128, XZ127, _offset); XZ48 ^= amd_bitalign(XZ129, XZ128, _offset); XZ49 ^= amd_bitalign(XZ130, XZ129, _offset); XZ50 ^= amd_bitalign(XZ131, XZ130, _offset); XZ51 ^= amd_bitalign(XZ132, XZ131, _offset); XZ52 ^= amd_bitalign(XZ133, XZ132, _offset); XZ53 ^= amd_bitalign(XZ134, XZ133, _offset); XZ54 ^= amd_bitalign(XZ135, XZ134, _offset); XZ55 ^= amd_bitalign(XZ136, XZ135, _offset); XZ56 ^= amd_bitalign(XZ137, XZ136, _offset); XZ57 ^= amd_bitalign(XZ138, XZ137, _offset); XZ58 ^= amd_bitalign(XZ139, XZ138, _offset); XZ59 ^= amd_bitalign(XZ140, XZ139, _offset); XZ60 ^= amd_bitalign(XZ141, XZ140, _offset); XZ61 ^= amd_bitalign(XZ142, XZ141, _offset); XZ62 ^= amd_bitalign(XZ143, XZ142, _offset); XZ63 ^= amd_bitalign(XZ144, XZ143, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ82, XZ81, _offset); XZ1 ^= amd_bitalign(XZ83, XZ82, _offset); XZ2 ^= amd_bitalign(XZ84, XZ83, _offset); XZ3 ^= amd_bitalign(XZ85, XZ84, _offset); XZ4 ^= amd_bitalign(XZ86, XZ85, _offset); XZ5 ^= amd_bitalign(XZ87, XZ86, _offset); XZ6 ^= amd_bitalign(XZ88, XZ87, _offset); XZ7 ^= amd_bitalign(XZ89, XZ88, _offset); XZ8 ^= amd_bitalign(XZ90, XZ89, _offset); XZ9 ^= amd_bitalign(XZ91, XZ90, _offset); XZ10 ^= amd_bitalign(XZ92, XZ91, _offset); XZ11 ^= amd_bitalign(XZ93, XZ92, _offset); XZ12 ^= amd_bitalign(XZ94, XZ93, _offset); XZ13 ^= amd_bitalign(XZ95, XZ94, _offset); XZ14 ^= amd_bitalign(XZ96, XZ95, _offset); XZ15 ^= amd_bitalign(XZ97, XZ96, _offset); XZ16 ^= amd_bitalign(XZ98, XZ97, _offset); XZ17 ^= amd_bitalign(XZ99, XZ98, _offset); XZ18 ^= amd_bitalign(XZ100, XZ99, _offset); XZ19 ^= amd_bitalign(XZ101, XZ100, _offset); XZ20 ^= amd_bitalign(XZ102, XZ101, _offset); XZ21 ^= amd_bitalign(XZ103, XZ102, _offset); XZ22 ^= amd_bitalign(XZ104, XZ103, _offset); XZ23 ^= amd_bitalign(XZ105, XZ104, _offset); XZ24 ^= amd_bitalign(XZ106, XZ105, _offset); XZ25 ^= amd_bitalign(XZ107, XZ106, _offset); XZ26 ^= amd_bitalign(XZ108, XZ107, _offset); XZ27 ^= amd_bitalign(XZ109, XZ108, _offset); XZ28 ^= amd_bitalign(XZ110, XZ109, _offset); XZ29 ^= amd_bitalign(XZ111, XZ110, _offset); XZ30 ^= amd_bitalign(XZ112, XZ111, _offset); XZ31 ^= amd_bitalign(XZ113, XZ112, _offset); XZ32 ^= amd_bitalign(XZ114, XZ113, _offset); XZ33 ^= amd_bitalign(XZ115, XZ114, _offset); XZ34 ^= amd_bitalign(XZ116, XZ115, _offset); XZ35 ^= amd_bitalign(XZ117, XZ116, _offset); XZ36 ^= amd_bitalign(XZ118, XZ117, _offset); XZ37 ^= amd_bitalign(XZ119, XZ118, _offset); XZ38 ^= amd_bitalign(XZ120, XZ119, _offset); XZ39 ^= amd_bitalign(XZ121, XZ120, _offset); XZ40 ^= amd_bitalign(XZ122, XZ121, _offset); XZ41 ^= amd_bitalign(XZ123, XZ122, _offset); XZ42 ^= amd_bitalign(XZ124, XZ123, _offset); XZ43 ^= amd_bitalign(XZ125, XZ124, _offset); XZ44 ^= amd_bitalign(XZ126, XZ125, _offset); XZ45 ^= amd_bitalign(XZ127, XZ126, _offset); XZ46 ^= amd_bitalign(XZ128, XZ127, _offset); XZ47 ^= amd_bitalign(XZ129, XZ128, _offset); XZ48 ^= amd_bitalign(XZ130, XZ129, _offset); XZ49 ^= amd_bitalign(XZ131, XZ130, _offset); XZ50 ^= amd_bitalign(XZ132, XZ131, _offset); XZ51 ^= amd_bitalign(XZ133, XZ132, _offset); XZ52 ^= amd_bitalign(XZ134, XZ133, _offset); XZ53 ^= amd_bitalign(XZ135, XZ134, _offset); XZ54 ^= amd_bitalign(XZ136, XZ135, _offset); XZ55 ^= amd_bitalign(XZ137, XZ136, _offset); XZ56 ^= amd_bitalign(XZ138, XZ137, _offset); XZ57 ^= amd_bitalign(XZ139, XZ138, _offset); XZ58 ^= amd_bitalign(XZ140, XZ139, _offset); XZ59 ^= amd_bitalign(XZ141, XZ140, _offset); XZ60 ^= amd_bitalign(XZ142, XZ141, _offset); XZ61 ^= amd_bitalign(XZ143, XZ142, _offset); XZ62 ^= amd_bitalign(XZ144, XZ143, _offset); XZ63 ^= amd_bitalign(XZ145, XZ144, _offset); }
+						else if (shifted_bufptr < 3) { XZ0 ^= amd_bitalign(XZ83, XZ82, _offset); XZ1 ^= amd_bitalign(XZ84, XZ83, _offset); XZ2 ^= amd_bitalign(XZ85, XZ84, _offset); XZ3 ^= amd_bitalign(XZ86, XZ85, _offset); XZ4 ^= amd_bitalign(XZ87, XZ86, _offset); XZ5 ^= amd_bitalign(XZ88, XZ87, _offset); XZ6 ^= amd_bitalign(XZ89, XZ88, _offset); XZ7 ^= amd_bitalign(XZ90, XZ89, _offset); XZ8 ^= amd_bitalign(XZ91, XZ90, _offset); XZ9 ^= amd_bitalign(XZ92, XZ91, _offset); XZ10 ^= amd_bitalign(XZ93, XZ92, _offset); XZ11 ^= amd_bitalign(XZ94, XZ93, _offset); XZ12 ^= amd_bitalign(XZ95, XZ94, _offset); XZ13 ^= amd_bitalign(XZ96, XZ95, _offset); XZ14 ^= amd_bitalign(XZ97, XZ96, _offset); XZ15 ^= amd_bitalign(XZ98, XZ97, _offset); XZ16 ^= amd_bitalign(XZ99, XZ98, _offset); XZ17 ^= amd_bitalign(XZ100, XZ99, _offset); XZ18 ^= amd_bitalign(XZ101, XZ100, _offset); XZ19 ^= amd_bitalign(XZ102, XZ101, _offset); XZ20 ^= amd_bitalign(XZ103, XZ102, _offset); XZ21 ^= amd_bitalign(XZ104, XZ103, _offset); XZ22 ^= amd_bitalign(XZ105, XZ104, _offset); XZ23 ^= amd_bitalign(XZ106, XZ105, _offset); XZ24 ^= amd_bitalign(XZ107, XZ106, _offset); XZ25 ^= amd_bitalign(XZ108, XZ107, _offset); XZ26 ^= amd_bitalign(XZ109, XZ108, _offset); XZ27 ^= amd_bitalign(XZ110, XZ109, _offset); XZ28 ^= amd_bitalign(XZ111, XZ110, _offset); XZ29 ^= amd_bitalign(XZ112, XZ111, _offset); XZ30 ^= amd_bitalign(XZ113, XZ112, _offset); XZ31 ^= amd_bitalign(XZ114, XZ113, _offset); XZ32 ^= amd_bitalign(XZ115, XZ114, _offset); XZ33 ^= amd_bitalign(XZ116, XZ115, _offset); XZ34 ^= amd_bitalign(XZ117, XZ116, _offset); XZ35 ^= amd_bitalign(XZ118, XZ117, _offset); XZ36 ^= amd_bitalign(XZ119, XZ118, _offset); XZ37 ^= amd_bitalign(XZ120, XZ119, _offset); XZ38 ^= amd_bitalign(XZ121, XZ120, _offset); XZ39 ^= amd_bitalign(XZ122, XZ121, _offset); XZ40 ^= amd_bitalign(XZ123, XZ122, _offset); XZ41 ^= amd_bitalign(XZ124, XZ123, _offset); XZ42 ^= amd_bitalign(XZ125, XZ124, _offset); XZ43 ^= amd_bitalign(XZ126, XZ125, _offset); XZ44 ^= amd_bitalign(XZ127, XZ126, _offset); XZ45 ^= amd_bitalign(XZ128, XZ127, _offset); XZ46 ^= amd_bitalign(XZ129, XZ128, _offset); XZ47 ^= amd_bitalign(XZ130, XZ129, _offset); XZ48 ^= amd_bitalign(XZ131, XZ130, _offset); XZ49 ^= amd_bitalign(XZ132, XZ131, _offset); XZ50 ^= amd_bitalign(XZ133, XZ132, _offset); XZ51 ^= amd_bitalign(XZ134, XZ133, _offset); XZ52 ^= amd_bitalign(XZ135, XZ134, _offset); XZ53 ^= amd_bitalign(XZ136, XZ135, _offset); XZ54 ^= amd_bitalign(XZ137, XZ136, _offset); XZ55 ^= amd_bitalign(XZ138, XZ137, _offset); XZ56 ^= amd_bitalign(XZ139, XZ138, _offset); XZ57 ^= amd_bitalign(XZ140, XZ139, _offset); XZ58 ^= amd_bitalign(XZ141, XZ140, _offset); XZ59 ^= amd_bitalign(XZ142, XZ141, _offset); XZ60 ^= amd_bitalign(XZ143, XZ142, _offset); XZ61 ^= amd_bitalign(XZ144, XZ143, _offset); XZ62 ^= amd_bitalign(XZ145, XZ144, _offset); XZ63 ^= amd_bitalign(XZ146, XZ145, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ84, XZ83, _offset); XZ1 ^= amd_bitalign(XZ85, XZ84, _offset); XZ2 ^= amd_bitalign(XZ86, XZ85, _offset); XZ3 ^= amd_bitalign(XZ87, XZ86, _offset); XZ4 ^= amd_bitalign(XZ88, XZ87, _offset); XZ5 ^= amd_bitalign(XZ89, XZ88, _offset); XZ6 ^= amd_bitalign(XZ90, XZ89, _offset); XZ7 ^= amd_bitalign(XZ91, XZ90, _offset); XZ8 ^= amd_bitalign(XZ92, XZ91, _offset); XZ9 ^= amd_bitalign(XZ93, XZ92, _offset); XZ10 ^= amd_bitalign(XZ94, XZ93, _offset); XZ11 ^= amd_bitalign(XZ95, XZ94, _offset); XZ12 ^= amd_bitalign(XZ96, XZ95, _offset); XZ13 ^= amd_bitalign(XZ97, XZ96, _offset); XZ14 ^= amd_bitalign(XZ98, XZ97, _offset); XZ15 ^= amd_bitalign(XZ99, XZ98, _offset); XZ16 ^= amd_bitalign(XZ100, XZ99, _offset); XZ17 ^= amd_bitalign(XZ101, XZ100, _offset); XZ18 ^= amd_bitalign(XZ102, XZ101, _offset); XZ19 ^= amd_bitalign(XZ103, XZ102, _offset); XZ20 ^= amd_bitalign(XZ104, XZ103, _offset); XZ21 ^= amd_bitalign(XZ105, XZ104, _offset); XZ22 ^= amd_bitalign(XZ106, XZ105, _offset); XZ23 ^= amd_bitalign(XZ107, XZ106, _offset); XZ24 ^= amd_bitalign(XZ108, XZ107, _offset); XZ25 ^= amd_bitalign(XZ109, XZ108, _offset); XZ26 ^= amd_bitalign(XZ110, XZ109, _offset); XZ27 ^= amd_bitalign(XZ111, XZ110, _offset); XZ28 ^= amd_bitalign(XZ112, XZ111, _offset); XZ29 ^= amd_bitalign(XZ113, XZ112, _offset); XZ30 ^= amd_bitalign(XZ114, XZ113, _offset); XZ31 ^= amd_bitalign(XZ115, XZ114, _offset); XZ32 ^= amd_bitalign(XZ116, XZ115, _offset); XZ33 ^= amd_bitalign(XZ117, XZ116, _offset); XZ34 ^= amd_bitalign(XZ118, XZ117, _offset); XZ35 ^= amd_bitalign(XZ119, XZ118, _offset); XZ36 ^= amd_bitalign(XZ120, XZ119, _offset); XZ37 ^= amd_bitalign(XZ121, XZ120, _offset); XZ38 ^= amd_bitalign(XZ122, XZ121, _offset); XZ39 ^= amd_bitalign(XZ123, XZ122, _offset); XZ40 ^= amd_bitalign(XZ124, XZ123, _offset); XZ41 ^= amd_bitalign(XZ125, XZ124, _offset); XZ42 ^= amd_bitalign(XZ126, XZ125, _offset); XZ43 ^= amd_bitalign(XZ127, XZ126, _offset); XZ44 ^= amd_bitalign(XZ128, XZ127, _offset); XZ45 ^= amd_bitalign(XZ129, XZ128, _offset); XZ46 ^= amd_bitalign(XZ130, XZ129, _offset); XZ47 ^= amd_bitalign(XZ131, XZ130, _offset); XZ48 ^= amd_bitalign(XZ132, XZ131, _offset); XZ49 ^= amd_bitalign(XZ133, XZ132, _offset); XZ50 ^= amd_bitalign(XZ134, XZ133, _offset); XZ51 ^= amd_bitalign(XZ135, XZ134, _offset); XZ52 ^= amd_bitalign(XZ136, XZ135, _offset); XZ53 ^= amd_bitalign(XZ137, XZ136, _offset); XZ54 ^= amd_bitalign(XZ138, XZ137, _offset); XZ55 ^= amd_bitalign(XZ139, XZ138, _offset); XZ56 ^= amd_bitalign(XZ140, XZ139, _offset); XZ57 ^= amd_bitalign(XZ141, XZ140, _offset); XZ58 ^= amd_bitalign(XZ142, XZ141, _offset); XZ59 ^= amd_bitalign(XZ143, XZ142, _offset); XZ60 ^= amd_bitalign(XZ144, XZ143, _offset); XZ61 ^= amd_bitalign(XZ145, XZ144, _offset); XZ62 ^= amd_bitalign(XZ146, XZ145, _offset); XZ63 ^= amd_bitalign(XZ147, XZ146, _offset); }
+						else if (shifted_bufptr < 6) if (shifted_bufptr < 5) { XZ0 ^= amd_bitalign(XZ85, XZ84, _offset); XZ1 ^= amd_bitalign(XZ86, XZ85, _offset); XZ2 ^= amd_bitalign(XZ87, XZ86, _offset); XZ3 ^= amd_bitalign(XZ88, XZ87, _offset); XZ4 ^= amd_bitalign(XZ89, XZ88, _offset); XZ5 ^= amd_bitalign(XZ90, XZ89, _offset); XZ6 ^= amd_bitalign(XZ91, XZ90, _offset); XZ7 ^= amd_bitalign(XZ92, XZ91, _offset); XZ8 ^= amd_bitalign(XZ93, XZ92, _offset); XZ9 ^= amd_bitalign(XZ94, XZ93, _offset); XZ10 ^= amd_bitalign(XZ95, XZ94, _offset); XZ11 ^= amd_bitalign(XZ96, XZ95, _offset); XZ12 ^= amd_bitalign(XZ97, XZ96, _offset); XZ13 ^= amd_bitalign(XZ98, XZ97, _offset); XZ14 ^= amd_bitalign(XZ99, XZ98, _offset); XZ15 ^= amd_bitalign(XZ100, XZ99, _offset); XZ16 ^= amd_bitalign(XZ101, XZ100, _offset); XZ17 ^= amd_bitalign(XZ102, XZ101, _offset); XZ18 ^= amd_bitalign(XZ103, XZ102, _offset); XZ19 ^= amd_bitalign(XZ104, XZ103, _offset); XZ20 ^= amd_bitalign(XZ105, XZ104, _offset); XZ21 ^= amd_bitalign(XZ106, XZ105, _offset); XZ22 ^= amd_bitalign(XZ107, XZ106, _offset); XZ23 ^= amd_bitalign(XZ108, XZ107, _offset); XZ24 ^= amd_bitalign(XZ109, XZ108, _offset); XZ25 ^= amd_bitalign(XZ110, XZ109, _offset); XZ26 ^= amd_bitalign(XZ111, XZ110, _offset); XZ27 ^= amd_bitalign(XZ112, XZ111, _offset); XZ28 ^= amd_bitalign(XZ113, XZ112, _offset); XZ29 ^= amd_bitalign(XZ114, XZ113, _offset); XZ30 ^= amd_bitalign(XZ115, XZ114, _offset); XZ31 ^= amd_bitalign(XZ116, XZ115, _offset); XZ32 ^= amd_bitalign(XZ117, XZ116, _offset); XZ33 ^= amd_bitalign(XZ118, XZ117, _offset); XZ34 ^= amd_bitalign(XZ119, XZ118, _offset); XZ35 ^= amd_bitalign(XZ120, XZ119, _offset); XZ36 ^= amd_bitalign(XZ121, XZ120, _offset); XZ37 ^= amd_bitalign(XZ122, XZ121, _offset); XZ38 ^= amd_bitalign(XZ123, XZ122, _offset); XZ39 ^= amd_bitalign(XZ124, XZ123, _offset); XZ40 ^= amd_bitalign(XZ125, XZ124, _offset); XZ41 ^= amd_bitalign(XZ126, XZ125, _offset); XZ42 ^= amd_bitalign(XZ127, XZ126, _offset); XZ43 ^= amd_bitalign(XZ128, XZ127, _offset); XZ44 ^= amd_bitalign(XZ129, XZ128, _offset); XZ45 ^= amd_bitalign(XZ130, XZ129, _offset); XZ46 ^= amd_bitalign(XZ131, XZ130, _offset); XZ47 ^= amd_bitalign(XZ132, XZ131, _offset); XZ48 ^= amd_bitalign(XZ133, XZ132, _offset); XZ49 ^= amd_bitalign(XZ134, XZ133, _offset); XZ50 ^= amd_bitalign(XZ135, XZ134, _offset); XZ51 ^= amd_bitalign(XZ136, XZ135, _offset); XZ52 ^= amd_bitalign(XZ137, XZ136, _offset); XZ53 ^= amd_bitalign(XZ138, XZ137, _offset); XZ54 ^= amd_bitalign(XZ139, XZ138, _offset); XZ55 ^= amd_bitalign(XZ140, XZ139, _offset); XZ56 ^= amd_bitalign(XZ141, XZ140, _offset); XZ57 ^= amd_bitalign(XZ142, XZ141, _offset); XZ58 ^= amd_bitalign(XZ143, XZ142, _offset); XZ59 ^= amd_bitalign(XZ144, XZ143, _offset); XZ60 ^= amd_bitalign(XZ145, XZ144, _offset); XZ61 ^= amd_bitalign(XZ146, XZ145, _offset); XZ62 ^= amd_bitalign(XZ147, XZ146, _offset); XZ63 ^= amd_bitalign(XZ148, XZ147, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ86, XZ85, _offset); XZ1 ^= amd_bitalign(XZ87, XZ86, _offset); XZ2 ^= amd_bitalign(XZ88, XZ87, _offset); XZ3 ^= amd_bitalign(XZ89, XZ88, _offset); XZ4 ^= amd_bitalign(XZ90, XZ89, _offset); XZ5 ^= amd_bitalign(XZ91, XZ90, _offset); XZ6 ^= amd_bitalign(XZ92, XZ91, _offset); XZ7 ^= amd_bitalign(XZ93, XZ92, _offset); XZ8 ^= amd_bitalign(XZ94, XZ93, _offset); XZ9 ^= amd_bitalign(XZ95, XZ94, _offset); XZ10 ^= amd_bitalign(XZ96, XZ95, _offset); XZ11 ^= amd_bitalign(XZ97, XZ96, _offset); XZ12 ^= amd_bitalign(XZ98, XZ97, _offset); XZ13 ^= amd_bitalign(XZ99, XZ98, _offset); XZ14 ^= amd_bitalign(XZ100, XZ99, _offset); XZ15 ^= amd_bitalign(XZ101, XZ100, _offset); XZ16 ^= amd_bitalign(XZ102, XZ101, _offset); XZ17 ^= amd_bitalign(XZ103, XZ102, _offset); XZ18 ^= amd_bitalign(XZ104, XZ103, _offset); XZ19 ^= amd_bitalign(XZ105, XZ104, _offset); XZ20 ^= amd_bitalign(XZ106, XZ105, _offset); XZ21 ^= amd_bitalign(XZ107, XZ106, _offset); XZ22 ^= amd_bitalign(XZ108, XZ107, _offset); XZ23 ^= amd_bitalign(XZ109, XZ108, _offset); XZ24 ^= amd_bitalign(XZ110, XZ109, _offset); XZ25 ^= amd_bitalign(XZ111, XZ110, _offset); XZ26 ^= amd_bitalign(XZ112, XZ111, _offset); XZ27 ^= amd_bitalign(XZ113, XZ112, _offset); XZ28 ^= amd_bitalign(XZ114, XZ113, _offset); XZ29 ^= amd_bitalign(XZ115, XZ114, _offset); XZ30 ^= amd_bitalign(XZ116, XZ115, _offset); XZ31 ^= amd_bitalign(XZ117, XZ116, _offset); XZ32 ^= amd_bitalign(XZ118, XZ117, _offset); XZ33 ^= amd_bitalign(XZ119, XZ118, _offset); XZ34 ^= amd_bitalign(XZ120, XZ119, _offset); XZ35 ^= amd_bitalign(XZ121, XZ120, _offset); XZ36 ^= amd_bitalign(XZ122, XZ121, _offset); XZ37 ^= amd_bitalign(XZ123, XZ122, _offset); XZ38 ^= amd_bitalign(XZ124, XZ123, _offset); XZ39 ^= amd_bitalign(XZ125, XZ124, _offset); XZ40 ^= amd_bitalign(XZ126, XZ125, _offset); XZ41 ^= amd_bitalign(XZ127, XZ126, _offset); XZ42 ^= amd_bitalign(XZ128, XZ127, _offset); XZ43 ^= amd_bitalign(XZ129, XZ128, _offset); XZ44 ^= amd_bitalign(XZ130, XZ129, _offset); XZ45 ^= amd_bitalign(XZ131, XZ130, _offset); XZ46 ^= amd_bitalign(XZ132, XZ131, _offset); XZ47 ^= amd_bitalign(XZ133, XZ132, _offset); XZ48 ^= amd_bitalign(XZ134, XZ133, _offset); XZ49 ^= amd_bitalign(XZ135, XZ134, _offset); XZ50 ^= amd_bitalign(XZ136, XZ135, _offset); XZ51 ^= amd_bitalign(XZ137, XZ136, _offset); XZ52 ^= amd_bitalign(XZ138, XZ137, _offset); XZ53 ^= amd_bitalign(XZ139, XZ138, _offset); XZ54 ^= amd_bitalign(XZ140, XZ139, _offset); XZ55 ^= amd_bitalign(XZ141, XZ140, _offset); XZ56 ^= amd_bitalign(XZ142, XZ141, _offset); XZ57 ^= amd_bitalign(XZ143, XZ142, _offset); XZ58 ^= amd_bitalign(XZ144, XZ143, _offset); XZ59 ^= amd_bitalign(XZ145, XZ144, _offset); XZ60 ^= amd_bitalign(XZ146, XZ145, _offset); XZ61 ^= amd_bitalign(XZ147, XZ146, _offset); XZ62 ^= amd_bitalign(XZ148, XZ147, _offset); XZ63 ^= amd_bitalign(XZ149, XZ148, _offset); }
+						else if (shifted_bufptr < 7) { XZ0 ^= amd_bitalign(XZ87, XZ86, _offset); XZ1 ^= amd_bitalign(XZ88, XZ87, _offset); XZ2 ^= amd_bitalign(XZ89, XZ88, _offset); XZ3 ^= amd_bitalign(XZ90, XZ89, _offset); XZ4 ^= amd_bitalign(XZ91, XZ90, _offset); XZ5 ^= amd_bitalign(XZ92, XZ91, _offset); XZ6 ^= amd_bitalign(XZ93, XZ92, _offset); XZ7 ^= amd_bitalign(XZ94, XZ93, _offset); XZ8 ^= amd_bitalign(XZ95, XZ94, _offset); XZ9 ^= amd_bitalign(XZ96, XZ95, _offset); XZ10 ^= amd_bitalign(XZ97, XZ96, _offset); XZ11 ^= amd_bitalign(XZ98, XZ97, _offset); XZ12 ^= amd_bitalign(XZ99, XZ98, _offset); XZ13 ^= amd_bitalign(XZ100, XZ99, _offset); XZ14 ^= amd_bitalign(XZ101, XZ100, _offset); XZ15 ^= amd_bitalign(XZ102, XZ101, _offset); XZ16 ^= amd_bitalign(XZ103, XZ102, _offset); XZ17 ^= amd_bitalign(XZ104, XZ103, _offset); XZ18 ^= amd_bitalign(XZ105, XZ104, _offset); XZ19 ^= amd_bitalign(XZ106, XZ105, _offset); XZ20 ^= amd_bitalign(XZ107, XZ106, _offset); XZ21 ^= amd_bitalign(XZ108, XZ107, _offset); XZ22 ^= amd_bitalign(XZ109, XZ108, _offset); XZ23 ^= amd_bitalign(XZ110, XZ109, _offset); XZ24 ^= amd_bitalign(XZ111, XZ110, _offset); XZ25 ^= amd_bitalign(XZ112, XZ111, _offset); XZ26 ^= amd_bitalign(XZ113, XZ112, _offset); XZ27 ^= amd_bitalign(XZ114, XZ113, _offset); XZ28 ^= amd_bitalign(XZ115, XZ114, _offset); XZ29 ^= amd_bitalign(XZ116, XZ115, _offset); XZ30 ^= amd_bitalign(XZ117, XZ116, _offset); XZ31 ^= amd_bitalign(XZ118, XZ117, _offset); XZ32 ^= amd_bitalign(XZ119, XZ118, _offset); XZ33 ^= amd_bitalign(XZ120, XZ119, _offset); XZ34 ^= amd_bitalign(XZ121, XZ120, _offset); XZ35 ^= amd_bitalign(XZ122, XZ121, _offset); XZ36 ^= amd_bitalign(XZ123, XZ122, _offset); XZ37 ^= amd_bitalign(XZ124, XZ123, _offset); XZ38 ^= amd_bitalign(XZ125, XZ124, _offset); XZ39 ^= amd_bitalign(XZ126, XZ125, _offset); XZ40 ^= amd_bitalign(XZ127, XZ126, _offset); XZ41 ^= amd_bitalign(XZ128, XZ127, _offset); XZ42 ^= amd_bitalign(XZ129, XZ128, _offset); XZ43 ^= amd_bitalign(XZ130, XZ129, _offset); XZ44 ^= amd_bitalign(XZ131, XZ130, _offset); XZ45 ^= amd_bitalign(XZ132, XZ131, _offset); XZ46 ^= amd_bitalign(XZ133, XZ132, _offset); XZ47 ^= amd_bitalign(XZ134, XZ133, _offset); XZ48 ^= amd_bitalign(XZ135, XZ134, _offset); XZ49 ^= amd_bitalign(XZ136, XZ135, _offset); XZ50 ^= amd_bitalign(XZ137, XZ136, _offset); XZ51 ^= amd_bitalign(XZ138, XZ137, _offset); XZ52 ^= amd_bitalign(XZ139, XZ138, _offset); XZ53 ^= amd_bitalign(XZ140, XZ139, _offset); XZ54 ^= amd_bitalign(XZ141, XZ140, _offset); XZ55 ^= amd_bitalign(XZ142, XZ141, _offset); XZ56 ^= amd_bitalign(XZ143, XZ142, _offset); XZ57 ^= amd_bitalign(XZ144, XZ143, _offset); XZ58 ^= amd_bitalign(XZ145, XZ144, _offset); XZ59 ^= amd_bitalign(XZ146, XZ145, _offset); XZ60 ^= amd_bitalign(XZ147, XZ146, _offset); XZ61 ^= amd_bitalign(XZ148, XZ147, _offset); XZ62 ^= amd_bitalign(XZ149, XZ148, _offset); XZ63 ^= amd_bitalign(XZ150, XZ149, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ88, XZ87, _offset); XZ1 ^= amd_bitalign(XZ89, XZ88, _offset); XZ2 ^= amd_bitalign(XZ90, XZ89, _offset); XZ3 ^= amd_bitalign(XZ91, XZ90, _offset); XZ4 ^= amd_bitalign(XZ92, XZ91, _offset); XZ5 ^= amd_bitalign(XZ93, XZ92, _offset); XZ6 ^= amd_bitalign(XZ94, XZ93, _offset); XZ7 ^= amd_bitalign(XZ95, XZ94, _offset); XZ8 ^= amd_bitalign(XZ96, XZ95, _offset); XZ9 ^= amd_bitalign(XZ97, XZ96, _offset); XZ10 ^= amd_bitalign(XZ98, XZ97, _offset); XZ11 ^= amd_bitalign(XZ99, XZ98, _offset); XZ12 ^= amd_bitalign(XZ100, XZ99, _offset); XZ13 ^= amd_bitalign(XZ101, XZ100, _offset); XZ14 ^= amd_bitalign(XZ102, XZ101, _offset); XZ15 ^= amd_bitalign(XZ103, XZ102, _offset); XZ16 ^= amd_bitalign(XZ104, XZ103, _offset); XZ17 ^= amd_bitalign(XZ105, XZ104, _offset); XZ18 ^= amd_bitalign(XZ106, XZ105, _offset); XZ19 ^= amd_bitalign(XZ107, XZ106, _offset); XZ20 ^= amd_bitalign(XZ108, XZ107, _offset); XZ21 ^= amd_bitalign(XZ109, XZ108, _offset); XZ22 ^= amd_bitalign(XZ110, XZ109, _offset); XZ23 ^= amd_bitalign(XZ111, XZ110, _offset); XZ24 ^= amd_bitalign(XZ112, XZ111, _offset); XZ25 ^= amd_bitalign(XZ113, XZ112, _offset); XZ26 ^= amd_bitalign(XZ114, XZ113, _offset); XZ27 ^= amd_bitalign(XZ115, XZ114, _offset); XZ28 ^= amd_bitalign(XZ116, XZ115, _offset); XZ29 ^= amd_bitalign(XZ117, XZ116, _offset); XZ30 ^= amd_bitalign(XZ118, XZ117, _offset); XZ31 ^= amd_bitalign(XZ119, XZ118, _offset); XZ32 ^= amd_bitalign(XZ120, XZ119, _offset); XZ33 ^= amd_bitalign(XZ121, XZ120, _offset); XZ34 ^= amd_bitalign(XZ122, XZ121, _offset); XZ35 ^= amd_bitalign(XZ123, XZ122, _offset); XZ36 ^= amd_bitalign(XZ124, XZ123, _offset); XZ37 ^= amd_bitalign(XZ125, XZ124, _offset); XZ38 ^= amd_bitalign(XZ126, XZ125, _offset); XZ39 ^= amd_bitalign(XZ127, XZ126, _offset); XZ40 ^= amd_bitalign(XZ128, XZ127, _offset); XZ41 ^= amd_bitalign(XZ129, XZ128, _offset); XZ42 ^= amd_bitalign(XZ130, XZ129, _offset); XZ43 ^= amd_bitalign(XZ131, XZ130, _offset); XZ44 ^= amd_bitalign(XZ132, XZ131, _offset); XZ45 ^= amd_bitalign(XZ133, XZ132, _offset); XZ46 ^= amd_bitalign(XZ134, XZ133, _offset); XZ47 ^= amd_bitalign(XZ135, XZ134, _offset); XZ48 ^= amd_bitalign(XZ136, XZ135, _offset); XZ49 ^= amd_bitalign(XZ137, XZ136, _offset); XZ50 ^= amd_bitalign(XZ138, XZ137, _offset); XZ51 ^= amd_bitalign(XZ139, XZ138, _offset); XZ52 ^= amd_bitalign(XZ140, XZ139, _offset); XZ53 ^= amd_bitalign(XZ141, XZ140, _offset); XZ54 ^= amd_bitalign(XZ142, XZ141, _offset); XZ55 ^= amd_bitalign(XZ143, XZ142, _offset); XZ56 ^= amd_bitalign(XZ144, XZ143, _offset); XZ57 ^= amd_bitalign(XZ145, XZ144, _offset); XZ58 ^= amd_bitalign(XZ146, XZ145, _offset); XZ59 ^= amd_bitalign(XZ147, XZ146, _offset); XZ60 ^= amd_bitalign(XZ148, XZ147, _offset); XZ61 ^= amd_bitalign(XZ149, XZ148, _offset); XZ62 ^= amd_bitalign(XZ150, XZ149, _offset); XZ63 ^= amd_bitalign(XZ151, XZ150, _offset); }
+						else if (shifted_bufptr < 12) if (shifted_bufptr < 10) if (shifted_bufptr < 9) { XZ0 ^= amd_bitalign(XZ89, XZ88, _offset); XZ1 ^= amd_bitalign(XZ90, XZ89, _offset); XZ2 ^= amd_bitalign(XZ91, XZ90, _offset); XZ3 ^= amd_bitalign(XZ92, XZ91, _offset); XZ4 ^= amd_bitalign(XZ93, XZ92, _offset); XZ5 ^= amd_bitalign(XZ94, XZ93, _offset); XZ6 ^= amd_bitalign(XZ95, XZ94, _offset); XZ7 ^= amd_bitalign(XZ96, XZ95, _offset); XZ8 ^= amd_bitalign(XZ97, XZ96, _offset); XZ9 ^= amd_bitalign(XZ98, XZ97, _offset); XZ10 ^= amd_bitalign(XZ99, XZ98, _offset); XZ11 ^= amd_bitalign(XZ100, XZ99, _offset); XZ12 ^= amd_bitalign(XZ101, XZ100, _offset); XZ13 ^= amd_bitalign(XZ102, XZ101, _offset); XZ14 ^= amd_bitalign(XZ103, XZ102, _offset); XZ15 ^= amd_bitalign(XZ104, XZ103, _offset); XZ16 ^= amd_bitalign(XZ105, XZ104, _offset); XZ17 ^= amd_bitalign(XZ106, XZ105, _offset); XZ18 ^= amd_bitalign(XZ107, XZ106, _offset); XZ19 ^= amd_bitalign(XZ108, XZ107, _offset); XZ20 ^= amd_bitalign(XZ109, XZ108, _offset); XZ21 ^= amd_bitalign(XZ110, XZ109, _offset); XZ22 ^= amd_bitalign(XZ111, XZ110, _offset); XZ23 ^= amd_bitalign(XZ112, XZ111, _offset); XZ24 ^= amd_bitalign(XZ113, XZ112, _offset); XZ25 ^= amd_bitalign(XZ114, XZ113, _offset); XZ26 ^= amd_bitalign(XZ115, XZ114, _offset); XZ27 ^= amd_bitalign(XZ116, XZ115, _offset); XZ28 ^= amd_bitalign(XZ117, XZ116, _offset); XZ29 ^= amd_bitalign(XZ118, XZ117, _offset); XZ30 ^= amd_bitalign(XZ119, XZ118, _offset); XZ31 ^= amd_bitalign(XZ120, XZ119, _offset); XZ32 ^= amd_bitalign(XZ121, XZ120, _offset); XZ33 ^= amd_bitalign(XZ122, XZ121, _offset); XZ34 ^= amd_bitalign(XZ123, XZ122, _offset); XZ35 ^= amd_bitalign(XZ124, XZ123, _offset); XZ36 ^= amd_bitalign(XZ125, XZ124, _offset); XZ37 ^= amd_bitalign(XZ126, XZ125, _offset); XZ38 ^= amd_bitalign(XZ127, XZ126, _offset); XZ39 ^= amd_bitalign(XZ128, XZ127, _offset); XZ40 ^= amd_bitalign(XZ129, XZ128, _offset); XZ41 ^= amd_bitalign(XZ130, XZ129, _offset); XZ42 ^= amd_bitalign(XZ131, XZ130, _offset); XZ43 ^= amd_bitalign(XZ132, XZ131, _offset); XZ44 ^= amd_bitalign(XZ133, XZ132, _offset); XZ45 ^= amd_bitalign(XZ134, XZ133, _offset); XZ46 ^= amd_bitalign(XZ135, XZ134, _offset); XZ47 ^= amd_bitalign(XZ136, XZ135, _offset); XZ48 ^= amd_bitalign(XZ137, XZ136, _offset); XZ49 ^= amd_bitalign(XZ138, XZ137, _offset); XZ50 ^= amd_bitalign(XZ139, XZ138, _offset); XZ51 ^= amd_bitalign(XZ140, XZ139, _offset); XZ52 ^= amd_bitalign(XZ141, XZ140, _offset); XZ53 ^= amd_bitalign(XZ142, XZ141, _offset); XZ54 ^= amd_bitalign(XZ143, XZ142, _offset); XZ55 ^= amd_bitalign(XZ144, XZ143, _offset); XZ56 ^= amd_bitalign(XZ81, XZ80, _offset); XZ57 ^= amd_bitalign(XZ82, XZ81, _offset); XZ58 ^= amd_bitalign(XZ83, XZ82, _offset); XZ59 ^= amd_bitalign(XZ84, XZ83, _offset); XZ60 ^= amd_bitalign(XZ85, XZ84, _offset); XZ61 ^= amd_bitalign(XZ86, XZ85, _offset); XZ62 ^= amd_bitalign(XZ87, XZ86, _offset); XZ63 ^= amd_bitalign(XZ88, XZ87, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ90, XZ89, _offset); XZ1 ^= amd_bitalign(XZ91, XZ90, _offset); XZ2 ^= amd_bitalign(XZ92, XZ91, _offset); XZ3 ^= amd_bitalign(XZ93, XZ92, _offset); XZ4 ^= amd_bitalign(XZ94, XZ93, _offset); XZ5 ^= amd_bitalign(XZ95, XZ94, _offset); XZ6 ^= amd_bitalign(XZ96, XZ95, _offset); XZ7 ^= amd_bitalign(XZ97, XZ96, _offset); XZ8 ^= amd_bitalign(XZ98, XZ97, _offset); XZ9 ^= amd_bitalign(XZ99, XZ98, _offset); XZ10 ^= amd_bitalign(XZ100, XZ99, _offset); XZ11 ^= amd_bitalign(XZ101, XZ100, _offset); XZ12 ^= amd_bitalign(XZ102, XZ101, _offset); XZ13 ^= amd_bitalign(XZ103, XZ102, _offset); XZ14 ^= amd_bitalign(XZ104, XZ103, _offset); XZ15 ^= amd_bitalign(XZ105, XZ104, _offset); XZ16 ^= amd_bitalign(XZ106, XZ105, _offset); XZ17 ^= amd_bitalign(XZ107, XZ106, _offset); XZ18 ^= amd_bitalign(XZ108, XZ107, _offset); XZ19 ^= amd_bitalign(XZ109, XZ108, _offset); XZ20 ^= amd_bitalign(XZ110, XZ109, _offset); XZ21 ^= amd_bitalign(XZ111, XZ110, _offset); XZ22 ^= amd_bitalign(XZ112, XZ111, _offset); XZ23 ^= amd_bitalign(XZ113, XZ112, _offset); XZ24 ^= amd_bitalign(XZ114, XZ113, _offset); XZ25 ^= amd_bitalign(XZ115, XZ114, _offset); XZ26 ^= amd_bitalign(XZ116, XZ115, _offset); XZ27 ^= amd_bitalign(XZ117, XZ116, _offset); XZ28 ^= amd_bitalign(XZ118, XZ117, _offset); XZ29 ^= amd_bitalign(XZ119, XZ118, _offset); XZ30 ^= amd_bitalign(XZ120, XZ119, _offset); XZ31 ^= amd_bitalign(XZ121, XZ120, _offset); XZ32 ^= amd_bitalign(XZ122, XZ121, _offset); XZ33 ^= amd_bitalign(XZ123, XZ122, _offset); XZ34 ^= amd_bitalign(XZ124, XZ123, _offset); XZ35 ^= amd_bitalign(XZ125, XZ124, _offset); XZ36 ^= amd_bitalign(XZ126, XZ125, _offset); XZ37 ^= amd_bitalign(XZ127, XZ126, _offset); XZ38 ^= amd_bitalign(XZ128, XZ127, _offset); XZ39 ^= amd_bitalign(XZ129, XZ128, _offset); XZ40 ^= amd_bitalign(XZ130, XZ129, _offset); XZ41 ^= amd_bitalign(XZ131, XZ130, _offset); XZ42 ^= amd_bitalign(XZ132, XZ131, _offset); XZ43 ^= amd_bitalign(XZ133, XZ132, _offset); XZ44 ^= amd_bitalign(XZ134, XZ133, _offset); XZ45 ^= amd_bitalign(XZ135, XZ134, _offset); XZ46 ^= amd_bitalign(XZ136, XZ135, _offset); XZ47 ^= amd_bitalign(XZ137, XZ136, _offset); XZ48 ^= amd_bitalign(XZ138, XZ137, _offset); XZ49 ^= amd_bitalign(XZ139, XZ138, _offset); XZ50 ^= amd_bitalign(XZ140, XZ139, _offset); XZ51 ^= amd_bitalign(XZ141, XZ140, _offset); XZ52 ^= amd_bitalign(XZ142, XZ141, _offset); XZ53 ^= amd_bitalign(XZ143, XZ142, _offset); XZ54 ^= amd_bitalign(XZ144, XZ143, _offset); XZ55 ^= amd_bitalign(XZ145, XZ144, _offset); XZ56 ^= amd_bitalign(XZ82, XZ81, _offset); XZ57 ^= amd_bitalign(XZ83, XZ82, _offset); XZ58 ^= amd_bitalign(XZ84, XZ83, _offset); XZ59 ^= amd_bitalign(XZ85, XZ84, _offset); XZ60 ^= amd_bitalign(XZ86, XZ85, _offset); XZ61 ^= amd_bitalign(XZ87, XZ86, _offset); XZ62 ^= amd_bitalign(XZ88, XZ87, _offset); XZ63 ^= amd_bitalign(XZ89, XZ88, _offset); }
+						else if (shifted_bufptr < 11) { XZ0 ^= amd_bitalign(XZ91, XZ90, _offset); XZ1 ^= amd_bitalign(XZ92, XZ91, _offset); XZ2 ^= amd_bitalign(XZ93, XZ92, _offset); XZ3 ^= amd_bitalign(XZ94, XZ93, _offset); XZ4 ^= amd_bitalign(XZ95, XZ94, _offset); XZ5 ^= amd_bitalign(XZ96, XZ95, _offset); XZ6 ^= amd_bitalign(XZ97, XZ96, _offset); XZ7 ^= amd_bitalign(XZ98, XZ97, _offset); XZ8 ^= amd_bitalign(XZ99, XZ98, _offset); XZ9 ^= amd_bitalign(XZ100, XZ99, _offset); XZ10 ^= amd_bitalign(XZ101, XZ100, _offset); XZ11 ^= amd_bitalign(XZ102, XZ101, _offset); XZ12 ^= amd_bitalign(XZ103, XZ102, _offset); XZ13 ^= amd_bitalign(XZ104, XZ103, _offset); XZ14 ^= amd_bitalign(XZ105, XZ104, _offset); XZ15 ^= amd_bitalign(XZ106, XZ105, _offset); XZ16 ^= amd_bitalign(XZ107, XZ106, _offset); XZ17 ^= amd_bitalign(XZ108, XZ107, _offset); XZ18 ^= amd_bitalign(XZ109, XZ108, _offset); XZ19 ^= amd_bitalign(XZ110, XZ109, _offset); XZ20 ^= amd_bitalign(XZ111, XZ110, _offset); XZ21 ^= amd_bitalign(XZ112, XZ111, _offset); XZ22 ^= amd_bitalign(XZ113, XZ112, _offset); XZ23 ^= amd_bitalign(XZ114, XZ113, _offset); XZ24 ^= amd_bitalign(XZ115, XZ114, _offset); XZ25 ^= amd_bitalign(XZ116, XZ115, _offset); XZ26 ^= amd_bitalign(XZ117, XZ116, _offset); XZ27 ^= amd_bitalign(XZ118, XZ117, _offset); XZ28 ^= amd_bitalign(XZ119, XZ118, _offset); XZ29 ^= amd_bitalign(XZ120, XZ119, _offset); XZ30 ^= amd_bitalign(XZ121, XZ120, _offset); XZ31 ^= amd_bitalign(XZ122, XZ121, _offset); XZ32 ^= amd_bitalign(XZ123, XZ122, _offset); XZ33 ^= amd_bitalign(XZ124, XZ123, _offset); XZ34 ^= amd_bitalign(XZ125, XZ124, _offset); XZ35 ^= amd_bitalign(XZ126, XZ125, _offset); XZ36 ^= amd_bitalign(XZ127, XZ126, _offset); XZ37 ^= amd_bitalign(XZ128, XZ127, _offset); XZ38 ^= amd_bitalign(XZ129, XZ128, _offset); XZ39 ^= amd_bitalign(XZ130, XZ129, _offset); XZ40 ^= amd_bitalign(XZ131, XZ130, _offset); XZ41 ^= amd_bitalign(XZ132, XZ131, _offset); XZ42 ^= amd_bitalign(XZ133, XZ132, _offset); XZ43 ^= amd_bitalign(XZ134, XZ133, _offset); XZ44 ^= amd_bitalign(XZ135, XZ134, _offset); XZ45 ^= amd_bitalign(XZ136, XZ135, _offset); XZ46 ^= amd_bitalign(XZ137, XZ136, _offset); XZ47 ^= amd_bitalign(XZ138, XZ137, _offset); XZ48 ^= amd_bitalign(XZ139, XZ138, _offset); XZ49 ^= amd_bitalign(XZ140, XZ139, _offset); XZ50 ^= amd_bitalign(XZ141, XZ140, _offset); XZ51 ^= amd_bitalign(XZ142, XZ141, _offset); XZ52 ^= amd_bitalign(XZ143, XZ142, _offset); XZ53 ^= amd_bitalign(XZ144, XZ143, _offset); XZ54 ^= amd_bitalign(XZ145, XZ144, _offset); XZ55 ^= amd_bitalign(XZ146, XZ145, _offset); XZ56 ^= amd_bitalign(XZ83, XZ82, _offset); XZ57 ^= amd_bitalign(XZ84, XZ83, _offset); XZ58 ^= amd_bitalign(XZ85, XZ84, _offset); XZ59 ^= amd_bitalign(XZ86, XZ85, _offset); XZ60 ^= amd_bitalign(XZ87, XZ86, _offset); XZ61 ^= amd_bitalign(XZ88, XZ87, _offset); XZ62 ^= amd_bitalign(XZ89, XZ88, _offset); XZ63 ^= amd_bitalign(XZ90, XZ89, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ92, XZ91, _offset); XZ1 ^= amd_bitalign(XZ93, XZ92, _offset); XZ2 ^= amd_bitalign(XZ94, XZ93, _offset); XZ3 ^= amd_bitalign(XZ95, XZ94, _offset); XZ4 ^= amd_bitalign(XZ96, XZ95, _offset); XZ5 ^= amd_bitalign(XZ97, XZ96, _offset); XZ6 ^= amd_bitalign(XZ98, XZ97, _offset); XZ7 ^= amd_bitalign(XZ99, XZ98, _offset); XZ8 ^= amd_bitalign(XZ100, XZ99, _offset); XZ9 ^= amd_bitalign(XZ101, XZ100, _offset); XZ10 ^= amd_bitalign(XZ102, XZ101, _offset); XZ11 ^= amd_bitalign(XZ103, XZ102, _offset); XZ12 ^= amd_bitalign(XZ104, XZ103, _offset); XZ13 ^= amd_bitalign(XZ105, XZ104, _offset); XZ14 ^= amd_bitalign(XZ106, XZ105, _offset); XZ15 ^= amd_bitalign(XZ107, XZ106, _offset); XZ16 ^= amd_bitalign(XZ108, XZ107, _offset); XZ17 ^= amd_bitalign(XZ109, XZ108, _offset); XZ18 ^= amd_bitalign(XZ110, XZ109, _offset); XZ19 ^= amd_bitalign(XZ111, XZ110, _offset); XZ20 ^= amd_bitalign(XZ112, XZ111, _offset); XZ21 ^= amd_bitalign(XZ113, XZ112, _offset); XZ22 ^= amd_bitalign(XZ114, XZ113, _offset); XZ23 ^= amd_bitalign(XZ115, XZ114, _offset); XZ24 ^= amd_bitalign(XZ116, XZ115, _offset); XZ25 ^= amd_bitalign(XZ117, XZ116, _offset); XZ26 ^= amd_bitalign(XZ118, XZ117, _offset); XZ27 ^= amd_bitalign(XZ119, XZ118, _offset); XZ28 ^= amd_bitalign(XZ120, XZ119, _offset); XZ29 ^= amd_bitalign(XZ121, XZ120, _offset); XZ30 ^= amd_bitalign(XZ122, XZ121, _offset); XZ31 ^= amd_bitalign(XZ123, XZ122, _offset); XZ32 ^= amd_bitalign(XZ124, XZ123, _offset); XZ33 ^= amd_bitalign(XZ125, XZ124, _offset); XZ34 ^= amd_bitalign(XZ126, XZ125, _offset); XZ35 ^= amd_bitalign(XZ127, XZ126, _offset); XZ36 ^= amd_bitalign(XZ128, XZ127, _offset); XZ37 ^= amd_bitalign(XZ129, XZ128, _offset); XZ38 ^= amd_bitalign(XZ130, XZ129, _offset); XZ39 ^= amd_bitalign(XZ131, XZ130, _offset); XZ40 ^= amd_bitalign(XZ132, XZ131, _offset); XZ41 ^= amd_bitalign(XZ133, XZ132, _offset); XZ42 ^= amd_bitalign(XZ134, XZ133, _offset); XZ43 ^= amd_bitalign(XZ135, XZ134, _offset); XZ44 ^= amd_bitalign(XZ136, XZ135, _offset); XZ45 ^= amd_bitalign(XZ137, XZ136, _offset); XZ46 ^= amd_bitalign(XZ138, XZ137, _offset); XZ47 ^= amd_bitalign(XZ139, XZ138, _offset); XZ48 ^= amd_bitalign(XZ140, XZ139, _offset); XZ49 ^= amd_bitalign(XZ141, XZ140, _offset); XZ50 ^= amd_bitalign(XZ142, XZ141, _offset); XZ51 ^= amd_bitalign(XZ143, XZ142, _offset); XZ52 ^= amd_bitalign(XZ144, XZ143, _offset); XZ53 ^= amd_bitalign(XZ145, XZ144, _offset); XZ54 ^= amd_bitalign(XZ146, XZ145, _offset); XZ55 ^= amd_bitalign(XZ147, XZ146, _offset); XZ56 ^= amd_bitalign(XZ84, XZ83, _offset); XZ57 ^= amd_bitalign(XZ85, XZ84, _offset); XZ58 ^= amd_bitalign(XZ86, XZ85, _offset); XZ59 ^= amd_bitalign(XZ87, XZ86, _offset); XZ60 ^= amd_bitalign(XZ88, XZ87, _offset); XZ61 ^= amd_bitalign(XZ89, XZ88, _offset); XZ62 ^= amd_bitalign(XZ90, XZ89, _offset); XZ63 ^= amd_bitalign(XZ91, XZ90, _offset); }
+						else if (shifted_bufptr < 14) if (shifted_bufptr < 13) { XZ0 ^= amd_bitalign(XZ93, XZ92, _offset); XZ1 ^= amd_bitalign(XZ94, XZ93, _offset); XZ2 ^= amd_bitalign(XZ95, XZ94, _offset); XZ3 ^= amd_bitalign(XZ96, XZ95, _offset); XZ4 ^= amd_bitalign(XZ97, XZ96, _offset); XZ5 ^= amd_bitalign(XZ98, XZ97, _offset); XZ6 ^= amd_bitalign(XZ99, XZ98, _offset); XZ7 ^= amd_bitalign(XZ100, XZ99, _offset); XZ8 ^= amd_bitalign(XZ101, XZ100, _offset); XZ9 ^= amd_bitalign(XZ102, XZ101, _offset); XZ10 ^= amd_bitalign(XZ103, XZ102, _offset); XZ11 ^= amd_bitalign(XZ104, XZ103, _offset); XZ12 ^= amd_bitalign(XZ105, XZ104, _offset); XZ13 ^= amd_bitalign(XZ106, XZ105, _offset); XZ14 ^= amd_bitalign(XZ107, XZ106, _offset); XZ15 ^= amd_bitalign(XZ108, XZ107, _offset); XZ16 ^= amd_bitalign(XZ109, XZ108, _offset); XZ17 ^= amd_bitalign(XZ110, XZ109, _offset); XZ18 ^= amd_bitalign(XZ111, XZ110, _offset); XZ19 ^= amd_bitalign(XZ112, XZ111, _offset); XZ20 ^= amd_bitalign(XZ113, XZ112, _offset); XZ21 ^= amd_bitalign(XZ114, XZ113, _offset); XZ22 ^= amd_bitalign(XZ115, XZ114, _offset); XZ23 ^= amd_bitalign(XZ116, XZ115, _offset); XZ24 ^= amd_bitalign(XZ117, XZ116, _offset); XZ25 ^= amd_bitalign(XZ118, XZ117, _offset); XZ26 ^= amd_bitalign(XZ119, XZ118, _offset); XZ27 ^= amd_bitalign(XZ120, XZ119, _offset); XZ28 ^= amd_bitalign(XZ121, XZ120, _offset); XZ29 ^= amd_bitalign(XZ122, XZ121, _offset); XZ30 ^= amd_bitalign(XZ123, XZ122, _offset); XZ31 ^= amd_bitalign(XZ124, XZ123, _offset); XZ32 ^= amd_bitalign(XZ125, XZ124, _offset); XZ33 ^= amd_bitalign(XZ126, XZ125, _offset); XZ34 ^= amd_bitalign(XZ127, XZ126, _offset); XZ35 ^= amd_bitalign(XZ128, XZ127, _offset); XZ36 ^= amd_bitalign(XZ129, XZ128, _offset); XZ37 ^= amd_bitalign(XZ130, XZ129, _offset); XZ38 ^= amd_bitalign(XZ131, XZ130, _offset); XZ39 ^= amd_bitalign(XZ132, XZ131, _offset); XZ40 ^= amd_bitalign(XZ133, XZ132, _offset); XZ41 ^= amd_bitalign(XZ134, XZ133, _offset); XZ42 ^= amd_bitalign(XZ135, XZ134, _offset); XZ43 ^= amd_bitalign(XZ136, XZ135, _offset); XZ44 ^= amd_bitalign(XZ137, XZ136, _offset); XZ45 ^= amd_bitalign(XZ138, XZ137, _offset); XZ46 ^= amd_bitalign(XZ139, XZ138, _offset); XZ47 ^= amd_bitalign(XZ140, XZ139, _offset); XZ48 ^= amd_bitalign(XZ141, XZ140, _offset); XZ49 ^= amd_bitalign(XZ142, XZ141, _offset); XZ50 ^= amd_bitalign(XZ143, XZ142, _offset); XZ51 ^= amd_bitalign(XZ144, XZ143, _offset); XZ52 ^= amd_bitalign(XZ145, XZ144, _offset); XZ53 ^= amd_bitalign(XZ146, XZ145, _offset); XZ54 ^= amd_bitalign(XZ147, XZ146, _offset); XZ55 ^= amd_bitalign(XZ148, XZ147, _offset); XZ56 ^= amd_bitalign(XZ85, XZ84, _offset); XZ57 ^= amd_bitalign(XZ86, XZ85, _offset); XZ58 ^= amd_bitalign(XZ87, XZ86, _offset); XZ59 ^= amd_bitalign(XZ88, XZ87, _offset); XZ60 ^= amd_bitalign(XZ89, XZ88, _offset); XZ61 ^= amd_bitalign(XZ90, XZ89, _offset); XZ62 ^= amd_bitalign(XZ91, XZ90, _offset); XZ63 ^= amd_bitalign(XZ92, XZ91, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ94, XZ93, _offset); XZ1 ^= amd_bitalign(XZ95, XZ94, _offset); XZ2 ^= amd_bitalign(XZ96, XZ95, _offset); XZ3 ^= amd_bitalign(XZ97, XZ96, _offset); XZ4 ^= amd_bitalign(XZ98, XZ97, _offset); XZ5 ^= amd_bitalign(XZ99, XZ98, _offset); XZ6 ^= amd_bitalign(XZ100, XZ99, _offset); XZ7 ^= amd_bitalign(XZ101, XZ100, _offset); XZ8 ^= amd_bitalign(XZ102, XZ101, _offset); XZ9 ^= amd_bitalign(XZ103, XZ102, _offset); XZ10 ^= amd_bitalign(XZ104, XZ103, _offset); XZ11 ^= amd_bitalign(XZ105, XZ104, _offset); XZ12 ^= amd_bitalign(XZ106, XZ105, _offset); XZ13 ^= amd_bitalign(XZ107, XZ106, _offset); XZ14 ^= amd_bitalign(XZ108, XZ107, _offset); XZ15 ^= amd_bitalign(XZ109, XZ108, _offset); XZ16 ^= amd_bitalign(XZ110, XZ109, _offset); XZ17 ^= amd_bitalign(XZ111, XZ110, _offset); XZ18 ^= amd_bitalign(XZ112, XZ111, _offset); XZ19 ^= amd_bitalign(XZ113, XZ112, _offset); XZ20 ^= amd_bitalign(XZ114, XZ113, _offset); XZ21 ^= amd_bitalign(XZ115, XZ114, _offset); XZ22 ^= amd_bitalign(XZ116, XZ115, _offset); XZ23 ^= amd_bitalign(XZ117, XZ116, _offset); XZ24 ^= amd_bitalign(XZ118, XZ117, _offset); XZ25 ^= amd_bitalign(XZ119, XZ118, _offset); XZ26 ^= amd_bitalign(XZ120, XZ119, _offset); XZ27 ^= amd_bitalign(XZ121, XZ120, _offset); XZ28 ^= amd_bitalign(XZ122, XZ121, _offset); XZ29 ^= amd_bitalign(XZ123, XZ122, _offset); XZ30 ^= amd_bitalign(XZ124, XZ123, _offset); XZ31 ^= amd_bitalign(XZ125, XZ124, _offset); XZ32 ^= amd_bitalign(XZ126, XZ125, _offset); XZ33 ^= amd_bitalign(XZ127, XZ126, _offset); XZ34 ^= amd_bitalign(XZ128, XZ127, _offset); XZ35 ^= amd_bitalign(XZ129, XZ128, _offset); XZ36 ^= amd_bitalign(XZ130, XZ129, _offset); XZ37 ^= amd_bitalign(XZ131, XZ130, _offset); XZ38 ^= amd_bitalign(XZ132, XZ131, _offset); XZ39 ^= amd_bitalign(XZ133, XZ132, _offset); XZ40 ^= amd_bitalign(XZ134, XZ133, _offset); XZ41 ^= amd_bitalign(XZ135, XZ134, _offset); XZ42 ^= amd_bitalign(XZ136, XZ135, _offset); XZ43 ^= amd_bitalign(XZ137, XZ136, _offset); XZ44 ^= amd_bitalign(XZ138, XZ137, _offset); XZ45 ^= amd_bitalign(XZ139, XZ138, _offset); XZ46 ^= amd_bitalign(XZ140, XZ139, _offset); XZ47 ^= amd_bitalign(XZ141, XZ140, _offset); XZ48 ^= amd_bitalign(XZ142, XZ141, _offset); XZ49 ^= amd_bitalign(XZ143, XZ142, _offset); XZ50 ^= amd_bitalign(XZ144, XZ143, _offset); XZ51 ^= amd_bitalign(XZ145, XZ144, _offset); XZ52 ^= amd_bitalign(XZ146, XZ145, _offset); XZ53 ^= amd_bitalign(XZ147, XZ146, _offset); XZ54 ^= amd_bitalign(XZ148, XZ147, _offset); XZ55 ^= amd_bitalign(XZ149, XZ148, _offset); XZ56 ^= amd_bitalign(XZ86, XZ85, _offset); XZ57 ^= amd_bitalign(XZ87, XZ86, _offset); XZ58 ^= amd_bitalign(XZ88, XZ87, _offset); XZ59 ^= amd_bitalign(XZ89, XZ88, _offset); XZ60 ^= amd_bitalign(XZ90, XZ89, _offset); XZ61 ^= amd_bitalign(XZ91, XZ90, _offset); XZ62 ^= amd_bitalign(XZ92, XZ91, _offset); XZ63 ^= amd_bitalign(XZ93, XZ92, _offset); }
+						else if (shifted_bufptr < 15) { XZ0 ^= amd_bitalign(XZ95, XZ94, _offset); XZ1 ^= amd_bitalign(XZ96, XZ95, _offset); XZ2 ^= amd_bitalign(XZ97, XZ96, _offset); XZ3 ^= amd_bitalign(XZ98, XZ97, _offset); XZ4 ^= amd_bitalign(XZ99, XZ98, _offset); XZ5 ^= amd_bitalign(XZ100, XZ99, _offset); XZ6 ^= amd_bitalign(XZ101, XZ100, _offset); XZ7 ^= amd_bitalign(XZ102, XZ101, _offset); XZ8 ^= amd_bitalign(XZ103, XZ102, _offset); XZ9 ^= amd_bitalign(XZ104, XZ103, _offset); XZ10 ^= amd_bitalign(XZ105, XZ104, _offset); XZ11 ^= amd_bitalign(XZ106, XZ105, _offset); XZ12 ^= amd_bitalign(XZ107, XZ106, _offset); XZ13 ^= amd_bitalign(XZ108, XZ107, _offset); XZ14 ^= amd_bitalign(XZ109, XZ108, _offset); XZ15 ^= amd_bitalign(XZ110, XZ109, _offset); XZ16 ^= amd_bitalign(XZ111, XZ110, _offset); XZ17 ^= amd_bitalign(XZ112, XZ111, _offset); XZ18 ^= amd_bitalign(XZ113, XZ112, _offset); XZ19 ^= amd_bitalign(XZ114, XZ113, _offset); XZ20 ^= amd_bitalign(XZ115, XZ114, _offset); XZ21 ^= amd_bitalign(XZ116, XZ115, _offset); XZ22 ^= amd_bitalign(XZ117, XZ116, _offset); XZ23 ^= amd_bitalign(XZ118, XZ117, _offset); XZ24 ^= amd_bitalign(XZ119, XZ118, _offset); XZ25 ^= amd_bitalign(XZ120, XZ119, _offset); XZ26 ^= amd_bitalign(XZ121, XZ120, _offset); XZ27 ^= amd_bitalign(XZ122, XZ121, _offset); XZ28 ^= amd_bitalign(XZ123, XZ122, _offset); XZ29 ^= amd_bitalign(XZ124, XZ123, _offset); XZ30 ^= amd_bitalign(XZ125, XZ124, _offset); XZ31 ^= amd_bitalign(XZ126, XZ125, _offset); XZ32 ^= amd_bitalign(XZ127, XZ126, _offset); XZ33 ^= amd_bitalign(XZ128, XZ127, _offset); XZ34 ^= amd_bitalign(XZ129, XZ128, _offset); XZ35 ^= amd_bitalign(XZ130, XZ129, _offset); XZ36 ^= amd_bitalign(XZ131, XZ130, _offset); XZ37 ^= amd_bitalign(XZ132, XZ131, _offset); XZ38 ^= amd_bitalign(XZ133, XZ132, _offset); XZ39 ^= amd_bitalign(XZ134, XZ133, _offset); XZ40 ^= amd_bitalign(XZ135, XZ134, _offset); XZ41 ^= amd_bitalign(XZ136, XZ135, _offset); XZ42 ^= amd_bitalign(XZ137, XZ136, _offset); XZ43 ^= amd_bitalign(XZ138, XZ137, _offset); XZ44 ^= amd_bitalign(XZ139, XZ138, _offset); XZ45 ^= amd_bitalign(XZ140, XZ139, _offset); XZ46 ^= amd_bitalign(XZ141, XZ140, _offset); XZ47 ^= amd_bitalign(XZ142, XZ141, _offset); XZ48 ^= amd_bitalign(XZ143, XZ142, _offset); XZ49 ^= amd_bitalign(XZ144, XZ143, _offset); XZ50 ^= amd_bitalign(XZ145, XZ144, _offset); XZ51 ^= amd_bitalign(XZ146, XZ145, _offset); XZ52 ^= amd_bitalign(XZ147, XZ146, _offset); XZ53 ^= amd_bitalign(XZ148, XZ147, _offset); XZ54 ^= amd_bitalign(XZ149, XZ148, _offset); XZ55 ^= amd_bitalign(XZ150, XZ149, _offset); XZ56 ^= amd_bitalign(XZ87, XZ86, _offset); XZ57 ^= amd_bitalign(XZ88, XZ87, _offset); XZ58 ^= amd_bitalign(XZ89, XZ88, _offset); XZ59 ^= amd_bitalign(XZ90, XZ89, _offset); XZ60 ^= amd_bitalign(XZ91, XZ90, _offset); XZ61 ^= amd_bitalign(XZ92, XZ91, _offset); XZ62 ^= amd_bitalign(XZ93, XZ92, _offset); XZ63 ^= amd_bitalign(XZ94, XZ93, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ96, XZ95, _offset); XZ1 ^= amd_bitalign(XZ97, XZ96, _offset); XZ2 ^= amd_bitalign(XZ98, XZ97, _offset); XZ3 ^= amd_bitalign(XZ99, XZ98, _offset); XZ4 ^= amd_bitalign(XZ100, XZ99, _offset); XZ5 ^= amd_bitalign(XZ101, XZ100, _offset); XZ6 ^= amd_bitalign(XZ102, XZ101, _offset); XZ7 ^= amd_bitalign(XZ103, XZ102, _offset); XZ8 ^= amd_bitalign(XZ104, XZ103, _offset); XZ9 ^= amd_bitalign(XZ105, XZ104, _offset); XZ10 ^= amd_bitalign(XZ106, XZ105, _offset); XZ11 ^= amd_bitalign(XZ107, XZ106, _offset); XZ12 ^= amd_bitalign(XZ108, XZ107, _offset); XZ13 ^= amd_bitalign(XZ109, XZ108, _offset); XZ14 ^= amd_bitalign(XZ110, XZ109, _offset); XZ15 ^= amd_bitalign(XZ111, XZ110, _offset); XZ16 ^= amd_bitalign(XZ112, XZ111, _offset); XZ17 ^= amd_bitalign(XZ113, XZ112, _offset); XZ18 ^= amd_bitalign(XZ114, XZ113, _offset); XZ19 ^= amd_bitalign(XZ115, XZ114, _offset); XZ20 ^= amd_bitalign(XZ116, XZ115, _offset); XZ21 ^= amd_bitalign(XZ117, XZ116, _offset); XZ22 ^= amd_bitalign(XZ118, XZ117, _offset); XZ23 ^= amd_bitalign(XZ119, XZ118, _offset); XZ24 ^= amd_bitalign(XZ120, XZ119, _offset); XZ25 ^= amd_bitalign(XZ121, XZ120, _offset); XZ26 ^= amd_bitalign(XZ122, XZ121, _offset); XZ27 ^= amd_bitalign(XZ123, XZ122, _offset); XZ28 ^= amd_bitalign(XZ124, XZ123, _offset); XZ29 ^= amd_bitalign(XZ125, XZ124, _offset); XZ30 ^= amd_bitalign(XZ126, XZ125, _offset); XZ31 ^= amd_bitalign(XZ127, XZ126, _offset); XZ32 ^= amd_bitalign(XZ128, XZ127, _offset); XZ33 ^= amd_bitalign(XZ129, XZ128, _offset); XZ34 ^= amd_bitalign(XZ130, XZ129, _offset); XZ35 ^= amd_bitalign(XZ131, XZ130, _offset); XZ36 ^= amd_bitalign(XZ132, XZ131, _offset); XZ37 ^= amd_bitalign(XZ133, XZ132, _offset); XZ38 ^= amd_bitalign(XZ134, XZ133, _offset); XZ39 ^= amd_bitalign(XZ135, XZ134, _offset); XZ40 ^= amd_bitalign(XZ136, XZ135, _offset); XZ41 ^= amd_bitalign(XZ137, XZ136, _offset); XZ42 ^= amd_bitalign(XZ138, XZ137, _offset); XZ43 ^= amd_bitalign(XZ139, XZ138, _offset); XZ44 ^= amd_bitalign(XZ140, XZ139, _offset); XZ45 ^= amd_bitalign(XZ141, XZ140, _offset); XZ46 ^= amd_bitalign(XZ142, XZ141, _offset); XZ47 ^= amd_bitalign(XZ143, XZ142, _offset); XZ48 ^= amd_bitalign(XZ144, XZ143, _offset); XZ49 ^= amd_bitalign(XZ145, XZ144, _offset); XZ50 ^= amd_bitalign(XZ146, XZ145, _offset); XZ51 ^= amd_bitalign(XZ147, XZ146, _offset); XZ52 ^= amd_bitalign(XZ148, XZ147, _offset); XZ53 ^= amd_bitalign(XZ149, XZ148, _offset); XZ54 ^= amd_bitalign(XZ150, XZ149, _offset); XZ55 ^= amd_bitalign(XZ151, XZ150, _offset); XZ56 ^= amd_bitalign(XZ88, XZ87, _offset); XZ57 ^= amd_bitalign(XZ89, XZ88, _offset); XZ58 ^= amd_bitalign(XZ90, XZ89, _offset); XZ59 ^= amd_bitalign(XZ91, XZ90, _offset); XZ60 ^= amd_bitalign(XZ92, XZ91, _offset); XZ61 ^= amd_bitalign(XZ93, XZ92, _offset); XZ62 ^= amd_bitalign(XZ94, XZ93, _offset); XZ63 ^= amd_bitalign(XZ95, XZ94, _offset); }
+						else if (shifted_bufptr < 24) if (shifted_bufptr < 20) if (shifted_bufptr < 18) if (shifted_bufptr < 17) { XZ0 ^= amd_bitalign(XZ97, XZ96, _offset); XZ1 ^= amd_bitalign(XZ98, XZ97, _offset); XZ2 ^= amd_bitalign(XZ99, XZ98, _offset); XZ3 ^= amd_bitalign(XZ100, XZ99, _offset); XZ4 ^= amd_bitalign(XZ101, XZ100, _offset); XZ5 ^= amd_bitalign(XZ102, XZ101, _offset); XZ6 ^= amd_bitalign(XZ103, XZ102, _offset); XZ7 ^= amd_bitalign(XZ104, XZ103, _offset); XZ8 ^= amd_bitalign(XZ105, XZ104, _offset); XZ9 ^= amd_bitalign(XZ106, XZ105, _offset); XZ10 ^= amd_bitalign(XZ107, XZ106, _offset); XZ11 ^= amd_bitalign(XZ108, XZ107, _offset); XZ12 ^= amd_bitalign(XZ109, XZ108, _offset); XZ13 ^= amd_bitalign(XZ110, XZ109, _offset); XZ14 ^= amd_bitalign(XZ111, XZ110, _offset); XZ15 ^= amd_bitalign(XZ112, XZ111, _offset); XZ16 ^= amd_bitalign(XZ113, XZ112, _offset); XZ17 ^= amd_bitalign(XZ114, XZ113, _offset); XZ18 ^= amd_bitalign(XZ115, XZ114, _offset); XZ19 ^= amd_bitalign(XZ116, XZ115, _offset); XZ20 ^= amd_bitalign(XZ117, XZ116, _offset); XZ21 ^= amd_bitalign(XZ118, XZ117, _offset); XZ22 ^= amd_bitalign(XZ119, XZ118, _offset); XZ23 ^= amd_bitalign(XZ120, XZ119, _offset); XZ24 ^= amd_bitalign(XZ121, XZ120, _offset); XZ25 ^= amd_bitalign(XZ122, XZ121, _offset); XZ26 ^= amd_bitalign(XZ123, XZ122, _offset); XZ27 ^= amd_bitalign(XZ124, XZ123, _offset); XZ28 ^= amd_bitalign(XZ125, XZ124, _offset); XZ29 ^= amd_bitalign(XZ126, XZ125, _offset); XZ30 ^= amd_bitalign(XZ127, XZ126, _offset); XZ31 ^= amd_bitalign(XZ128, XZ127, _offset); XZ32 ^= amd_bitalign(XZ129, XZ128, _offset); XZ33 ^= amd_bitalign(XZ130, XZ129, _offset); XZ34 ^= amd_bitalign(XZ131, XZ130, _offset); XZ35 ^= amd_bitalign(XZ132, XZ131, _offset); XZ36 ^= amd_bitalign(XZ133, XZ132, _offset); XZ37 ^= amd_bitalign(XZ134, XZ133, _offset); XZ38 ^= amd_bitalign(XZ135, XZ134, _offset); XZ39 ^= amd_bitalign(XZ136, XZ135, _offset); XZ40 ^= amd_bitalign(XZ137, XZ136, _offset); XZ41 ^= amd_bitalign(XZ138, XZ137, _offset); XZ42 ^= amd_bitalign(XZ139, XZ138, _offset); XZ43 ^= amd_bitalign(XZ140, XZ139, _offset); XZ44 ^= amd_bitalign(XZ141, XZ140, _offset); XZ45 ^= amd_bitalign(XZ142, XZ141, _offset); XZ46 ^= amd_bitalign(XZ143, XZ142, _offset); XZ47 ^= amd_bitalign(XZ144, XZ143, _offset); XZ48 ^= amd_bitalign(XZ81, XZ80, _offset); XZ49 ^= amd_bitalign(XZ82, XZ81, _offset); XZ50 ^= amd_bitalign(XZ83, XZ82, _offset); XZ51 ^= amd_bitalign(XZ84, XZ83, _offset); XZ52 ^= amd_bitalign(XZ85, XZ84, _offset); XZ53 ^= amd_bitalign(XZ86, XZ85, _offset); XZ54 ^= amd_bitalign(XZ87, XZ86, _offset); XZ55 ^= amd_bitalign(XZ88, XZ87, _offset); XZ56 ^= amd_bitalign(XZ89, XZ88, _offset); XZ57 ^= amd_bitalign(XZ90, XZ89, _offset); XZ58 ^= amd_bitalign(XZ91, XZ90, _offset); XZ59 ^= amd_bitalign(XZ92, XZ91, _offset); XZ60 ^= amd_bitalign(XZ93, XZ92, _offset); XZ61 ^= amd_bitalign(XZ94, XZ93, _offset); XZ62 ^= amd_bitalign(XZ95, XZ94, _offset); XZ63 ^= amd_bitalign(XZ96, XZ95, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ98, XZ97, _offset); XZ1 ^= amd_bitalign(XZ99, XZ98, _offset); XZ2 ^= amd_bitalign(XZ100, XZ99, _offset); XZ3 ^= amd_bitalign(XZ101, XZ100, _offset); XZ4 ^= amd_bitalign(XZ102, XZ101, _offset); XZ5 ^= amd_bitalign(XZ103, XZ102, _offset); XZ6 ^= amd_bitalign(XZ104, XZ103, _offset); XZ7 ^= amd_bitalign(XZ105, XZ104, _offset); XZ8 ^= amd_bitalign(XZ106, XZ105, _offset); XZ9 ^= amd_bitalign(XZ107, XZ106, _offset); XZ10 ^= amd_bitalign(XZ108, XZ107, _offset); XZ11 ^= amd_bitalign(XZ109, XZ108, _offset); XZ12 ^= amd_bitalign(XZ110, XZ109, _offset); XZ13 ^= amd_bitalign(XZ111, XZ110, _offset); XZ14 ^= amd_bitalign(XZ112, XZ111, _offset); XZ15 ^= amd_bitalign(XZ113, XZ112, _offset); XZ16 ^= amd_bitalign(XZ114, XZ113, _offset); XZ17 ^= amd_bitalign(XZ115, XZ114, _offset); XZ18 ^= amd_bitalign(XZ116, XZ115, _offset); XZ19 ^= amd_bitalign(XZ117, XZ116, _offset); XZ20 ^= amd_bitalign(XZ118, XZ117, _offset); XZ21 ^= amd_bitalign(XZ119, XZ118, _offset); XZ22 ^= amd_bitalign(XZ120, XZ119, _offset); XZ23 ^= amd_bitalign(XZ121, XZ120, _offset); XZ24 ^= amd_bitalign(XZ122, XZ121, _offset); XZ25 ^= amd_bitalign(XZ123, XZ122, _offset); XZ26 ^= amd_bitalign(XZ124, XZ123, _offset); XZ27 ^= amd_bitalign(XZ125, XZ124, _offset); XZ28 ^= amd_bitalign(XZ126, XZ125, _offset); XZ29 ^= amd_bitalign(XZ127, XZ126, _offset); XZ30 ^= amd_bitalign(XZ128, XZ127, _offset); XZ31 ^= amd_bitalign(XZ129, XZ128, _offset); XZ32 ^= amd_bitalign(XZ130, XZ129, _offset); XZ33 ^= amd_bitalign(XZ131, XZ130, _offset); XZ34 ^= amd_bitalign(XZ132, XZ131, _offset); XZ35 ^= amd_bitalign(XZ133, XZ132, _offset); XZ36 ^= amd_bitalign(XZ134, XZ133, _offset); XZ37 ^= amd_bitalign(XZ135, XZ134, _offset); XZ38 ^= amd_bitalign(XZ136, XZ135, _offset); XZ39 ^= amd_bitalign(XZ137, XZ136, _offset); XZ40 ^= amd_bitalign(XZ138, XZ137, _offset); XZ41 ^= amd_bitalign(XZ139, XZ138, _offset); XZ42 ^= amd_bitalign(XZ140, XZ139, _offset); XZ43 ^= amd_bitalign(XZ141, XZ140, _offset); XZ44 ^= amd_bitalign(XZ142, XZ141, _offset); XZ45 ^= amd_bitalign(XZ143, XZ142, _offset); XZ46 ^= amd_bitalign(XZ144, XZ143, _offset); XZ47 ^= amd_bitalign(XZ145, XZ144, _offset); XZ48 ^= amd_bitalign(XZ82, XZ81, _offset); XZ49 ^= amd_bitalign(XZ83, XZ82, _offset); XZ50 ^= amd_bitalign(XZ84, XZ83, _offset); XZ51 ^= amd_bitalign(XZ85, XZ84, _offset); XZ52 ^= amd_bitalign(XZ86, XZ85, _offset); XZ53 ^= amd_bitalign(XZ87, XZ86, _offset); XZ54 ^= amd_bitalign(XZ88, XZ87, _offset); XZ55 ^= amd_bitalign(XZ89, XZ88, _offset); XZ56 ^= amd_bitalign(XZ90, XZ89, _offset); XZ57 ^= amd_bitalign(XZ91, XZ90, _offset); XZ58 ^= amd_bitalign(XZ92, XZ91, _offset); XZ59 ^= amd_bitalign(XZ93, XZ92, _offset); XZ60 ^= amd_bitalign(XZ94, XZ93, _offset); XZ61 ^= amd_bitalign(XZ95, XZ94, _offset); XZ62 ^= amd_bitalign(XZ96, XZ95, _offset); XZ63 ^= amd_bitalign(XZ97, XZ96, _offset); }
+						else if (shifted_bufptr < 19) { XZ0 ^= amd_bitalign(XZ99, XZ98, _offset); XZ1 ^= amd_bitalign(XZ100, XZ99, _offset); XZ2 ^= amd_bitalign(XZ101, XZ100, _offset); XZ3 ^= amd_bitalign(XZ102, XZ101, _offset); XZ4 ^= amd_bitalign(XZ103, XZ102, _offset); XZ5 ^= amd_bitalign(XZ104, XZ103, _offset); XZ6 ^= amd_bitalign(XZ105, XZ104, _offset); XZ7 ^= amd_bitalign(XZ106, XZ105, _offset); XZ8 ^= amd_bitalign(XZ107, XZ106, _offset); XZ9 ^= amd_bitalign(XZ108, XZ107, _offset); XZ10 ^= amd_bitalign(XZ109, XZ108, _offset); XZ11 ^= amd_bitalign(XZ110, XZ109, _offset); XZ12 ^= amd_bitalign(XZ111, XZ110, _offset); XZ13 ^= amd_bitalign(XZ112, XZ111, _offset); XZ14 ^= amd_bitalign(XZ113, XZ112, _offset); XZ15 ^= amd_bitalign(XZ114, XZ113, _offset); XZ16 ^= amd_bitalign(XZ115, XZ114, _offset); XZ17 ^= amd_bitalign(XZ116, XZ115, _offset); XZ18 ^= amd_bitalign(XZ117, XZ116, _offset); XZ19 ^= amd_bitalign(XZ118, XZ117, _offset); XZ20 ^= amd_bitalign(XZ119, XZ118, _offset); XZ21 ^= amd_bitalign(XZ120, XZ119, _offset); XZ22 ^= amd_bitalign(XZ121, XZ120, _offset); XZ23 ^= amd_bitalign(XZ122, XZ121, _offset); XZ24 ^= amd_bitalign(XZ123, XZ122, _offset); XZ25 ^= amd_bitalign(XZ124, XZ123, _offset); XZ26 ^= amd_bitalign(XZ125, XZ124, _offset); XZ27 ^= amd_bitalign(XZ126, XZ125, _offset); XZ28 ^= amd_bitalign(XZ127, XZ126, _offset); XZ29 ^= amd_bitalign(XZ128, XZ127, _offset); XZ30 ^= amd_bitalign(XZ129, XZ128, _offset); XZ31 ^= amd_bitalign(XZ130, XZ129, _offset); XZ32 ^= amd_bitalign(XZ131, XZ130, _offset); XZ33 ^= amd_bitalign(XZ132, XZ131, _offset); XZ34 ^= amd_bitalign(XZ133, XZ132, _offset); XZ35 ^= amd_bitalign(XZ134, XZ133, _offset); XZ36 ^= amd_bitalign(XZ135, XZ134, _offset); XZ37 ^= amd_bitalign(XZ136, XZ135, _offset); XZ38 ^= amd_bitalign(XZ137, XZ136, _offset); XZ39 ^= amd_bitalign(XZ138, XZ137, _offset); XZ40 ^= amd_bitalign(XZ139, XZ138, _offset); XZ41 ^= amd_bitalign(XZ140, XZ139, _offset); XZ42 ^= amd_bitalign(XZ141, XZ140, _offset); XZ43 ^= amd_bitalign(XZ142, XZ141, _offset); XZ44 ^= amd_bitalign(XZ143, XZ142, _offset); XZ45 ^= amd_bitalign(XZ144, XZ143, _offset); XZ46 ^= amd_bitalign(XZ145, XZ144, _offset); XZ47 ^= amd_bitalign(XZ146, XZ145, _offset); XZ48 ^= amd_bitalign(XZ83, XZ82, _offset); XZ49 ^= amd_bitalign(XZ84, XZ83, _offset); XZ50 ^= amd_bitalign(XZ85, XZ84, _offset); XZ51 ^= amd_bitalign(XZ86, XZ85, _offset); XZ52 ^= amd_bitalign(XZ87, XZ86, _offset); XZ53 ^= amd_bitalign(XZ88, XZ87, _offset); XZ54 ^= amd_bitalign(XZ89, XZ88, _offset); XZ55 ^= amd_bitalign(XZ90, XZ89, _offset); XZ56 ^= amd_bitalign(XZ91, XZ90, _offset); XZ57 ^= amd_bitalign(XZ92, XZ91, _offset); XZ58 ^= amd_bitalign(XZ93, XZ92, _offset); XZ59 ^= amd_bitalign(XZ94, XZ93, _offset); XZ60 ^= amd_bitalign(XZ95, XZ94, _offset); XZ61 ^= amd_bitalign(XZ96, XZ95, _offset); XZ62 ^= amd_bitalign(XZ97, XZ96, _offset); XZ63 ^= amd_bitalign(XZ98, XZ97, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ100, XZ99, _offset); XZ1 ^= amd_bitalign(XZ101, XZ100, _offset); XZ2 ^= amd_bitalign(XZ102, XZ101, _offset); XZ3 ^= amd_bitalign(XZ103, XZ102, _offset); XZ4 ^= amd_bitalign(XZ104, XZ103, _offset); XZ5 ^= amd_bitalign(XZ105, XZ104, _offset); XZ6 ^= amd_bitalign(XZ106, XZ105, _offset); XZ7 ^= amd_bitalign(XZ107, XZ106, _offset); XZ8 ^= amd_bitalign(XZ108, XZ107, _offset); XZ9 ^= amd_bitalign(XZ109, XZ108, _offset); XZ10 ^= amd_bitalign(XZ110, XZ109, _offset); XZ11 ^= amd_bitalign(XZ111, XZ110, _offset); XZ12 ^= amd_bitalign(XZ112, XZ111, _offset); XZ13 ^= amd_bitalign(XZ113, XZ112, _offset); XZ14 ^= amd_bitalign(XZ114, XZ113, _offset); XZ15 ^= amd_bitalign(XZ115, XZ114, _offset); XZ16 ^= amd_bitalign(XZ116, XZ115, _offset); XZ17 ^= amd_bitalign(XZ117, XZ116, _offset); XZ18 ^= amd_bitalign(XZ118, XZ117, _offset); XZ19 ^= amd_bitalign(XZ119, XZ118, _offset); XZ20 ^= amd_bitalign(XZ120, XZ119, _offset); XZ21 ^= amd_bitalign(XZ121, XZ120, _offset); XZ22 ^= amd_bitalign(XZ122, XZ121, _offset); XZ23 ^= amd_bitalign(XZ123, XZ122, _offset); XZ24 ^= amd_bitalign(XZ124, XZ123, _offset); XZ25 ^= amd_bitalign(XZ125, XZ124, _offset); XZ26 ^= amd_bitalign(XZ126, XZ125, _offset); XZ27 ^= amd_bitalign(XZ127, XZ126, _offset); XZ28 ^= amd_bitalign(XZ128, XZ127, _offset); XZ29 ^= amd_bitalign(XZ129, XZ128, _offset); XZ30 ^= amd_bitalign(XZ130, XZ129, _offset); XZ31 ^= amd_bitalign(XZ131, XZ130, _offset); XZ32 ^= amd_bitalign(XZ132, XZ131, _offset); XZ33 ^= amd_bitalign(XZ133, XZ132, _offset); XZ34 ^= amd_bitalign(XZ134, XZ133, _offset); XZ35 ^= amd_bitalign(XZ135, XZ134, _offset); XZ36 ^= amd_bitalign(XZ136, XZ135, _offset); XZ37 ^= amd_bitalign(XZ137, XZ136, _offset); XZ38 ^= amd_bitalign(XZ138, XZ137, _offset); XZ39 ^= amd_bitalign(XZ139, XZ138, _offset); XZ40 ^= amd_bitalign(XZ140, XZ139, _offset); XZ41 ^= amd_bitalign(XZ141, XZ140, _offset); XZ42 ^= amd_bitalign(XZ142, XZ141, _offset); XZ43 ^= amd_bitalign(XZ143, XZ142, _offset); XZ44 ^= amd_bitalign(XZ144, XZ143, _offset); XZ45 ^= amd_bitalign(XZ145, XZ144, _offset); XZ46 ^= amd_bitalign(XZ146, XZ145, _offset); XZ47 ^= amd_bitalign(XZ147, XZ146, _offset); XZ48 ^= amd_bitalign(XZ84, XZ83, _offset); XZ49 ^= amd_bitalign(XZ85, XZ84, _offset); XZ50 ^= amd_bitalign(XZ86, XZ85, _offset); XZ51 ^= amd_bitalign(XZ87, XZ86, _offset); XZ52 ^= amd_bitalign(XZ88, XZ87, _offset); XZ53 ^= amd_bitalign(XZ89, XZ88, _offset); XZ54 ^= amd_bitalign(XZ90, XZ89, _offset); XZ55 ^= amd_bitalign(XZ91, XZ90, _offset); XZ56 ^= amd_bitalign(XZ92, XZ91, _offset); XZ57 ^= amd_bitalign(XZ93, XZ92, _offset); XZ58 ^= amd_bitalign(XZ94, XZ93, _offset); XZ59 ^= amd_bitalign(XZ95, XZ94, _offset); XZ60 ^= amd_bitalign(XZ96, XZ95, _offset); XZ61 ^= amd_bitalign(XZ97, XZ96, _offset); XZ62 ^= amd_bitalign(XZ98, XZ97, _offset); XZ63 ^= amd_bitalign(XZ99, XZ98, _offset); }
+						else if (shifted_bufptr < 22) if (shifted_bufptr < 21) { XZ0 ^= amd_bitalign(XZ101, XZ100, _offset); XZ1 ^= amd_bitalign(XZ102, XZ101, _offset); XZ2 ^= amd_bitalign(XZ103, XZ102, _offset); XZ3 ^= amd_bitalign(XZ104, XZ103, _offset); XZ4 ^= amd_bitalign(XZ105, XZ104, _offset); XZ5 ^= amd_bitalign(XZ106, XZ105, _offset); XZ6 ^= amd_bitalign(XZ107, XZ106, _offset); XZ7 ^= amd_bitalign(XZ108, XZ107, _offset); XZ8 ^= amd_bitalign(XZ109, XZ108, _offset); XZ9 ^= amd_bitalign(XZ110, XZ109, _offset); XZ10 ^= amd_bitalign(XZ111, XZ110, _offset); XZ11 ^= amd_bitalign(XZ112, XZ111, _offset); XZ12 ^= amd_bitalign(XZ113, XZ112, _offset); XZ13 ^= amd_bitalign(XZ114, XZ113, _offset); XZ14 ^= amd_bitalign(XZ115, XZ114, _offset); XZ15 ^= amd_bitalign(XZ116, XZ115, _offset); XZ16 ^= amd_bitalign(XZ117, XZ116, _offset); XZ17 ^= amd_bitalign(XZ118, XZ117, _offset); XZ18 ^= amd_bitalign(XZ119, XZ118, _offset); XZ19 ^= amd_bitalign(XZ120, XZ119, _offset); XZ20 ^= amd_bitalign(XZ121, XZ120, _offset); XZ21 ^= amd_bitalign(XZ122, XZ121, _offset); XZ22 ^= amd_bitalign(XZ123, XZ122, _offset); XZ23 ^= amd_bitalign(XZ124, XZ123, _offset); XZ24 ^= amd_bitalign(XZ125, XZ124, _offset); XZ25 ^= amd_bitalign(XZ126, XZ125, _offset); XZ26 ^= amd_bitalign(XZ127, XZ126, _offset); XZ27 ^= amd_bitalign(XZ128, XZ127, _offset); XZ28 ^= amd_bitalign(XZ129, XZ128, _offset); XZ29 ^= amd_bitalign(XZ130, XZ129, _offset); XZ30 ^= amd_bitalign(XZ131, XZ130, _offset); XZ31 ^= amd_bitalign(XZ132, XZ131, _offset); XZ32 ^= amd_bitalign(XZ133, XZ132, _offset); XZ33 ^= amd_bitalign(XZ134, XZ133, _offset); XZ34 ^= amd_bitalign(XZ135, XZ134, _offset); XZ35 ^= amd_bitalign(XZ136, XZ135, _offset); XZ36 ^= amd_bitalign(XZ137, XZ136, _offset); XZ37 ^= amd_bitalign(XZ138, XZ137, _offset); XZ38 ^= amd_bitalign(XZ139, XZ138, _offset); XZ39 ^= amd_bitalign(XZ140, XZ139, _offset); XZ40 ^= amd_bitalign(XZ141, XZ140, _offset); XZ41 ^= amd_bitalign(XZ142, XZ141, _offset); XZ42 ^= amd_bitalign(XZ143, XZ142, _offset); XZ43 ^= amd_bitalign(XZ144, XZ143, _offset); XZ44 ^= amd_bitalign(XZ145, XZ144, _offset); XZ45 ^= amd_bitalign(XZ146, XZ145, _offset); XZ46 ^= amd_bitalign(XZ147, XZ146, _offset); XZ47 ^= amd_bitalign(XZ148, XZ147, _offset); XZ48 ^= amd_bitalign(XZ85, XZ84, _offset); XZ49 ^= amd_bitalign(XZ86, XZ85, _offset); XZ50 ^= amd_bitalign(XZ87, XZ86, _offset); XZ51 ^= amd_bitalign(XZ88, XZ87, _offset); XZ52 ^= amd_bitalign(XZ89, XZ88, _offset); XZ53 ^= amd_bitalign(XZ90, XZ89, _offset); XZ54 ^= amd_bitalign(XZ91, XZ90, _offset); XZ55 ^= amd_bitalign(XZ92, XZ91, _offset); XZ56 ^= amd_bitalign(XZ93, XZ92, _offset); XZ57 ^= amd_bitalign(XZ94, XZ93, _offset); XZ58 ^= amd_bitalign(XZ95, XZ94, _offset); XZ59 ^= amd_bitalign(XZ96, XZ95, _offset); XZ60 ^= amd_bitalign(XZ97, XZ96, _offset); XZ61 ^= amd_bitalign(XZ98, XZ97, _offset); XZ62 ^= amd_bitalign(XZ99, XZ98, _offset); XZ63 ^= amd_bitalign(XZ100, XZ99, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ102, XZ101, _offset); XZ1 ^= amd_bitalign(XZ103, XZ102, _offset); XZ2 ^= amd_bitalign(XZ104, XZ103, _offset); XZ3 ^= amd_bitalign(XZ105, XZ104, _offset); XZ4 ^= amd_bitalign(XZ106, XZ105, _offset); XZ5 ^= amd_bitalign(XZ107, XZ106, _offset); XZ6 ^= amd_bitalign(XZ108, XZ107, _offset); XZ7 ^= amd_bitalign(XZ109, XZ108, _offset); XZ8 ^= amd_bitalign(XZ110, XZ109, _offset); XZ9 ^= amd_bitalign(XZ111, XZ110, _offset); XZ10 ^= amd_bitalign(XZ112, XZ111, _offset); XZ11 ^= amd_bitalign(XZ113, XZ112, _offset); XZ12 ^= amd_bitalign(XZ114, XZ113, _offset); XZ13 ^= amd_bitalign(XZ115, XZ114, _offset); XZ14 ^= amd_bitalign(XZ116, XZ115, _offset); XZ15 ^= amd_bitalign(XZ117, XZ116, _offset); XZ16 ^= amd_bitalign(XZ118, XZ117, _offset); XZ17 ^= amd_bitalign(XZ119, XZ118, _offset); XZ18 ^= amd_bitalign(XZ120, XZ119, _offset); XZ19 ^= amd_bitalign(XZ121, XZ120, _offset); XZ20 ^= amd_bitalign(XZ122, XZ121, _offset); XZ21 ^= amd_bitalign(XZ123, XZ122, _offset); XZ22 ^= amd_bitalign(XZ124, XZ123, _offset); XZ23 ^= amd_bitalign(XZ125, XZ124, _offset); XZ24 ^= amd_bitalign(XZ126, XZ125, _offset); XZ25 ^= amd_bitalign(XZ127, XZ126, _offset); XZ26 ^= amd_bitalign(XZ128, XZ127, _offset); XZ27 ^= amd_bitalign(XZ129, XZ128, _offset); XZ28 ^= amd_bitalign(XZ130, XZ129, _offset); XZ29 ^= amd_bitalign(XZ131, XZ130, _offset); XZ30 ^= amd_bitalign(XZ132, XZ131, _offset); XZ31 ^= amd_bitalign(XZ133, XZ132, _offset); XZ32 ^= amd_bitalign(XZ134, XZ133, _offset); XZ33 ^= amd_bitalign(XZ135, XZ134, _offset); XZ34 ^= amd_bitalign(XZ136, XZ135, _offset); XZ35 ^= amd_bitalign(XZ137, XZ136, _offset); XZ36 ^= amd_bitalign(XZ138, XZ137, _offset); XZ37 ^= amd_bitalign(XZ139, XZ138, _offset); XZ38 ^= amd_bitalign(XZ140, XZ139, _offset); XZ39 ^= amd_bitalign(XZ141, XZ140, _offset); XZ40 ^= amd_bitalign(XZ142, XZ141, _offset); XZ41 ^= amd_bitalign(XZ143, XZ142, _offset); XZ42 ^= amd_bitalign(XZ144, XZ143, _offset); XZ43 ^= amd_bitalign(XZ145, XZ144, _offset); XZ44 ^= amd_bitalign(XZ146, XZ145, _offset); XZ45 ^= amd_bitalign(XZ147, XZ146, _offset); XZ46 ^= amd_bitalign(XZ148, XZ147, _offset); XZ47 ^= amd_bitalign(XZ149, XZ148, _offset); XZ48 ^= amd_bitalign(XZ86, XZ85, _offset); XZ49 ^= amd_bitalign(XZ87, XZ86, _offset); XZ50 ^= amd_bitalign(XZ88, XZ87, _offset); XZ51 ^= amd_bitalign(XZ89, XZ88, _offset); XZ52 ^= amd_bitalign(XZ90, XZ89, _offset); XZ53 ^= amd_bitalign(XZ91, XZ90, _offset); XZ54 ^= amd_bitalign(XZ92, XZ91, _offset); XZ55 ^= amd_bitalign(XZ93, XZ92, _offset); XZ56 ^= amd_bitalign(XZ94, XZ93, _offset); XZ57 ^= amd_bitalign(XZ95, XZ94, _offset); XZ58 ^= amd_bitalign(XZ96, XZ95, _offset); XZ59 ^= amd_bitalign(XZ97, XZ96, _offset); XZ60 ^= amd_bitalign(XZ98, XZ97, _offset); XZ61 ^= amd_bitalign(XZ99, XZ98, _offset); XZ62 ^= amd_bitalign(XZ100, XZ99, _offset); XZ63 ^= amd_bitalign(XZ101, XZ100, _offset); }
+						else if (shifted_bufptr < 23) { XZ0 ^= amd_bitalign(XZ103, XZ102, _offset); XZ1 ^= amd_bitalign(XZ104, XZ103, _offset); XZ2 ^= amd_bitalign(XZ105, XZ104, _offset); XZ3 ^= amd_bitalign(XZ106, XZ105, _offset); XZ4 ^= amd_bitalign(XZ107, XZ106, _offset); XZ5 ^= amd_bitalign(XZ108, XZ107, _offset); XZ6 ^= amd_bitalign(XZ109, XZ108, _offset); XZ7 ^= amd_bitalign(XZ110, XZ109, _offset); XZ8 ^= amd_bitalign(XZ111, XZ110, _offset); XZ9 ^= amd_bitalign(XZ112, XZ111, _offset); XZ10 ^= amd_bitalign(XZ113, XZ112, _offset); XZ11 ^= amd_bitalign(XZ114, XZ113, _offset); XZ12 ^= amd_bitalign(XZ115, XZ114, _offset); XZ13 ^= amd_bitalign(XZ116, XZ115, _offset); XZ14 ^= amd_bitalign(XZ117, XZ116, _offset); XZ15 ^= amd_bitalign(XZ118, XZ117, _offset); XZ16 ^= amd_bitalign(XZ119, XZ118, _offset); XZ17 ^= amd_bitalign(XZ120, XZ119, _offset); XZ18 ^= amd_bitalign(XZ121, XZ120, _offset); XZ19 ^= amd_bitalign(XZ122, XZ121, _offset); XZ20 ^= amd_bitalign(XZ123, XZ122, _offset); XZ21 ^= amd_bitalign(XZ124, XZ123, _offset); XZ22 ^= amd_bitalign(XZ125, XZ124, _offset); XZ23 ^= amd_bitalign(XZ126, XZ125, _offset); XZ24 ^= amd_bitalign(XZ127, XZ126, _offset); XZ25 ^= amd_bitalign(XZ128, XZ127, _offset); XZ26 ^= amd_bitalign(XZ129, XZ128, _offset); XZ27 ^= amd_bitalign(XZ130, XZ129, _offset); XZ28 ^= amd_bitalign(XZ131, XZ130, _offset); XZ29 ^= amd_bitalign(XZ132, XZ131, _offset); XZ30 ^= amd_bitalign(XZ133, XZ132, _offset); XZ31 ^= amd_bitalign(XZ134, XZ133, _offset); XZ32 ^= amd_bitalign(XZ135, XZ134, _offset); XZ33 ^= amd_bitalign(XZ136, XZ135, _offset); XZ34 ^= amd_bitalign(XZ137, XZ136, _offset); XZ35 ^= amd_bitalign(XZ138, XZ137, _offset); XZ36 ^= amd_bitalign(XZ139, XZ138, _offset); XZ37 ^= amd_bitalign(XZ140, XZ139, _offset); XZ38 ^= amd_bitalign(XZ141, XZ140, _offset); XZ39 ^= amd_bitalign(XZ142, XZ141, _offset); XZ40 ^= amd_bitalign(XZ143, XZ142, _offset); XZ41 ^= amd_bitalign(XZ144, XZ143, _offset); XZ42 ^= amd_bitalign(XZ145, XZ144, _offset); XZ43 ^= amd_bitalign(XZ146, XZ145, _offset); XZ44 ^= amd_bitalign(XZ147, XZ146, _offset); XZ45 ^= amd_bitalign(XZ148, XZ147, _offset); XZ46 ^= amd_bitalign(XZ149, XZ148, _offset); XZ47 ^= amd_bitalign(XZ150, XZ149, _offset); XZ48 ^= amd_bitalign(XZ87, XZ86, _offset); XZ49 ^= amd_bitalign(XZ88, XZ87, _offset); XZ50 ^= amd_bitalign(XZ89, XZ88, _offset); XZ51 ^= amd_bitalign(XZ90, XZ89, _offset); XZ52 ^= amd_bitalign(XZ91, XZ90, _offset); XZ53 ^= amd_bitalign(XZ92, XZ91, _offset); XZ54 ^= amd_bitalign(XZ93, XZ92, _offset); XZ55 ^= amd_bitalign(XZ94, XZ93, _offset); XZ56 ^= amd_bitalign(XZ95, XZ94, _offset); XZ57 ^= amd_bitalign(XZ96, XZ95, _offset); XZ58 ^= amd_bitalign(XZ97, XZ96, _offset); XZ59 ^= amd_bitalign(XZ98, XZ97, _offset); XZ60 ^= amd_bitalign(XZ99, XZ98, _offset); XZ61 ^= amd_bitalign(XZ100, XZ99, _offset); XZ62 ^= amd_bitalign(XZ101, XZ100, _offset); XZ63 ^= amd_bitalign(XZ102, XZ101, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ104, XZ103, _offset); XZ1 ^= amd_bitalign(XZ105, XZ104, _offset); XZ2 ^= amd_bitalign(XZ106, XZ105, _offset); XZ3 ^= amd_bitalign(XZ107, XZ106, _offset); XZ4 ^= amd_bitalign(XZ108, XZ107, _offset); XZ5 ^= amd_bitalign(XZ109, XZ108, _offset); XZ6 ^= amd_bitalign(XZ110, XZ109, _offset); XZ7 ^= amd_bitalign(XZ111, XZ110, _offset); XZ8 ^= amd_bitalign(XZ112, XZ111, _offset); XZ9 ^= amd_bitalign(XZ113, XZ112, _offset); XZ10 ^= amd_bitalign(XZ114, XZ113, _offset); XZ11 ^= amd_bitalign(XZ115, XZ114, _offset); XZ12 ^= amd_bitalign(XZ116, XZ115, _offset); XZ13 ^= amd_bitalign(XZ117, XZ116, _offset); XZ14 ^= amd_bitalign(XZ118, XZ117, _offset); XZ15 ^= amd_bitalign(XZ119, XZ118, _offset); XZ16 ^= amd_bitalign(XZ120, XZ119, _offset); XZ17 ^= amd_bitalign(XZ121, XZ120, _offset); XZ18 ^= amd_bitalign(XZ122, XZ121, _offset); XZ19 ^= amd_bitalign(XZ123, XZ122, _offset); XZ20 ^= amd_bitalign(XZ124, XZ123, _offset); XZ21 ^= amd_bitalign(XZ125, XZ124, _offset); XZ22 ^= amd_bitalign(XZ126, XZ125, _offset); XZ23 ^= amd_bitalign(XZ127, XZ126, _offset); XZ24 ^= amd_bitalign(XZ128, XZ127, _offset); XZ25 ^= amd_bitalign(XZ129, XZ128, _offset); XZ26 ^= amd_bitalign(XZ130, XZ129, _offset); XZ27 ^= amd_bitalign(XZ131, XZ130, _offset); XZ28 ^= amd_bitalign(XZ132, XZ131, _offset); XZ29 ^= amd_bitalign(XZ133, XZ132, _offset); XZ30 ^= amd_bitalign(XZ134, XZ133, _offset); XZ31 ^= amd_bitalign(XZ135, XZ134, _offset); XZ32 ^= amd_bitalign(XZ136, XZ135, _offset); XZ33 ^= amd_bitalign(XZ137, XZ136, _offset); XZ34 ^= amd_bitalign(XZ138, XZ137, _offset); XZ35 ^= amd_bitalign(XZ139, XZ138, _offset); XZ36 ^= amd_bitalign(XZ140, XZ139, _offset); XZ37 ^= amd_bitalign(XZ141, XZ140, _offset); XZ38 ^= amd_bitalign(XZ142, XZ141, _offset); XZ39 ^= amd_bitalign(XZ143, XZ142, _offset); XZ40 ^= amd_bitalign(XZ144, XZ143, _offset); XZ41 ^= amd_bitalign(XZ145, XZ144, _offset); XZ42 ^= amd_bitalign(XZ146, XZ145, _offset); XZ43 ^= amd_bitalign(XZ147, XZ146, _offset); XZ44 ^= amd_bitalign(XZ148, XZ147, _offset); XZ45 ^= amd_bitalign(XZ149, XZ148, _offset); XZ46 ^= amd_bitalign(XZ150, XZ149, _offset); XZ47 ^= amd_bitalign(XZ151, XZ150, _offset); XZ48 ^= amd_bitalign(XZ88, XZ87, _offset); XZ49 ^= amd_bitalign(XZ89, XZ88, _offset); XZ50 ^= amd_bitalign(XZ90, XZ89, _offset); XZ51 ^= amd_bitalign(XZ91, XZ90, _offset); XZ52 ^= amd_bitalign(XZ92, XZ91, _offset); XZ53 ^= amd_bitalign(XZ93, XZ92, _offset); XZ54 ^= amd_bitalign(XZ94, XZ93, _offset); XZ55 ^= amd_bitalign(XZ95, XZ94, _offset); XZ56 ^= amd_bitalign(XZ96, XZ95, _offset); XZ57 ^= amd_bitalign(XZ97, XZ96, _offset); XZ58 ^= amd_bitalign(XZ98, XZ97, _offset); XZ59 ^= amd_bitalign(XZ99, XZ98, _offset); XZ60 ^= amd_bitalign(XZ100, XZ99, _offset); XZ61 ^= amd_bitalign(XZ101, XZ100, _offset); XZ62 ^= amd_bitalign(XZ102, XZ101, _offset); XZ63 ^= amd_bitalign(XZ103, XZ102, _offset); }
+						else if (shifted_bufptr < 28) if (shifted_bufptr < 26) if (shifted_bufptr < 25) { XZ0 ^= amd_bitalign(XZ105, XZ104, _offset); XZ1 ^= amd_bitalign(XZ106, XZ105, _offset); XZ2 ^= amd_bitalign(XZ107, XZ106, _offset); XZ3 ^= amd_bitalign(XZ108, XZ107, _offset); XZ4 ^= amd_bitalign(XZ109, XZ108, _offset); XZ5 ^= amd_bitalign(XZ110, XZ109, _offset); XZ6 ^= amd_bitalign(XZ111, XZ110, _offset); XZ7 ^= amd_bitalign(XZ112, XZ111, _offset); XZ8 ^= amd_bitalign(XZ113, XZ112, _offset); XZ9 ^= amd_bitalign(XZ114, XZ113, _offset); XZ10 ^= amd_bitalign(XZ115, XZ114, _offset); XZ11 ^= amd_bitalign(XZ116, XZ115, _offset); XZ12 ^= amd_bitalign(XZ117, XZ116, _offset); XZ13 ^= amd_bitalign(XZ118, XZ117, _offset); XZ14 ^= amd_bitalign(XZ119, XZ118, _offset); XZ15 ^= amd_bitalign(XZ120, XZ119, _offset); XZ16 ^= amd_bitalign(XZ121, XZ120, _offset); XZ17 ^= amd_bitalign(XZ122, XZ121, _offset); XZ18 ^= amd_bitalign(XZ123, XZ122, _offset); XZ19 ^= amd_bitalign(XZ124, XZ123, _offset); XZ20 ^= amd_bitalign(XZ125, XZ124, _offset); XZ21 ^= amd_bitalign(XZ126, XZ125, _offset); XZ22 ^= amd_bitalign(XZ127, XZ126, _offset); XZ23 ^= amd_bitalign(XZ128, XZ127, _offset); XZ24 ^= amd_bitalign(XZ129, XZ128, _offset); XZ25 ^= amd_bitalign(XZ130, XZ129, _offset); XZ26 ^= amd_bitalign(XZ131, XZ130, _offset); XZ27 ^= amd_bitalign(XZ132, XZ131, _offset); XZ28 ^= amd_bitalign(XZ133, XZ132, _offset); XZ29 ^= amd_bitalign(XZ134, XZ133, _offset); XZ30 ^= amd_bitalign(XZ135, XZ134, _offset); XZ31 ^= amd_bitalign(XZ136, XZ135, _offset); XZ32 ^= amd_bitalign(XZ137, XZ136, _offset); XZ33 ^= amd_bitalign(XZ138, XZ137, _offset); XZ34 ^= amd_bitalign(XZ139, XZ138, _offset); XZ35 ^= amd_bitalign(XZ140, XZ139, _offset); XZ36 ^= amd_bitalign(XZ141, XZ140, _offset); XZ37 ^= amd_bitalign(XZ142, XZ141, _offset); XZ38 ^= amd_bitalign(XZ143, XZ142, _offset); XZ39 ^= amd_bitalign(XZ144, XZ143, _offset); XZ40 ^= amd_bitalign(XZ81, XZ80, _offset); XZ41 ^= amd_bitalign(XZ82, XZ81, _offset); XZ42 ^= amd_bitalign(XZ83, XZ82, _offset); XZ43 ^= amd_bitalign(XZ84, XZ83, _offset); XZ44 ^= amd_bitalign(XZ85, XZ84, _offset); XZ45 ^= amd_bitalign(XZ86, XZ85, _offset); XZ46 ^= amd_bitalign(XZ87, XZ86, _offset); XZ47 ^= amd_bitalign(XZ88, XZ87, _offset); XZ48 ^= amd_bitalign(XZ89, XZ88, _offset); XZ49 ^= amd_bitalign(XZ90, XZ89, _offset); XZ50 ^= amd_bitalign(XZ91, XZ90, _offset); XZ51 ^= amd_bitalign(XZ92, XZ91, _offset); XZ52 ^= amd_bitalign(XZ93, XZ92, _offset); XZ53 ^= amd_bitalign(XZ94, XZ93, _offset); XZ54 ^= amd_bitalign(XZ95, XZ94, _offset); XZ55 ^= amd_bitalign(XZ96, XZ95, _offset); XZ56 ^= amd_bitalign(XZ97, XZ96, _offset); XZ57 ^= amd_bitalign(XZ98, XZ97, _offset); XZ58 ^= amd_bitalign(XZ99, XZ98, _offset); XZ59 ^= amd_bitalign(XZ100, XZ99, _offset); XZ60 ^= amd_bitalign(XZ101, XZ100, _offset); XZ61 ^= amd_bitalign(XZ102, XZ101, _offset); XZ62 ^= amd_bitalign(XZ103, XZ102, _offset); XZ63 ^= amd_bitalign(XZ104, XZ103, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ106, XZ105, _offset); XZ1 ^= amd_bitalign(XZ107, XZ106, _offset); XZ2 ^= amd_bitalign(XZ108, XZ107, _offset); XZ3 ^= amd_bitalign(XZ109, XZ108, _offset); XZ4 ^= amd_bitalign(XZ110, XZ109, _offset); XZ5 ^= amd_bitalign(XZ111, XZ110, _offset); XZ6 ^= amd_bitalign(XZ112, XZ111, _offset); XZ7 ^= amd_bitalign(XZ113, XZ112, _offset); XZ8 ^= amd_bitalign(XZ114, XZ113, _offset); XZ9 ^= amd_bitalign(XZ115, XZ114, _offset); XZ10 ^= amd_bitalign(XZ116, XZ115, _offset); XZ11 ^= amd_bitalign(XZ117, XZ116, _offset); XZ12 ^= amd_bitalign(XZ118, XZ117, _offset); XZ13 ^= amd_bitalign(XZ119, XZ118, _offset); XZ14 ^= amd_bitalign(XZ120, XZ119, _offset); XZ15 ^= amd_bitalign(XZ121, XZ120, _offset); XZ16 ^= amd_bitalign(XZ122, XZ121, _offset); XZ17 ^= amd_bitalign(XZ123, XZ122, _offset); XZ18 ^= amd_bitalign(XZ124, XZ123, _offset); XZ19 ^= amd_bitalign(XZ125, XZ124, _offset); XZ20 ^= amd_bitalign(XZ126, XZ125, _offset); XZ21 ^= amd_bitalign(XZ127, XZ126, _offset); XZ22 ^= amd_bitalign(XZ128, XZ127, _offset); XZ23 ^= amd_bitalign(XZ129, XZ128, _offset); XZ24 ^= amd_bitalign(XZ130, XZ129, _offset); XZ25 ^= amd_bitalign(XZ131, XZ130, _offset); XZ26 ^= amd_bitalign(XZ132, XZ131, _offset); XZ27 ^= amd_bitalign(XZ133, XZ132, _offset); XZ28 ^= amd_bitalign(XZ134, XZ133, _offset); XZ29 ^= amd_bitalign(XZ135, XZ134, _offset); XZ30 ^= amd_bitalign(XZ136, XZ135, _offset); XZ31 ^= amd_bitalign(XZ137, XZ136, _offset); XZ32 ^= amd_bitalign(XZ138, XZ137, _offset); XZ33 ^= amd_bitalign(XZ139, XZ138, _offset); XZ34 ^= amd_bitalign(XZ140, XZ139, _offset); XZ35 ^= amd_bitalign(XZ141, XZ140, _offset); XZ36 ^= amd_bitalign(XZ142, XZ141, _offset); XZ37 ^= amd_bitalign(XZ143, XZ142, _offset); XZ38 ^= amd_bitalign(XZ144, XZ143, _offset); XZ39 ^= amd_bitalign(XZ145, XZ144, _offset); XZ40 ^= amd_bitalign(XZ82, XZ81, _offset); XZ41 ^= amd_bitalign(XZ83, XZ82, _offset); XZ42 ^= amd_bitalign(XZ84, XZ83, _offset); XZ43 ^= amd_bitalign(XZ85, XZ84, _offset); XZ44 ^= amd_bitalign(XZ86, XZ85, _offset); XZ45 ^= amd_bitalign(XZ87, XZ86, _offset); XZ46 ^= amd_bitalign(XZ88, XZ87, _offset); XZ47 ^= amd_bitalign(XZ89, XZ88, _offset); XZ48 ^= amd_bitalign(XZ90, XZ89, _offset); XZ49 ^= amd_bitalign(XZ91, XZ90, _offset); XZ50 ^= amd_bitalign(XZ92, XZ91, _offset); XZ51 ^= amd_bitalign(XZ93, XZ92, _offset); XZ52 ^= amd_bitalign(XZ94, XZ93, _offset); XZ53 ^= amd_bitalign(XZ95, XZ94, _offset); XZ54 ^= amd_bitalign(XZ96, XZ95, _offset); XZ55 ^= amd_bitalign(XZ97, XZ96, _offset); XZ56 ^= amd_bitalign(XZ98, XZ97, _offset); XZ57 ^= amd_bitalign(XZ99, XZ98, _offset); XZ58 ^= amd_bitalign(XZ100, XZ99, _offset); XZ59 ^= amd_bitalign(XZ101, XZ100, _offset); XZ60 ^= amd_bitalign(XZ102, XZ101, _offset); XZ61 ^= amd_bitalign(XZ103, XZ102, _offset); XZ62 ^= amd_bitalign(XZ104, XZ103, _offset); XZ63 ^= amd_bitalign(XZ105, XZ104, _offset); }
+						else if (shifted_bufptr < 27) { XZ0 ^= amd_bitalign(XZ107, XZ106, _offset); XZ1 ^= amd_bitalign(XZ108, XZ107, _offset); XZ2 ^= amd_bitalign(XZ109, XZ108, _offset); XZ3 ^= amd_bitalign(XZ110, XZ109, _offset); XZ4 ^= amd_bitalign(XZ111, XZ110, _offset); XZ5 ^= amd_bitalign(XZ112, XZ111, _offset); XZ6 ^= amd_bitalign(XZ113, XZ112, _offset); XZ7 ^= amd_bitalign(XZ114, XZ113, _offset); XZ8 ^= amd_bitalign(XZ115, XZ114, _offset); XZ9 ^= amd_bitalign(XZ116, XZ115, _offset); XZ10 ^= amd_bitalign(XZ117, XZ116, _offset); XZ11 ^= amd_bitalign(XZ118, XZ117, _offset); XZ12 ^= amd_bitalign(XZ119, XZ118, _offset); XZ13 ^= amd_bitalign(XZ120, XZ119, _offset); XZ14 ^= amd_bitalign(XZ121, XZ120, _offset); XZ15 ^= amd_bitalign(XZ122, XZ121, _offset); XZ16 ^= amd_bitalign(XZ123, XZ122, _offset); XZ17 ^= amd_bitalign(XZ124, XZ123, _offset); XZ18 ^= amd_bitalign(XZ125, XZ124, _offset); XZ19 ^= amd_bitalign(XZ126, XZ125, _offset); XZ20 ^= amd_bitalign(XZ127, XZ126, _offset); XZ21 ^= amd_bitalign(XZ128, XZ127, _offset); XZ22 ^= amd_bitalign(XZ129, XZ128, _offset); XZ23 ^= amd_bitalign(XZ130, XZ129, _offset); XZ24 ^= amd_bitalign(XZ131, XZ130, _offset); XZ25 ^= amd_bitalign(XZ132, XZ131, _offset); XZ26 ^= amd_bitalign(XZ133, XZ132, _offset); XZ27 ^= amd_bitalign(XZ134, XZ133, _offset); XZ28 ^= amd_bitalign(XZ135, XZ134, _offset); XZ29 ^= amd_bitalign(XZ136, XZ135, _offset); XZ30 ^= amd_bitalign(XZ137, XZ136, _offset); XZ31 ^= amd_bitalign(XZ138, XZ137, _offset); XZ32 ^= amd_bitalign(XZ139, XZ138, _offset); XZ33 ^= amd_bitalign(XZ140, XZ139, _offset); XZ34 ^= amd_bitalign(XZ141, XZ140, _offset); XZ35 ^= amd_bitalign(XZ142, XZ141, _offset); XZ36 ^= amd_bitalign(XZ143, XZ142, _offset); XZ37 ^= amd_bitalign(XZ144, XZ143, _offset); XZ38 ^= amd_bitalign(XZ145, XZ144, _offset); XZ39 ^= amd_bitalign(XZ146, XZ145, _offset); XZ40 ^= amd_bitalign(XZ83, XZ82, _offset); XZ41 ^= amd_bitalign(XZ84, XZ83, _offset); XZ42 ^= amd_bitalign(XZ85, XZ84, _offset); XZ43 ^= amd_bitalign(XZ86, XZ85, _offset); XZ44 ^= amd_bitalign(XZ87, XZ86, _offset); XZ45 ^= amd_bitalign(XZ88, XZ87, _offset); XZ46 ^= amd_bitalign(XZ89, XZ88, _offset); XZ47 ^= amd_bitalign(XZ90, XZ89, _offset); XZ48 ^= amd_bitalign(XZ91, XZ90, _offset); XZ49 ^= amd_bitalign(XZ92, XZ91, _offset); XZ50 ^= amd_bitalign(XZ93, XZ92, _offset); XZ51 ^= amd_bitalign(XZ94, XZ93, _offset); XZ52 ^= amd_bitalign(XZ95, XZ94, _offset); XZ53 ^= amd_bitalign(XZ96, XZ95, _offset); XZ54 ^= amd_bitalign(XZ97, XZ96, _offset); XZ55 ^= amd_bitalign(XZ98, XZ97, _offset); XZ56 ^= amd_bitalign(XZ99, XZ98, _offset); XZ57 ^= amd_bitalign(XZ100, XZ99, _offset); XZ58 ^= amd_bitalign(XZ101, XZ100, _offset); XZ59 ^= amd_bitalign(XZ102, XZ101, _offset); XZ60 ^= amd_bitalign(XZ103, XZ102, _offset); XZ61 ^= amd_bitalign(XZ104, XZ103, _offset); XZ62 ^= amd_bitalign(XZ105, XZ104, _offset); XZ63 ^= amd_bitalign(XZ106, XZ105, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ108, XZ107, _offset); XZ1 ^= amd_bitalign(XZ109, XZ108, _offset); XZ2 ^= amd_bitalign(XZ110, XZ109, _offset); XZ3 ^= amd_bitalign(XZ111, XZ110, _offset); XZ4 ^= amd_bitalign(XZ112, XZ111, _offset); XZ5 ^= amd_bitalign(XZ113, XZ112, _offset); XZ6 ^= amd_bitalign(XZ114, XZ113, _offset); XZ7 ^= amd_bitalign(XZ115, XZ114, _offset); XZ8 ^= amd_bitalign(XZ116, XZ115, _offset); XZ9 ^= amd_bitalign(XZ117, XZ116, _offset); XZ10 ^= amd_bitalign(XZ118, XZ117, _offset); XZ11 ^= amd_bitalign(XZ119, XZ118, _offset); XZ12 ^= amd_bitalign(XZ120, XZ119, _offset); XZ13 ^= amd_bitalign(XZ121, XZ120, _offset); XZ14 ^= amd_bitalign(XZ122, XZ121, _offset); XZ15 ^= amd_bitalign(XZ123, XZ122, _offset); XZ16 ^= amd_bitalign(XZ124, XZ123, _offset); XZ17 ^= amd_bitalign(XZ125, XZ124, _offset); XZ18 ^= amd_bitalign(XZ126, XZ125, _offset); XZ19 ^= amd_bitalign(XZ127, XZ126, _offset); XZ20 ^= amd_bitalign(XZ128, XZ127, _offset); XZ21 ^= amd_bitalign(XZ129, XZ128, _offset); XZ22 ^= amd_bitalign(XZ130, XZ129, _offset); XZ23 ^= amd_bitalign(XZ131, XZ130, _offset); XZ24 ^= amd_bitalign(XZ132, XZ131, _offset); XZ25 ^= amd_bitalign(XZ133, XZ132, _offset); XZ26 ^= amd_bitalign(XZ134, XZ133, _offset); XZ27 ^= amd_bitalign(XZ135, XZ134, _offset); XZ28 ^= amd_bitalign(XZ136, XZ135, _offset); XZ29 ^= amd_bitalign(XZ137, XZ136, _offset); XZ30 ^= amd_bitalign(XZ138, XZ137, _offset); XZ31 ^= amd_bitalign(XZ139, XZ138, _offset); XZ32 ^= amd_bitalign(XZ140, XZ139, _offset); XZ33 ^= amd_bitalign(XZ141, XZ140, _offset); XZ34 ^= amd_bitalign(XZ142, XZ141, _offset); XZ35 ^= amd_bitalign(XZ143, XZ142, _offset); XZ36 ^= amd_bitalign(XZ144, XZ143, _offset); XZ37 ^= amd_bitalign(XZ145, XZ144, _offset); XZ38 ^= amd_bitalign(XZ146, XZ145, _offset); XZ39 ^= amd_bitalign(XZ147, XZ146, _offset); XZ40 ^= amd_bitalign(XZ84, XZ83, _offset); XZ41 ^= amd_bitalign(XZ85, XZ84, _offset); XZ42 ^= amd_bitalign(XZ86, XZ85, _offset); XZ43 ^= amd_bitalign(XZ87, XZ86, _offset); XZ44 ^= amd_bitalign(XZ88, XZ87, _offset); XZ45 ^= amd_bitalign(XZ89, XZ88, _offset); XZ46 ^= amd_bitalign(XZ90, XZ89, _offset); XZ47 ^= amd_bitalign(XZ91, XZ90, _offset); XZ48 ^= amd_bitalign(XZ92, XZ91, _offset); XZ49 ^= amd_bitalign(XZ93, XZ92, _offset); XZ50 ^= amd_bitalign(XZ94, XZ93, _offset); XZ51 ^= amd_bitalign(XZ95, XZ94, _offset); XZ52 ^= amd_bitalign(XZ96, XZ95, _offset); XZ53 ^= amd_bitalign(XZ97, XZ96, _offset); XZ54 ^= amd_bitalign(XZ98, XZ97, _offset); XZ55 ^= amd_bitalign(XZ99, XZ98, _offset); XZ56 ^= amd_bitalign(XZ100, XZ99, _offset); XZ57 ^= amd_bitalign(XZ101, XZ100, _offset); XZ58 ^= amd_bitalign(XZ102, XZ101, _offset); XZ59 ^= amd_bitalign(XZ103, XZ102, _offset); XZ60 ^= amd_bitalign(XZ104, XZ103, _offset); XZ61 ^= amd_bitalign(XZ105, XZ104, _offset); XZ62 ^= amd_bitalign(XZ106, XZ105, _offset); XZ63 ^= amd_bitalign(XZ107, XZ106, _offset); }
+						else if (shifted_bufptr < 30) if (shifted_bufptr < 29) { XZ0 ^= amd_bitalign(XZ109, XZ108, _offset); XZ1 ^= amd_bitalign(XZ110, XZ109, _offset); XZ2 ^= amd_bitalign(XZ111, XZ110, _offset); XZ3 ^= amd_bitalign(XZ112, XZ111, _offset); XZ4 ^= amd_bitalign(XZ113, XZ112, _offset); XZ5 ^= amd_bitalign(XZ114, XZ113, _offset); XZ6 ^= amd_bitalign(XZ115, XZ114, _offset); XZ7 ^= amd_bitalign(XZ116, XZ115, _offset); XZ8 ^= amd_bitalign(XZ117, XZ116, _offset); XZ9 ^= amd_bitalign(XZ118, XZ117, _offset); XZ10 ^= amd_bitalign(XZ119, XZ118, _offset); XZ11 ^= amd_bitalign(XZ120, XZ119, _offset); XZ12 ^= amd_bitalign(XZ121, XZ120, _offset); XZ13 ^= amd_bitalign(XZ122, XZ121, _offset); XZ14 ^= amd_bitalign(XZ123, XZ122, _offset); XZ15 ^= amd_bitalign(XZ124, XZ123, _offset); XZ16 ^= amd_bitalign(XZ125, XZ124, _offset); XZ17 ^= amd_bitalign(XZ126, XZ125, _offset); XZ18 ^= amd_bitalign(XZ127, XZ126, _offset); XZ19 ^= amd_bitalign(XZ128, XZ127, _offset); XZ20 ^= amd_bitalign(XZ129, XZ128, _offset); XZ21 ^= amd_bitalign(XZ130, XZ129, _offset); XZ22 ^= amd_bitalign(XZ131, XZ130, _offset); XZ23 ^= amd_bitalign(XZ132, XZ131, _offset); XZ24 ^= amd_bitalign(XZ133, XZ132, _offset); XZ25 ^= amd_bitalign(XZ134, XZ133, _offset); XZ26 ^= amd_bitalign(XZ135, XZ134, _offset); XZ27 ^= amd_bitalign(XZ136, XZ135, _offset); XZ28 ^= amd_bitalign(XZ137, XZ136, _offset); XZ29 ^= amd_bitalign(XZ138, XZ137, _offset); XZ30 ^= amd_bitalign(XZ139, XZ138, _offset); XZ31 ^= amd_bitalign(XZ140, XZ139, _offset); XZ32 ^= amd_bitalign(XZ141, XZ140, _offset); XZ33 ^= amd_bitalign(XZ142, XZ141, _offset); XZ34 ^= amd_bitalign(XZ143, XZ142, _offset); XZ35 ^= amd_bitalign(XZ144, XZ143, _offset); XZ36 ^= amd_bitalign(XZ145, XZ144, _offset); XZ37 ^= amd_bitalign(XZ146, XZ145, _offset); XZ38 ^= amd_bitalign(XZ147, XZ146, _offset); XZ39 ^= amd_bitalign(XZ148, XZ147, _offset); XZ40 ^= amd_bitalign(XZ85, XZ84, _offset); XZ41 ^= amd_bitalign(XZ86, XZ85, _offset); XZ42 ^= amd_bitalign(XZ87, XZ86, _offset); XZ43 ^= amd_bitalign(XZ88, XZ87, _offset); XZ44 ^= amd_bitalign(XZ89, XZ88, _offset); XZ45 ^= amd_bitalign(XZ90, XZ89, _offset); XZ46 ^= amd_bitalign(XZ91, XZ90, _offset); XZ47 ^= amd_bitalign(XZ92, XZ91, _offset); XZ48 ^= amd_bitalign(XZ93, XZ92, _offset); XZ49 ^= amd_bitalign(XZ94, XZ93, _offset); XZ50 ^= amd_bitalign(XZ95, XZ94, _offset); XZ51 ^= amd_bitalign(XZ96, XZ95, _offset); XZ52 ^= amd_bitalign(XZ97, XZ96, _offset); XZ53 ^= amd_bitalign(XZ98, XZ97, _offset); XZ54 ^= amd_bitalign(XZ99, XZ98, _offset); XZ55 ^= amd_bitalign(XZ100, XZ99, _offset); XZ56 ^= amd_bitalign(XZ101, XZ100, _offset); XZ57 ^= amd_bitalign(XZ102, XZ101, _offset); XZ58 ^= amd_bitalign(XZ103, XZ102, _offset); XZ59 ^= amd_bitalign(XZ104, XZ103, _offset); XZ60 ^= amd_bitalign(XZ105, XZ104, _offset); XZ61 ^= amd_bitalign(XZ106, XZ105, _offset); XZ62 ^= amd_bitalign(XZ107, XZ106, _offset); XZ63 ^= amd_bitalign(XZ108, XZ107, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ110, XZ109, _offset); XZ1 ^= amd_bitalign(XZ111, XZ110, _offset); XZ2 ^= amd_bitalign(XZ112, XZ111, _offset); XZ3 ^= amd_bitalign(XZ113, XZ112, _offset); XZ4 ^= amd_bitalign(XZ114, XZ113, _offset); XZ5 ^= amd_bitalign(XZ115, XZ114, _offset); XZ6 ^= amd_bitalign(XZ116, XZ115, _offset); XZ7 ^= amd_bitalign(XZ117, XZ116, _offset); XZ8 ^= amd_bitalign(XZ118, XZ117, _offset); XZ9 ^= amd_bitalign(XZ119, XZ118, _offset); XZ10 ^= amd_bitalign(XZ120, XZ119, _offset); XZ11 ^= amd_bitalign(XZ121, XZ120, _offset); XZ12 ^= amd_bitalign(XZ122, XZ121, _offset); XZ13 ^= amd_bitalign(XZ123, XZ122, _offset); XZ14 ^= amd_bitalign(XZ124, XZ123, _offset); XZ15 ^= amd_bitalign(XZ125, XZ124, _offset); XZ16 ^= amd_bitalign(XZ126, XZ125, _offset); XZ17 ^= amd_bitalign(XZ127, XZ126, _offset); XZ18 ^= amd_bitalign(XZ128, XZ127, _offset); XZ19 ^= amd_bitalign(XZ129, XZ128, _offset); XZ20 ^= amd_bitalign(XZ130, XZ129, _offset); XZ21 ^= amd_bitalign(XZ131, XZ130, _offset); XZ22 ^= amd_bitalign(XZ132, XZ131, _offset); XZ23 ^= amd_bitalign(XZ133, XZ132, _offset); XZ24 ^= amd_bitalign(XZ134, XZ133, _offset); XZ25 ^= amd_bitalign(XZ135, XZ134, _offset); XZ26 ^= amd_bitalign(XZ136, XZ135, _offset); XZ27 ^= amd_bitalign(XZ137, XZ136, _offset); XZ28 ^= amd_bitalign(XZ138, XZ137, _offset); XZ29 ^= amd_bitalign(XZ139, XZ138, _offset); XZ30 ^= amd_bitalign(XZ140, XZ139, _offset); XZ31 ^= amd_bitalign(XZ141, XZ140, _offset); XZ32 ^= amd_bitalign(XZ142, XZ141, _offset); XZ33 ^= amd_bitalign(XZ143, XZ142, _offset); XZ34 ^= amd_bitalign(XZ144, XZ143, _offset); XZ35 ^= amd_bitalign(XZ145, XZ144, _offset); XZ36 ^= amd_bitalign(XZ146, XZ145, _offset); XZ37 ^= amd_bitalign(XZ147, XZ146, _offset); XZ38 ^= amd_bitalign(XZ148, XZ147, _offset); XZ39 ^= amd_bitalign(XZ149, XZ148, _offset); XZ40 ^= amd_bitalign(XZ86, XZ85, _offset); XZ41 ^= amd_bitalign(XZ87, XZ86, _offset); XZ42 ^= amd_bitalign(XZ88, XZ87, _offset); XZ43 ^= amd_bitalign(XZ89, XZ88, _offset); XZ44 ^= amd_bitalign(XZ90, XZ89, _offset); XZ45 ^= amd_bitalign(XZ91, XZ90, _offset); XZ46 ^= amd_bitalign(XZ92, XZ91, _offset); XZ47 ^= amd_bitalign(XZ93, XZ92, _offset); XZ48 ^= amd_bitalign(XZ94, XZ93, _offset); XZ49 ^= amd_bitalign(XZ95, XZ94, _offset); XZ50 ^= amd_bitalign(XZ96, XZ95, _offset); XZ51 ^= amd_bitalign(XZ97, XZ96, _offset); XZ52 ^= amd_bitalign(XZ98, XZ97, _offset); XZ53 ^= amd_bitalign(XZ99, XZ98, _offset); XZ54 ^= amd_bitalign(XZ100, XZ99, _offset); XZ55 ^= amd_bitalign(XZ101, XZ100, _offset); XZ56 ^= amd_bitalign(XZ102, XZ101, _offset); XZ57 ^= amd_bitalign(XZ103, XZ102, _offset); XZ58 ^= amd_bitalign(XZ104, XZ103, _offset); XZ59 ^= amd_bitalign(XZ105, XZ104, _offset); XZ60 ^= amd_bitalign(XZ106, XZ105, _offset); XZ61 ^= amd_bitalign(XZ107, XZ106, _offset); XZ62 ^= amd_bitalign(XZ108, XZ107, _offset); XZ63 ^= amd_bitalign(XZ109, XZ108, _offset); }
+						else if (shifted_bufptr < 31) { XZ0 ^= amd_bitalign(XZ111, XZ110, _offset); XZ1 ^= amd_bitalign(XZ112, XZ111, _offset); XZ2 ^= amd_bitalign(XZ113, XZ112, _offset); XZ3 ^= amd_bitalign(XZ114, XZ113, _offset); XZ4 ^= amd_bitalign(XZ115, XZ114, _offset); XZ5 ^= amd_bitalign(XZ116, XZ115, _offset); XZ6 ^= amd_bitalign(XZ117, XZ116, _offset); XZ7 ^= amd_bitalign(XZ118, XZ117, _offset); XZ8 ^= amd_bitalign(XZ119, XZ118, _offset); XZ9 ^= amd_bitalign(XZ120, XZ119, _offset); XZ10 ^= amd_bitalign(XZ121, XZ120, _offset); XZ11 ^= amd_bitalign(XZ122, XZ121, _offset); XZ12 ^= amd_bitalign(XZ123, XZ122, _offset); XZ13 ^= amd_bitalign(XZ124, XZ123, _offset); XZ14 ^= amd_bitalign(XZ125, XZ124, _offset); XZ15 ^= amd_bitalign(XZ126, XZ125, _offset); XZ16 ^= amd_bitalign(XZ127, XZ126, _offset); XZ17 ^= amd_bitalign(XZ128, XZ127, _offset); XZ18 ^= amd_bitalign(XZ129, XZ128, _offset); XZ19 ^= amd_bitalign(XZ130, XZ129, _offset); XZ20 ^= amd_bitalign(XZ131, XZ130, _offset); XZ21 ^= amd_bitalign(XZ132, XZ131, _offset); XZ22 ^= amd_bitalign(XZ133, XZ132, _offset); XZ23 ^= amd_bitalign(XZ134, XZ133, _offset); XZ24 ^= amd_bitalign(XZ135, XZ134, _offset); XZ25 ^= amd_bitalign(XZ136, XZ135, _offset); XZ26 ^= amd_bitalign(XZ137, XZ136, _offset); XZ27 ^= amd_bitalign(XZ138, XZ137, _offset); XZ28 ^= amd_bitalign(XZ139, XZ138, _offset); XZ29 ^= amd_bitalign(XZ140, XZ139, _offset); XZ30 ^= amd_bitalign(XZ141, XZ140, _offset); XZ31 ^= amd_bitalign(XZ142, XZ141, _offset); XZ32 ^= amd_bitalign(XZ143, XZ142, _offset); XZ33 ^= amd_bitalign(XZ144, XZ143, _offset); XZ34 ^= amd_bitalign(XZ145, XZ144, _offset); XZ35 ^= amd_bitalign(XZ146, XZ145, _offset); XZ36 ^= amd_bitalign(XZ147, XZ146, _offset); XZ37 ^= amd_bitalign(XZ148, XZ147, _offset); XZ38 ^= amd_bitalign(XZ149, XZ148, _offset); XZ39 ^= amd_bitalign(XZ150, XZ149, _offset); XZ40 ^= amd_bitalign(XZ87, XZ86, _offset); XZ41 ^= amd_bitalign(XZ88, XZ87, _offset); XZ42 ^= amd_bitalign(XZ89, XZ88, _offset); XZ43 ^= amd_bitalign(XZ90, XZ89, _offset); XZ44 ^= amd_bitalign(XZ91, XZ90, _offset); XZ45 ^= amd_bitalign(XZ92, XZ91, _offset); XZ46 ^= amd_bitalign(XZ93, XZ92, _offset); XZ47 ^= amd_bitalign(XZ94, XZ93, _offset); XZ48 ^= amd_bitalign(XZ95, XZ94, _offset); XZ49 ^= amd_bitalign(XZ96, XZ95, _offset); XZ50 ^= amd_bitalign(XZ97, XZ96, _offset); XZ51 ^= amd_bitalign(XZ98, XZ97, _offset); XZ52 ^= amd_bitalign(XZ99, XZ98, _offset); XZ53 ^= amd_bitalign(XZ100, XZ99, _offset); XZ54 ^= amd_bitalign(XZ101, XZ100, _offset); XZ55 ^= amd_bitalign(XZ102, XZ101, _offset); XZ56 ^= amd_bitalign(XZ103, XZ102, _offset); XZ57 ^= amd_bitalign(XZ104, XZ103, _offset); XZ58 ^= amd_bitalign(XZ105, XZ104, _offset); XZ59 ^= amd_bitalign(XZ106, XZ105, _offset); XZ60 ^= amd_bitalign(XZ107, XZ106, _offset); XZ61 ^= amd_bitalign(XZ108, XZ107, _offset); XZ62 ^= amd_bitalign(XZ109, XZ108, _offset); XZ63 ^= amd_bitalign(XZ110, XZ109, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ112, XZ111, _offset); XZ1 ^= amd_bitalign(XZ113, XZ112, _offset); XZ2 ^= amd_bitalign(XZ114, XZ113, _offset); XZ3 ^= amd_bitalign(XZ115, XZ114, _offset); XZ4 ^= amd_bitalign(XZ116, XZ115, _offset); XZ5 ^= amd_bitalign(XZ117, XZ116, _offset); XZ6 ^= amd_bitalign(XZ118, XZ117, _offset); XZ7 ^= amd_bitalign(XZ119, XZ118, _offset); XZ8 ^= amd_bitalign(XZ120, XZ119, _offset); XZ9 ^= amd_bitalign(XZ121, XZ120, _offset); XZ10 ^= amd_bitalign(XZ122, XZ121, _offset); XZ11 ^= amd_bitalign(XZ123, XZ122, _offset); XZ12 ^= amd_bitalign(XZ124, XZ123, _offset); XZ13 ^= amd_bitalign(XZ125, XZ124, _offset); XZ14 ^= amd_bitalign(XZ126, XZ125, _offset); XZ15 ^= amd_bitalign(XZ127, XZ126, _offset); XZ16 ^= amd_bitalign(XZ128, XZ127, _offset); XZ17 ^= amd_bitalign(XZ129, XZ128, _offset); XZ18 ^= amd_bitalign(XZ130, XZ129, _offset); XZ19 ^= amd_bitalign(XZ131, XZ130, _offset); XZ20 ^= amd_bitalign(XZ132, XZ131, _offset); XZ21 ^= amd_bitalign(XZ133, XZ132, _offset); XZ22 ^= amd_bitalign(XZ134, XZ133, _offset); XZ23 ^= amd_bitalign(XZ135, XZ134, _offset); XZ24 ^= amd_bitalign(XZ136, XZ135, _offset); XZ25 ^= amd_bitalign(XZ137, XZ136, _offset); XZ26 ^= amd_bitalign(XZ138, XZ137, _offset); XZ27 ^= amd_bitalign(XZ139, XZ138, _offset); XZ28 ^= amd_bitalign(XZ140, XZ139, _offset); XZ29 ^= amd_bitalign(XZ141, XZ140, _offset); XZ30 ^= amd_bitalign(XZ142, XZ141, _offset); XZ31 ^= amd_bitalign(XZ143, XZ142, _offset); XZ32 ^= amd_bitalign(XZ144, XZ143, _offset); XZ33 ^= amd_bitalign(XZ145, XZ144, _offset); XZ34 ^= amd_bitalign(XZ146, XZ145, _offset); XZ35 ^= amd_bitalign(XZ147, XZ146, _offset); XZ36 ^= amd_bitalign(XZ148, XZ147, _offset); XZ37 ^= amd_bitalign(XZ149, XZ148, _offset); XZ38 ^= amd_bitalign(XZ150, XZ149, _offset); XZ39 ^= amd_bitalign(XZ151, XZ150, _offset); XZ40 ^= amd_bitalign(XZ88, XZ87, _offset); XZ41 ^= amd_bitalign(XZ89, XZ88, _offset); XZ42 ^= amd_bitalign(XZ90, XZ89, _offset); XZ43 ^= amd_bitalign(XZ91, XZ90, _offset); XZ44 ^= amd_bitalign(XZ92, XZ91, _offset); XZ45 ^= amd_bitalign(XZ93, XZ92, _offset); XZ46 ^= amd_bitalign(XZ94, XZ93, _offset); XZ47 ^= amd_bitalign(XZ95, XZ94, _offset); XZ48 ^= amd_bitalign(XZ96, XZ95, _offset); XZ49 ^= amd_bitalign(XZ97, XZ96, _offset); XZ50 ^= amd_bitalign(XZ98, XZ97, _offset); XZ51 ^= amd_bitalign(XZ99, XZ98, _offset); XZ52 ^= amd_bitalign(XZ100, XZ99, _offset); XZ53 ^= amd_bitalign(XZ101, XZ100, _offset); XZ54 ^= amd_bitalign(XZ102, XZ101, _offset); XZ55 ^= amd_bitalign(XZ103, XZ102, _offset); XZ56 ^= amd_bitalign(XZ104, XZ103, _offset); XZ57 ^= amd_bitalign(XZ105, XZ104, _offset); XZ58 ^= amd_bitalign(XZ106, XZ105, _offset); XZ59 ^= amd_bitalign(XZ107, XZ106, _offset); XZ60 ^= amd_bitalign(XZ108, XZ107, _offset); XZ61 ^= amd_bitalign(XZ109, XZ108, _offset); XZ62 ^= amd_bitalign(XZ110, XZ109, _offset); XZ63 ^= amd_bitalign(XZ111, XZ110, _offset); }
+						else if (shifted_bufptr < 48) if (shifted_bufptr < 40) if (shifted_bufptr < 36) if (shifted_bufptr < 34) if (shifted_bufptr < 33) { XZ0 ^= amd_bitalign(XZ113, XZ112, _offset); XZ1 ^= amd_bitalign(XZ114, XZ113, _offset); XZ2 ^= amd_bitalign(XZ115, XZ114, _offset); XZ3 ^= amd_bitalign(XZ116, XZ115, _offset); XZ4 ^= amd_bitalign(XZ117, XZ116, _offset); XZ5 ^= amd_bitalign(XZ118, XZ117, _offset); XZ6 ^= amd_bitalign(XZ119, XZ118, _offset); XZ7 ^= amd_bitalign(XZ120, XZ119, _offset); XZ8 ^= amd_bitalign(XZ121, XZ120, _offset); XZ9 ^= amd_bitalign(XZ122, XZ121, _offset); XZ10 ^= amd_bitalign(XZ123, XZ122, _offset); XZ11 ^= amd_bitalign(XZ124, XZ123, _offset); XZ12 ^= amd_bitalign(XZ125, XZ124, _offset); XZ13 ^= amd_bitalign(XZ126, XZ125, _offset); XZ14 ^= amd_bitalign(XZ127, XZ126, _offset); XZ15 ^= amd_bitalign(XZ128, XZ127, _offset); XZ16 ^= amd_bitalign(XZ129, XZ128, _offset); XZ17 ^= amd_bitalign(XZ130, XZ129, _offset); XZ18 ^= amd_bitalign(XZ131, XZ130, _offset); XZ19 ^= amd_bitalign(XZ132, XZ131, _offset); XZ20 ^= amd_bitalign(XZ133, XZ132, _offset); XZ21 ^= amd_bitalign(XZ134, XZ133, _offset); XZ22 ^= amd_bitalign(XZ135, XZ134, _offset); XZ23 ^= amd_bitalign(XZ136, XZ135, _offset); XZ24 ^= amd_bitalign(XZ137, XZ136, _offset); XZ25 ^= amd_bitalign(XZ138, XZ137, _offset); XZ26 ^= amd_bitalign(XZ139, XZ138, _offset); XZ27 ^= amd_bitalign(XZ140, XZ139, _offset); XZ28 ^= amd_bitalign(XZ141, XZ140, _offset); XZ29 ^= amd_bitalign(XZ142, XZ141, _offset); XZ30 ^= amd_bitalign(XZ143, XZ142, _offset); XZ31 ^= amd_bitalign(XZ144, XZ143, _offset); XZ32 ^= amd_bitalign(XZ81, XZ80, _offset); XZ33 ^= amd_bitalign(XZ82, XZ81, _offset); XZ34 ^= amd_bitalign(XZ83, XZ82, _offset); XZ35 ^= amd_bitalign(XZ84, XZ83, _offset); XZ36 ^= amd_bitalign(XZ85, XZ84, _offset); XZ37 ^= amd_bitalign(XZ86, XZ85, _offset); XZ38 ^= amd_bitalign(XZ87, XZ86, _offset); XZ39 ^= amd_bitalign(XZ88, XZ87, _offset); XZ40 ^= amd_bitalign(XZ89, XZ88, _offset); XZ41 ^= amd_bitalign(XZ90, XZ89, _offset); XZ42 ^= amd_bitalign(XZ91, XZ90, _offset); XZ43 ^= amd_bitalign(XZ92, XZ91, _offset); XZ44 ^= amd_bitalign(XZ93, XZ92, _offset); XZ45 ^= amd_bitalign(XZ94, XZ93, _offset); XZ46 ^= amd_bitalign(XZ95, XZ94, _offset); XZ47 ^= amd_bitalign(XZ96, XZ95, _offset); XZ48 ^= amd_bitalign(XZ97, XZ96, _offset); XZ49 ^= amd_bitalign(XZ98, XZ97, _offset); XZ50 ^= amd_bitalign(XZ99, XZ98, _offset); XZ51 ^= amd_bitalign(XZ100, XZ99, _offset); XZ52 ^= amd_bitalign(XZ101, XZ100, _offset); XZ53 ^= amd_bitalign(XZ102, XZ101, _offset); XZ54 ^= amd_bitalign(XZ103, XZ102, _offset); XZ55 ^= amd_bitalign(XZ104, XZ103, _offset); XZ56 ^= amd_bitalign(XZ105, XZ104, _offset); XZ57 ^= amd_bitalign(XZ106, XZ105, _offset); XZ58 ^= amd_bitalign(XZ107, XZ106, _offset); XZ59 ^= amd_bitalign(XZ108, XZ107, _offset); XZ60 ^= amd_bitalign(XZ109, XZ108, _offset); XZ61 ^= amd_bitalign(XZ110, XZ109, _offset); XZ62 ^= amd_bitalign(XZ111, XZ110, _offset); XZ63 ^= amd_bitalign(XZ112, XZ111, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ114, XZ113, _offset); XZ1 ^= amd_bitalign(XZ115, XZ114, _offset); XZ2 ^= amd_bitalign(XZ116, XZ115, _offset); XZ3 ^= amd_bitalign(XZ117, XZ116, _offset); XZ4 ^= amd_bitalign(XZ118, XZ117, _offset); XZ5 ^= amd_bitalign(XZ119, XZ118, _offset); XZ6 ^= amd_bitalign(XZ120, XZ119, _offset); XZ7 ^= amd_bitalign(XZ121, XZ120, _offset); XZ8 ^= amd_bitalign(XZ122, XZ121, _offset); XZ9 ^= amd_bitalign(XZ123, XZ122, _offset); XZ10 ^= amd_bitalign(XZ124, XZ123, _offset); XZ11 ^= amd_bitalign(XZ125, XZ124, _offset); XZ12 ^= amd_bitalign(XZ126, XZ125, _offset); XZ13 ^= amd_bitalign(XZ127, XZ126, _offset); XZ14 ^= amd_bitalign(XZ128, XZ127, _offset); XZ15 ^= amd_bitalign(XZ129, XZ128, _offset); XZ16 ^= amd_bitalign(XZ130, XZ129, _offset); XZ17 ^= amd_bitalign(XZ131, XZ130, _offset); XZ18 ^= amd_bitalign(XZ132, XZ131, _offset); XZ19 ^= amd_bitalign(XZ133, XZ132, _offset); XZ20 ^= amd_bitalign(XZ134, XZ133, _offset); XZ21 ^= amd_bitalign(XZ135, XZ134, _offset); XZ22 ^= amd_bitalign(XZ136, XZ135, _offset); XZ23 ^= amd_bitalign(XZ137, XZ136, _offset); XZ24 ^= amd_bitalign(XZ138, XZ137, _offset); XZ25 ^= amd_bitalign(XZ139, XZ138, _offset); XZ26 ^= amd_bitalign(XZ140, XZ139, _offset); XZ27 ^= amd_bitalign(XZ141, XZ140, _offset); XZ28 ^= amd_bitalign(XZ142, XZ141, _offset); XZ29 ^= amd_bitalign(XZ143, XZ142, _offset); XZ30 ^= amd_bitalign(XZ144, XZ143, _offset); XZ31 ^= amd_bitalign(XZ145, XZ144, _offset); XZ32 ^= amd_bitalign(XZ82, XZ81, _offset); XZ33 ^= amd_bitalign(XZ83, XZ82, _offset); XZ34 ^= amd_bitalign(XZ84, XZ83, _offset); XZ35 ^= amd_bitalign(XZ85, XZ84, _offset); XZ36 ^= amd_bitalign(XZ86, XZ85, _offset); XZ37 ^= amd_bitalign(XZ87, XZ86, _offset); XZ38 ^= amd_bitalign(XZ88, XZ87, _offset); XZ39 ^= amd_bitalign(XZ89, XZ88, _offset); XZ40 ^= amd_bitalign(XZ90, XZ89, _offset); XZ41 ^= amd_bitalign(XZ91, XZ90, _offset); XZ42 ^= amd_bitalign(XZ92, XZ91, _offset); XZ43 ^= amd_bitalign(XZ93, XZ92, _offset); XZ44 ^= amd_bitalign(XZ94, XZ93, _offset); XZ45 ^= amd_bitalign(XZ95, XZ94, _offset); XZ46 ^= amd_bitalign(XZ96, XZ95, _offset); XZ47 ^= amd_bitalign(XZ97, XZ96, _offset); XZ48 ^= amd_bitalign(XZ98, XZ97, _offset); XZ49 ^= amd_bitalign(XZ99, XZ98, _offset); XZ50 ^= amd_bitalign(XZ100, XZ99, _offset); XZ51 ^= amd_bitalign(XZ101, XZ100, _offset); XZ52 ^= amd_bitalign(XZ102, XZ101, _offset); XZ53 ^= amd_bitalign(XZ103, XZ102, _offset); XZ54 ^= amd_bitalign(XZ104, XZ103, _offset); XZ55 ^= amd_bitalign(XZ105, XZ104, _offset); XZ56 ^= amd_bitalign(XZ106, XZ105, _offset); XZ57 ^= amd_bitalign(XZ107, XZ106, _offset); XZ58 ^= amd_bitalign(XZ108, XZ107, _offset); XZ59 ^= amd_bitalign(XZ109, XZ108, _offset); XZ60 ^= amd_bitalign(XZ110, XZ109, _offset); XZ61 ^= amd_bitalign(XZ111, XZ110, _offset); XZ62 ^= amd_bitalign(XZ112, XZ111, _offset); XZ63 ^= amd_bitalign(XZ113, XZ112, _offset); }
+						else if (shifted_bufptr < 35) { XZ0 ^= amd_bitalign(XZ115, XZ114, _offset); XZ1 ^= amd_bitalign(XZ116, XZ115, _offset); XZ2 ^= amd_bitalign(XZ117, XZ116, _offset); XZ3 ^= amd_bitalign(XZ118, XZ117, _offset); XZ4 ^= amd_bitalign(XZ119, XZ118, _offset); XZ5 ^= amd_bitalign(XZ120, XZ119, _offset); XZ6 ^= amd_bitalign(XZ121, XZ120, _offset); XZ7 ^= amd_bitalign(XZ122, XZ121, _offset); XZ8 ^= amd_bitalign(XZ123, XZ122, _offset); XZ9 ^= amd_bitalign(XZ124, XZ123, _offset); XZ10 ^= amd_bitalign(XZ125, XZ124, _offset); XZ11 ^= amd_bitalign(XZ126, XZ125, _offset); XZ12 ^= amd_bitalign(XZ127, XZ126, _offset); XZ13 ^= amd_bitalign(XZ128, XZ127, _offset); XZ14 ^= amd_bitalign(XZ129, XZ128, _offset); XZ15 ^= amd_bitalign(XZ130, XZ129, _offset); XZ16 ^= amd_bitalign(XZ131, XZ130, _offset); XZ17 ^= amd_bitalign(XZ132, XZ131, _offset); XZ18 ^= amd_bitalign(XZ133, XZ132, _offset); XZ19 ^= amd_bitalign(XZ134, XZ133, _offset); XZ20 ^= amd_bitalign(XZ135, XZ134, _offset); XZ21 ^= amd_bitalign(XZ136, XZ135, _offset); XZ22 ^= amd_bitalign(XZ137, XZ136, _offset); XZ23 ^= amd_bitalign(XZ138, XZ137, _offset); XZ24 ^= amd_bitalign(XZ139, XZ138, _offset); XZ25 ^= amd_bitalign(XZ140, XZ139, _offset); XZ26 ^= amd_bitalign(XZ141, XZ140, _offset); XZ27 ^= amd_bitalign(XZ142, XZ141, _offset); XZ28 ^= amd_bitalign(XZ143, XZ142, _offset); XZ29 ^= amd_bitalign(XZ144, XZ143, _offset); XZ30 ^= amd_bitalign(XZ145, XZ144, _offset); XZ31 ^= amd_bitalign(XZ146, XZ145, _offset); XZ32 ^= amd_bitalign(XZ83, XZ82, _offset); XZ33 ^= amd_bitalign(XZ84, XZ83, _offset); XZ34 ^= amd_bitalign(XZ85, XZ84, _offset); XZ35 ^= amd_bitalign(XZ86, XZ85, _offset); XZ36 ^= amd_bitalign(XZ87, XZ86, _offset); XZ37 ^= amd_bitalign(XZ88, XZ87, _offset); XZ38 ^= amd_bitalign(XZ89, XZ88, _offset); XZ39 ^= amd_bitalign(XZ90, XZ89, _offset); XZ40 ^= amd_bitalign(XZ91, XZ90, _offset); XZ41 ^= amd_bitalign(XZ92, XZ91, _offset); XZ42 ^= amd_bitalign(XZ93, XZ92, _offset); XZ43 ^= amd_bitalign(XZ94, XZ93, _offset); XZ44 ^= amd_bitalign(XZ95, XZ94, _offset); XZ45 ^= amd_bitalign(XZ96, XZ95, _offset); XZ46 ^= amd_bitalign(XZ97, XZ96, _offset); XZ47 ^= amd_bitalign(XZ98, XZ97, _offset); XZ48 ^= amd_bitalign(XZ99, XZ98, _offset); XZ49 ^= amd_bitalign(XZ100, XZ99, _offset); XZ50 ^= amd_bitalign(XZ101, XZ100, _offset); XZ51 ^= amd_bitalign(XZ102, XZ101, _offset); XZ52 ^= amd_bitalign(XZ103, XZ102, _offset); XZ53 ^= amd_bitalign(XZ104, XZ103, _offset); XZ54 ^= amd_bitalign(XZ105, XZ104, _offset); XZ55 ^= amd_bitalign(XZ106, XZ105, _offset); XZ56 ^= amd_bitalign(XZ107, XZ106, _offset); XZ57 ^= amd_bitalign(XZ108, XZ107, _offset); XZ58 ^= amd_bitalign(XZ109, XZ108, _offset); XZ59 ^= amd_bitalign(XZ110, XZ109, _offset); XZ60 ^= amd_bitalign(XZ111, XZ110, _offset); XZ61 ^= amd_bitalign(XZ112, XZ111, _offset); XZ62 ^= amd_bitalign(XZ113, XZ112, _offset); XZ63 ^= amd_bitalign(XZ114, XZ113, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ116, XZ115, _offset); XZ1 ^= amd_bitalign(XZ117, XZ116, _offset); XZ2 ^= amd_bitalign(XZ118, XZ117, _offset); XZ3 ^= amd_bitalign(XZ119, XZ118, _offset); XZ4 ^= amd_bitalign(XZ120, XZ119, _offset); XZ5 ^= amd_bitalign(XZ121, XZ120, _offset); XZ6 ^= amd_bitalign(XZ122, XZ121, _offset); XZ7 ^= amd_bitalign(XZ123, XZ122, _offset); XZ8 ^= amd_bitalign(XZ124, XZ123, _offset); XZ9 ^= amd_bitalign(XZ125, XZ124, _offset); XZ10 ^= amd_bitalign(XZ126, XZ125, _offset); XZ11 ^= amd_bitalign(XZ127, XZ126, _offset); XZ12 ^= amd_bitalign(XZ128, XZ127, _offset); XZ13 ^= amd_bitalign(XZ129, XZ128, _offset); XZ14 ^= amd_bitalign(XZ130, XZ129, _offset); XZ15 ^= amd_bitalign(XZ131, XZ130, _offset); XZ16 ^= amd_bitalign(XZ132, XZ131, _offset); XZ17 ^= amd_bitalign(XZ133, XZ132, _offset); XZ18 ^= amd_bitalign(XZ134, XZ133, _offset); XZ19 ^= amd_bitalign(XZ135, XZ134, _offset); XZ20 ^= amd_bitalign(XZ136, XZ135, _offset); XZ21 ^= amd_bitalign(XZ137, XZ136, _offset); XZ22 ^= amd_bitalign(XZ138, XZ137, _offset); XZ23 ^= amd_bitalign(XZ139, XZ138, _offset); XZ24 ^= amd_bitalign(XZ140, XZ139, _offset); XZ25 ^= amd_bitalign(XZ141, XZ140, _offset); XZ26 ^= amd_bitalign(XZ142, XZ141, _offset); XZ27 ^= amd_bitalign(XZ143, XZ142, _offset); XZ28 ^= amd_bitalign(XZ144, XZ143, _offset); XZ29 ^= amd_bitalign(XZ145, XZ144, _offset); XZ30 ^= amd_bitalign(XZ146, XZ145, _offset); XZ31 ^= amd_bitalign(XZ147, XZ146, _offset); XZ32 ^= amd_bitalign(XZ84, XZ83, _offset); XZ33 ^= amd_bitalign(XZ85, XZ84, _offset); XZ34 ^= amd_bitalign(XZ86, XZ85, _offset); XZ35 ^= amd_bitalign(XZ87, XZ86, _offset); XZ36 ^= amd_bitalign(XZ88, XZ87, _offset); XZ37 ^= amd_bitalign(XZ89, XZ88, _offset); XZ38 ^= amd_bitalign(XZ90, XZ89, _offset); XZ39 ^= amd_bitalign(XZ91, XZ90, _offset); XZ40 ^= amd_bitalign(XZ92, XZ91, _offset); XZ41 ^= amd_bitalign(XZ93, XZ92, _offset); XZ42 ^= amd_bitalign(XZ94, XZ93, _offset); XZ43 ^= amd_bitalign(XZ95, XZ94, _offset); XZ44 ^= amd_bitalign(XZ96, XZ95, _offset); XZ45 ^= amd_bitalign(XZ97, XZ96, _offset); XZ46 ^= amd_bitalign(XZ98, XZ97, _offset); XZ47 ^= amd_bitalign(XZ99, XZ98, _offset); XZ48 ^= amd_bitalign(XZ100, XZ99, _offset); XZ49 ^= amd_bitalign(XZ101, XZ100, _offset); XZ50 ^= amd_bitalign(XZ102, XZ101, _offset); XZ51 ^= amd_bitalign(XZ103, XZ102, _offset); XZ52 ^= amd_bitalign(XZ104, XZ103, _offset); XZ53 ^= amd_bitalign(XZ105, XZ104, _offset); XZ54 ^= amd_bitalign(XZ106, XZ105, _offset); XZ55 ^= amd_bitalign(XZ107, XZ106, _offset); XZ56 ^= amd_bitalign(XZ108, XZ107, _offset); XZ57 ^= amd_bitalign(XZ109, XZ108, _offset); XZ58 ^= amd_bitalign(XZ110, XZ109, _offset); XZ59 ^= amd_bitalign(XZ111, XZ110, _offset); XZ60 ^= amd_bitalign(XZ112, XZ111, _offset); XZ61 ^= amd_bitalign(XZ113, XZ112, _offset); XZ62 ^= amd_bitalign(XZ114, XZ113, _offset); XZ63 ^= amd_bitalign(XZ115, XZ114, _offset); }
+						else if (shifted_bufptr < 38) if (shifted_bufptr < 37) { XZ0 ^= amd_bitalign(XZ117, XZ116, _offset); XZ1 ^= amd_bitalign(XZ118, XZ117, _offset); XZ2 ^= amd_bitalign(XZ119, XZ118, _offset); XZ3 ^= amd_bitalign(XZ120, XZ119, _offset); XZ4 ^= amd_bitalign(XZ121, XZ120, _offset); XZ5 ^= amd_bitalign(XZ122, XZ121, _offset); XZ6 ^= amd_bitalign(XZ123, XZ122, _offset); XZ7 ^= amd_bitalign(XZ124, XZ123, _offset); XZ8 ^= amd_bitalign(XZ125, XZ124, _offset); XZ9 ^= amd_bitalign(XZ126, XZ125, _offset); XZ10 ^= amd_bitalign(XZ127, XZ126, _offset); XZ11 ^= amd_bitalign(XZ128, XZ127, _offset); XZ12 ^= amd_bitalign(XZ129, XZ128, _offset); XZ13 ^= amd_bitalign(XZ130, XZ129, _offset); XZ14 ^= amd_bitalign(XZ131, XZ130, _offset); XZ15 ^= amd_bitalign(XZ132, XZ131, _offset); XZ16 ^= amd_bitalign(XZ133, XZ132, _offset); XZ17 ^= amd_bitalign(XZ134, XZ133, _offset); XZ18 ^= amd_bitalign(XZ135, XZ134, _offset); XZ19 ^= amd_bitalign(XZ136, XZ135, _offset); XZ20 ^= amd_bitalign(XZ137, XZ136, _offset); XZ21 ^= amd_bitalign(XZ138, XZ137, _offset); XZ22 ^= amd_bitalign(XZ139, XZ138, _offset); XZ23 ^= amd_bitalign(XZ140, XZ139, _offset); XZ24 ^= amd_bitalign(XZ141, XZ140, _offset); XZ25 ^= amd_bitalign(XZ142, XZ141, _offset); XZ26 ^= amd_bitalign(XZ143, XZ142, _offset); XZ27 ^= amd_bitalign(XZ144, XZ143, _offset); XZ28 ^= amd_bitalign(XZ145, XZ144, _offset); XZ29 ^= amd_bitalign(XZ146, XZ145, _offset); XZ30 ^= amd_bitalign(XZ147, XZ146, _offset); XZ31 ^= amd_bitalign(XZ148, XZ147, _offset); XZ32 ^= amd_bitalign(XZ85, XZ84, _offset); XZ33 ^= amd_bitalign(XZ86, XZ85, _offset); XZ34 ^= amd_bitalign(XZ87, XZ86, _offset); XZ35 ^= amd_bitalign(XZ88, XZ87, _offset); XZ36 ^= amd_bitalign(XZ89, XZ88, _offset); XZ37 ^= amd_bitalign(XZ90, XZ89, _offset); XZ38 ^= amd_bitalign(XZ91, XZ90, _offset); XZ39 ^= amd_bitalign(XZ92, XZ91, _offset); XZ40 ^= amd_bitalign(XZ93, XZ92, _offset); XZ41 ^= amd_bitalign(XZ94, XZ93, _offset); XZ42 ^= amd_bitalign(XZ95, XZ94, _offset); XZ43 ^= amd_bitalign(XZ96, XZ95, _offset); XZ44 ^= amd_bitalign(XZ97, XZ96, _offset); XZ45 ^= amd_bitalign(XZ98, XZ97, _offset); XZ46 ^= amd_bitalign(XZ99, XZ98, _offset); XZ47 ^= amd_bitalign(XZ100, XZ99, _offset); XZ48 ^= amd_bitalign(XZ101, XZ100, _offset); XZ49 ^= amd_bitalign(XZ102, XZ101, _offset); XZ50 ^= amd_bitalign(XZ103, XZ102, _offset); XZ51 ^= amd_bitalign(XZ104, XZ103, _offset); XZ52 ^= amd_bitalign(XZ105, XZ104, _offset); XZ53 ^= amd_bitalign(XZ106, XZ105, _offset); XZ54 ^= amd_bitalign(XZ107, XZ106, _offset); XZ55 ^= amd_bitalign(XZ108, XZ107, _offset); XZ56 ^= amd_bitalign(XZ109, XZ108, _offset); XZ57 ^= amd_bitalign(XZ110, XZ109, _offset); XZ58 ^= amd_bitalign(XZ111, XZ110, _offset); XZ59 ^= amd_bitalign(XZ112, XZ111, _offset); XZ60 ^= amd_bitalign(XZ113, XZ112, _offset); XZ61 ^= amd_bitalign(XZ114, XZ113, _offset); XZ62 ^= amd_bitalign(XZ115, XZ114, _offset); XZ63 ^= amd_bitalign(XZ116, XZ115, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ118, XZ117, _offset); XZ1 ^= amd_bitalign(XZ119, XZ118, _offset); XZ2 ^= amd_bitalign(XZ120, XZ119, _offset); XZ3 ^= amd_bitalign(XZ121, XZ120, _offset); XZ4 ^= amd_bitalign(XZ122, XZ121, _offset); XZ5 ^= amd_bitalign(XZ123, XZ122, _offset); XZ6 ^= amd_bitalign(XZ124, XZ123, _offset); XZ7 ^= amd_bitalign(XZ125, XZ124, _offset); XZ8 ^= amd_bitalign(XZ126, XZ125, _offset); XZ9 ^= amd_bitalign(XZ127, XZ126, _offset); XZ10 ^= amd_bitalign(XZ128, XZ127, _offset); XZ11 ^= amd_bitalign(XZ129, XZ128, _offset); XZ12 ^= amd_bitalign(XZ130, XZ129, _offset); XZ13 ^= amd_bitalign(XZ131, XZ130, _offset); XZ14 ^= amd_bitalign(XZ132, XZ131, _offset); XZ15 ^= amd_bitalign(XZ133, XZ132, _offset); XZ16 ^= amd_bitalign(XZ134, XZ133, _offset); XZ17 ^= amd_bitalign(XZ135, XZ134, _offset); XZ18 ^= amd_bitalign(XZ136, XZ135, _offset); XZ19 ^= amd_bitalign(XZ137, XZ136, _offset); XZ20 ^= amd_bitalign(XZ138, XZ137, _offset); XZ21 ^= amd_bitalign(XZ139, XZ138, _offset); XZ22 ^= amd_bitalign(XZ140, XZ139, _offset); XZ23 ^= amd_bitalign(XZ141, XZ140, _offset); XZ24 ^= amd_bitalign(XZ142, XZ141, _offset); XZ25 ^= amd_bitalign(XZ143, XZ142, _offset); XZ26 ^= amd_bitalign(XZ144, XZ143, _offset); XZ27 ^= amd_bitalign(XZ145, XZ144, _offset); XZ28 ^= amd_bitalign(XZ146, XZ145, _offset); XZ29 ^= amd_bitalign(XZ147, XZ146, _offset); XZ30 ^= amd_bitalign(XZ148, XZ147, _offset); XZ31 ^= amd_bitalign(XZ149, XZ148, _offset); XZ32 ^= amd_bitalign(XZ86, XZ85, _offset); XZ33 ^= amd_bitalign(XZ87, XZ86, _offset); XZ34 ^= amd_bitalign(XZ88, XZ87, _offset); XZ35 ^= amd_bitalign(XZ89, XZ88, _offset); XZ36 ^= amd_bitalign(XZ90, XZ89, _offset); XZ37 ^= amd_bitalign(XZ91, XZ90, _offset); XZ38 ^= amd_bitalign(XZ92, XZ91, _offset); XZ39 ^= amd_bitalign(XZ93, XZ92, _offset); XZ40 ^= amd_bitalign(XZ94, XZ93, _offset); XZ41 ^= amd_bitalign(XZ95, XZ94, _offset); XZ42 ^= amd_bitalign(XZ96, XZ95, _offset); XZ43 ^= amd_bitalign(XZ97, XZ96, _offset); XZ44 ^= amd_bitalign(XZ98, XZ97, _offset); XZ45 ^= amd_bitalign(XZ99, XZ98, _offset); XZ46 ^= amd_bitalign(XZ100, XZ99, _offset); XZ47 ^= amd_bitalign(XZ101, XZ100, _offset); XZ48 ^= amd_bitalign(XZ102, XZ101, _offset); XZ49 ^= amd_bitalign(XZ103, XZ102, _offset); XZ50 ^= amd_bitalign(XZ104, XZ103, _offset); XZ51 ^= amd_bitalign(XZ105, XZ104, _offset); XZ52 ^= amd_bitalign(XZ106, XZ105, _offset); XZ53 ^= amd_bitalign(XZ107, XZ106, _offset); XZ54 ^= amd_bitalign(XZ108, XZ107, _offset); XZ55 ^= amd_bitalign(XZ109, XZ108, _offset); XZ56 ^= amd_bitalign(XZ110, XZ109, _offset); XZ57 ^= amd_bitalign(XZ111, XZ110, _offset); XZ58 ^= amd_bitalign(XZ112, XZ111, _offset); XZ59 ^= amd_bitalign(XZ113, XZ112, _offset); XZ60 ^= amd_bitalign(XZ114, XZ113, _offset); XZ61 ^= amd_bitalign(XZ115, XZ114, _offset); XZ62 ^= amd_bitalign(XZ116, XZ115, _offset); XZ63 ^= amd_bitalign(XZ117, XZ116, _offset); }
+						else if (shifted_bufptr < 39) { XZ0 ^= amd_bitalign(XZ119, XZ118, _offset); XZ1 ^= amd_bitalign(XZ120, XZ119, _offset); XZ2 ^= amd_bitalign(XZ121, XZ120, _offset); XZ3 ^= amd_bitalign(XZ122, XZ121, _offset); XZ4 ^= amd_bitalign(XZ123, XZ122, _offset); XZ5 ^= amd_bitalign(XZ124, XZ123, _offset); XZ6 ^= amd_bitalign(XZ125, XZ124, _offset); XZ7 ^= amd_bitalign(XZ126, XZ125, _offset); XZ8 ^= amd_bitalign(XZ127, XZ126, _offset); XZ9 ^= amd_bitalign(XZ128, XZ127, _offset); XZ10 ^= amd_bitalign(XZ129, XZ128, _offset); XZ11 ^= amd_bitalign(XZ130, XZ129, _offset); XZ12 ^= amd_bitalign(XZ131, XZ130, _offset); XZ13 ^= amd_bitalign(XZ132, XZ131, _offset); XZ14 ^= amd_bitalign(XZ133, XZ132, _offset); XZ15 ^= amd_bitalign(XZ134, XZ133, _offset); XZ16 ^= amd_bitalign(XZ135, XZ134, _offset); XZ17 ^= amd_bitalign(XZ136, XZ135, _offset); XZ18 ^= amd_bitalign(XZ137, XZ136, _offset); XZ19 ^= amd_bitalign(XZ138, XZ137, _offset); XZ20 ^= amd_bitalign(XZ139, XZ138, _offset); XZ21 ^= amd_bitalign(XZ140, XZ139, _offset); XZ22 ^= amd_bitalign(XZ141, XZ140, _offset); XZ23 ^= amd_bitalign(XZ142, XZ141, _offset); XZ24 ^= amd_bitalign(XZ143, XZ142, _offset); XZ25 ^= amd_bitalign(XZ144, XZ143, _offset); XZ26 ^= amd_bitalign(XZ145, XZ144, _offset); XZ27 ^= amd_bitalign(XZ146, XZ145, _offset); XZ28 ^= amd_bitalign(XZ147, XZ146, _offset); XZ29 ^= amd_bitalign(XZ148, XZ147, _offset); XZ30 ^= amd_bitalign(XZ149, XZ148, _offset); XZ31 ^= amd_bitalign(XZ150, XZ149, _offset); XZ32 ^= amd_bitalign(XZ87, XZ86, _offset); XZ33 ^= amd_bitalign(XZ88, XZ87, _offset); XZ34 ^= amd_bitalign(XZ89, XZ88, _offset); XZ35 ^= amd_bitalign(XZ90, XZ89, _offset); XZ36 ^= amd_bitalign(XZ91, XZ90, _offset); XZ37 ^= amd_bitalign(XZ92, XZ91, _offset); XZ38 ^= amd_bitalign(XZ93, XZ92, _offset); XZ39 ^= amd_bitalign(XZ94, XZ93, _offset); XZ40 ^= amd_bitalign(XZ95, XZ94, _offset); XZ41 ^= amd_bitalign(XZ96, XZ95, _offset); XZ42 ^= amd_bitalign(XZ97, XZ96, _offset); XZ43 ^= amd_bitalign(XZ98, XZ97, _offset); XZ44 ^= amd_bitalign(XZ99, XZ98, _offset); XZ45 ^= amd_bitalign(XZ100, XZ99, _offset); XZ46 ^= amd_bitalign(XZ101, XZ100, _offset); XZ47 ^= amd_bitalign(XZ102, XZ101, _offset); XZ48 ^= amd_bitalign(XZ103, XZ102, _offset); XZ49 ^= amd_bitalign(XZ104, XZ103, _offset); XZ50 ^= amd_bitalign(XZ105, XZ104, _offset); XZ51 ^= amd_bitalign(XZ106, XZ105, _offset); XZ52 ^= amd_bitalign(XZ107, XZ106, _offset); XZ53 ^= amd_bitalign(XZ108, XZ107, _offset); XZ54 ^= amd_bitalign(XZ109, XZ108, _offset); XZ55 ^= amd_bitalign(XZ110, XZ109, _offset); XZ56 ^= amd_bitalign(XZ111, XZ110, _offset); XZ57 ^= amd_bitalign(XZ112, XZ111, _offset); XZ58 ^= amd_bitalign(XZ113, XZ112, _offset); XZ59 ^= amd_bitalign(XZ114, XZ113, _offset); XZ60 ^= amd_bitalign(XZ115, XZ114, _offset); XZ61 ^= amd_bitalign(XZ116, XZ115, _offset); XZ62 ^= amd_bitalign(XZ117, XZ116, _offset); XZ63 ^= amd_bitalign(XZ118, XZ117, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ120, XZ119, _offset); XZ1 ^= amd_bitalign(XZ121, XZ120, _offset); XZ2 ^= amd_bitalign(XZ122, XZ121, _offset); XZ3 ^= amd_bitalign(XZ123, XZ122, _offset); XZ4 ^= amd_bitalign(XZ124, XZ123, _offset); XZ5 ^= amd_bitalign(XZ125, XZ124, _offset); XZ6 ^= amd_bitalign(XZ126, XZ125, _offset); XZ7 ^= amd_bitalign(XZ127, XZ126, _offset); XZ8 ^= amd_bitalign(XZ128, XZ127, _offset); XZ9 ^= amd_bitalign(XZ129, XZ128, _offset); XZ10 ^= amd_bitalign(XZ130, XZ129, _offset); XZ11 ^= amd_bitalign(XZ131, XZ130, _offset); XZ12 ^= amd_bitalign(XZ132, XZ131, _offset); XZ13 ^= amd_bitalign(XZ133, XZ132, _offset); XZ14 ^= amd_bitalign(XZ134, XZ133, _offset); XZ15 ^= amd_bitalign(XZ135, XZ134, _offset); XZ16 ^= amd_bitalign(XZ136, XZ135, _offset); XZ17 ^= amd_bitalign(XZ137, XZ136, _offset); XZ18 ^= amd_bitalign(XZ138, XZ137, _offset); XZ19 ^= amd_bitalign(XZ139, XZ138, _offset); XZ20 ^= amd_bitalign(XZ140, XZ139, _offset); XZ21 ^= amd_bitalign(XZ141, XZ140, _offset); XZ22 ^= amd_bitalign(XZ142, XZ141, _offset); XZ23 ^= amd_bitalign(XZ143, XZ142, _offset); XZ24 ^= amd_bitalign(XZ144, XZ143, _offset); XZ25 ^= amd_bitalign(XZ145, XZ144, _offset); XZ26 ^= amd_bitalign(XZ146, XZ145, _offset); XZ27 ^= amd_bitalign(XZ147, XZ146, _offset); XZ28 ^= amd_bitalign(XZ148, XZ147, _offset); XZ29 ^= amd_bitalign(XZ149, XZ148, _offset); XZ30 ^= amd_bitalign(XZ150, XZ149, _offset); XZ31 ^= amd_bitalign(XZ151, XZ150, _offset); XZ32 ^= amd_bitalign(XZ88, XZ87, _offset); XZ33 ^= amd_bitalign(XZ89, XZ88, _offset); XZ34 ^= amd_bitalign(XZ90, XZ89, _offset); XZ35 ^= amd_bitalign(XZ91, XZ90, _offset); XZ36 ^= amd_bitalign(XZ92, XZ91, _offset); XZ37 ^= amd_bitalign(XZ93, XZ92, _offset); XZ38 ^= amd_bitalign(XZ94, XZ93, _offset); XZ39 ^= amd_bitalign(XZ95, XZ94, _offset); XZ40 ^= amd_bitalign(XZ96, XZ95, _offset); XZ41 ^= amd_bitalign(XZ97, XZ96, _offset); XZ42 ^= amd_bitalign(XZ98, XZ97, _offset); XZ43 ^= amd_bitalign(XZ99, XZ98, _offset); XZ44 ^= amd_bitalign(XZ100, XZ99, _offset); XZ45 ^= amd_bitalign(XZ101, XZ100, _offset); XZ46 ^= amd_bitalign(XZ102, XZ101, _offset); XZ47 ^= amd_bitalign(XZ103, XZ102, _offset); XZ48 ^= amd_bitalign(XZ104, XZ103, _offset); XZ49 ^= amd_bitalign(XZ105, XZ104, _offset); XZ50 ^= amd_bitalign(XZ106, XZ105, _offset); XZ51 ^= amd_bitalign(XZ107, XZ106, _offset); XZ52 ^= amd_bitalign(XZ108, XZ107, _offset); XZ53 ^= amd_bitalign(XZ109, XZ108, _offset); XZ54 ^= amd_bitalign(XZ110, XZ109, _offset); XZ55 ^= amd_bitalign(XZ111, XZ110, _offset); XZ56 ^= amd_bitalign(XZ112, XZ111, _offset); XZ57 ^= amd_bitalign(XZ113, XZ112, _offset); XZ58 ^= amd_bitalign(XZ114, XZ113, _offset); XZ59 ^= amd_bitalign(XZ115, XZ114, _offset); XZ60 ^= amd_bitalign(XZ116, XZ115, _offset); XZ61 ^= amd_bitalign(XZ117, XZ116, _offset); XZ62 ^= amd_bitalign(XZ118, XZ117, _offset); XZ63 ^= amd_bitalign(XZ119, XZ118, _offset); }
+						else if (shifted_bufptr < 44) if (shifted_bufptr < 42) if (shifted_bufptr < 41) { XZ0 ^= amd_bitalign(XZ121, XZ120, _offset); XZ1 ^= amd_bitalign(XZ122, XZ121, _offset); XZ2 ^= amd_bitalign(XZ123, XZ122, _offset); XZ3 ^= amd_bitalign(XZ124, XZ123, _offset); XZ4 ^= amd_bitalign(XZ125, XZ124, _offset); XZ5 ^= amd_bitalign(XZ126, XZ125, _offset); XZ6 ^= amd_bitalign(XZ127, XZ126, _offset); XZ7 ^= amd_bitalign(XZ128, XZ127, _offset); XZ8 ^= amd_bitalign(XZ129, XZ128, _offset); XZ9 ^= amd_bitalign(XZ130, XZ129, _offset); XZ10 ^= amd_bitalign(XZ131, XZ130, _offset); XZ11 ^= amd_bitalign(XZ132, XZ131, _offset); XZ12 ^= amd_bitalign(XZ133, XZ132, _offset); XZ13 ^= amd_bitalign(XZ134, XZ133, _offset); XZ14 ^= amd_bitalign(XZ135, XZ134, _offset); XZ15 ^= amd_bitalign(XZ136, XZ135, _offset); XZ16 ^= amd_bitalign(XZ137, XZ136, _offset); XZ17 ^= amd_bitalign(XZ138, XZ137, _offset); XZ18 ^= amd_bitalign(XZ139, XZ138, _offset); XZ19 ^= amd_bitalign(XZ140, XZ139, _offset); XZ20 ^= amd_bitalign(XZ141, XZ140, _offset); XZ21 ^= amd_bitalign(XZ142, XZ141, _offset); XZ22 ^= amd_bitalign(XZ143, XZ142, _offset); XZ23 ^= amd_bitalign(XZ144, XZ143, _offset); XZ24 ^= amd_bitalign(XZ81, XZ80, _offset); XZ25 ^= amd_bitalign(XZ82, XZ81, _offset); XZ26 ^= amd_bitalign(XZ83, XZ82, _offset); XZ27 ^= amd_bitalign(XZ84, XZ83, _offset); XZ28 ^= amd_bitalign(XZ85, XZ84, _offset); XZ29 ^= amd_bitalign(XZ86, XZ85, _offset); XZ30 ^= amd_bitalign(XZ87, XZ86, _offset); XZ31 ^= amd_bitalign(XZ88, XZ87, _offset); XZ32 ^= amd_bitalign(XZ89, XZ88, _offset); XZ33 ^= amd_bitalign(XZ90, XZ89, _offset); XZ34 ^= amd_bitalign(XZ91, XZ90, _offset); XZ35 ^= amd_bitalign(XZ92, XZ91, _offset); XZ36 ^= amd_bitalign(XZ93, XZ92, _offset); XZ37 ^= amd_bitalign(XZ94, XZ93, _offset); XZ38 ^= amd_bitalign(XZ95, XZ94, _offset); XZ39 ^= amd_bitalign(XZ96, XZ95, _offset); XZ40 ^= amd_bitalign(XZ97, XZ96, _offset); XZ41 ^= amd_bitalign(XZ98, XZ97, _offset); XZ42 ^= amd_bitalign(XZ99, XZ98, _offset); XZ43 ^= amd_bitalign(XZ100, XZ99, _offset); XZ44 ^= amd_bitalign(XZ101, XZ100, _offset); XZ45 ^= amd_bitalign(XZ102, XZ101, _offset); XZ46 ^= amd_bitalign(XZ103, XZ102, _offset); XZ47 ^= amd_bitalign(XZ104, XZ103, _offset); XZ48 ^= amd_bitalign(XZ105, XZ104, _offset); XZ49 ^= amd_bitalign(XZ106, XZ105, _offset); XZ50 ^= amd_bitalign(XZ107, XZ106, _offset); XZ51 ^= amd_bitalign(XZ108, XZ107, _offset); XZ52 ^= amd_bitalign(XZ109, XZ108, _offset); XZ53 ^= amd_bitalign(XZ110, XZ109, _offset); XZ54 ^= amd_bitalign(XZ111, XZ110, _offset); XZ55 ^= amd_bitalign(XZ112, XZ111, _offset); XZ56 ^= amd_bitalign(XZ113, XZ112, _offset); XZ57 ^= amd_bitalign(XZ114, XZ113, _offset); XZ58 ^= amd_bitalign(XZ115, XZ114, _offset); XZ59 ^= amd_bitalign(XZ116, XZ115, _offset); XZ60 ^= amd_bitalign(XZ117, XZ116, _offset); XZ61 ^= amd_bitalign(XZ118, XZ117, _offset); XZ62 ^= amd_bitalign(XZ119, XZ118, _offset); XZ63 ^= amd_bitalign(XZ120, XZ119, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ122, XZ121, _offset); XZ1 ^= amd_bitalign(XZ123, XZ122, _offset); XZ2 ^= amd_bitalign(XZ124, XZ123, _offset); XZ3 ^= amd_bitalign(XZ125, XZ124, _offset); XZ4 ^= amd_bitalign(XZ126, XZ125, _offset); XZ5 ^= amd_bitalign(XZ127, XZ126, _offset); XZ6 ^= amd_bitalign(XZ128, XZ127, _offset); XZ7 ^= amd_bitalign(XZ129, XZ128, _offset); XZ8 ^= amd_bitalign(XZ130, XZ129, _offset); XZ9 ^= amd_bitalign(XZ131, XZ130, _offset); XZ10 ^= amd_bitalign(XZ132, XZ131, _offset); XZ11 ^= amd_bitalign(XZ133, XZ132, _offset); XZ12 ^= amd_bitalign(XZ134, XZ133, _offset); XZ13 ^= amd_bitalign(XZ135, XZ134, _offset); XZ14 ^= amd_bitalign(XZ136, XZ135, _offset); XZ15 ^= amd_bitalign(XZ137, XZ136, _offset); XZ16 ^= amd_bitalign(XZ138, XZ137, _offset); XZ17 ^= amd_bitalign(XZ139, XZ138, _offset); XZ18 ^= amd_bitalign(XZ140, XZ139, _offset); XZ19 ^= amd_bitalign(XZ141, XZ140, _offset); XZ20 ^= amd_bitalign(XZ142, XZ141, _offset); XZ21 ^= amd_bitalign(XZ143, XZ142, _offset); XZ22 ^= amd_bitalign(XZ144, XZ143, _offset); XZ23 ^= amd_bitalign(XZ145, XZ144, _offset); XZ24 ^= amd_bitalign(XZ82, XZ81, _offset); XZ25 ^= amd_bitalign(XZ83, XZ82, _offset); XZ26 ^= amd_bitalign(XZ84, XZ83, _offset); XZ27 ^= amd_bitalign(XZ85, XZ84, _offset); XZ28 ^= amd_bitalign(XZ86, XZ85, _offset); XZ29 ^= amd_bitalign(XZ87, XZ86, _offset); XZ30 ^= amd_bitalign(XZ88, XZ87, _offset); XZ31 ^= amd_bitalign(XZ89, XZ88, _offset); XZ32 ^= amd_bitalign(XZ90, XZ89, _offset); XZ33 ^= amd_bitalign(XZ91, XZ90, _offset); XZ34 ^= amd_bitalign(XZ92, XZ91, _offset); XZ35 ^= amd_bitalign(XZ93, XZ92, _offset); XZ36 ^= amd_bitalign(XZ94, XZ93, _offset); XZ37 ^= amd_bitalign(XZ95, XZ94, _offset); XZ38 ^= amd_bitalign(XZ96, XZ95, _offset); XZ39 ^= amd_bitalign(XZ97, XZ96, _offset); XZ40 ^= amd_bitalign(XZ98, XZ97, _offset); XZ41 ^= amd_bitalign(XZ99, XZ98, _offset); XZ42 ^= amd_bitalign(XZ100, XZ99, _offset); XZ43 ^= amd_bitalign(XZ101, XZ100, _offset); XZ44 ^= amd_bitalign(XZ102, XZ101, _offset); XZ45 ^= amd_bitalign(XZ103, XZ102, _offset); XZ46 ^= amd_bitalign(XZ104, XZ103, _offset); XZ47 ^= amd_bitalign(XZ105, XZ104, _offset); XZ48 ^= amd_bitalign(XZ106, XZ105, _offset); XZ49 ^= amd_bitalign(XZ107, XZ106, _offset); XZ50 ^= amd_bitalign(XZ108, XZ107, _offset); XZ51 ^= amd_bitalign(XZ109, XZ108, _offset); XZ52 ^= amd_bitalign(XZ110, XZ109, _offset); XZ53 ^= amd_bitalign(XZ111, XZ110, _offset); XZ54 ^= amd_bitalign(XZ112, XZ111, _offset); XZ55 ^= amd_bitalign(XZ113, XZ112, _offset); XZ56 ^= amd_bitalign(XZ114, XZ113, _offset); XZ57 ^= amd_bitalign(XZ115, XZ114, _offset); XZ58 ^= amd_bitalign(XZ116, XZ115, _offset); XZ59 ^= amd_bitalign(XZ117, XZ116, _offset); XZ60 ^= amd_bitalign(XZ118, XZ117, _offset); XZ61 ^= amd_bitalign(XZ119, XZ118, _offset); XZ62 ^= amd_bitalign(XZ120, XZ119, _offset); XZ63 ^= amd_bitalign(XZ121, XZ120, _offset); }
+						else if (shifted_bufptr < 43) { XZ0 ^= amd_bitalign(XZ123, XZ122, _offset); XZ1 ^= amd_bitalign(XZ124, XZ123, _offset); XZ2 ^= amd_bitalign(XZ125, XZ124, _offset); XZ3 ^= amd_bitalign(XZ126, XZ125, _offset); XZ4 ^= amd_bitalign(XZ127, XZ126, _offset); XZ5 ^= amd_bitalign(XZ128, XZ127, _offset); XZ6 ^= amd_bitalign(XZ129, XZ128, _offset); XZ7 ^= amd_bitalign(XZ130, XZ129, _offset); XZ8 ^= amd_bitalign(XZ131, XZ130, _offset); XZ9 ^= amd_bitalign(XZ132, XZ131, _offset); XZ10 ^= amd_bitalign(XZ133, XZ132, _offset); XZ11 ^= amd_bitalign(XZ134, XZ133, _offset); XZ12 ^= amd_bitalign(XZ135, XZ134, _offset); XZ13 ^= amd_bitalign(XZ136, XZ135, _offset); XZ14 ^= amd_bitalign(XZ137, XZ136, _offset); XZ15 ^= amd_bitalign(XZ138, XZ137, _offset); XZ16 ^= amd_bitalign(XZ139, XZ138, _offset); XZ17 ^= amd_bitalign(XZ140, XZ139, _offset); XZ18 ^= amd_bitalign(XZ141, XZ140, _offset); XZ19 ^= amd_bitalign(XZ142, XZ141, _offset); XZ20 ^= amd_bitalign(XZ143, XZ142, _offset); XZ21 ^= amd_bitalign(XZ144, XZ143, _offset); XZ22 ^= amd_bitalign(XZ145, XZ144, _offset); XZ23 ^= amd_bitalign(XZ146, XZ145, _offset); XZ24 ^= amd_bitalign(XZ83, XZ82, _offset); XZ25 ^= amd_bitalign(XZ84, XZ83, _offset); XZ26 ^= amd_bitalign(XZ85, XZ84, _offset); XZ27 ^= amd_bitalign(XZ86, XZ85, _offset); XZ28 ^= amd_bitalign(XZ87, XZ86, _offset); XZ29 ^= amd_bitalign(XZ88, XZ87, _offset); XZ30 ^= amd_bitalign(XZ89, XZ88, _offset); XZ31 ^= amd_bitalign(XZ90, XZ89, _offset); XZ32 ^= amd_bitalign(XZ91, XZ90, _offset); XZ33 ^= amd_bitalign(XZ92, XZ91, _offset); XZ34 ^= amd_bitalign(XZ93, XZ92, _offset); XZ35 ^= amd_bitalign(XZ94, XZ93, _offset); XZ36 ^= amd_bitalign(XZ95, XZ94, _offset); XZ37 ^= amd_bitalign(XZ96, XZ95, _offset); XZ38 ^= amd_bitalign(XZ97, XZ96, _offset); XZ39 ^= amd_bitalign(XZ98, XZ97, _offset); XZ40 ^= amd_bitalign(XZ99, XZ98, _offset); XZ41 ^= amd_bitalign(XZ100, XZ99, _offset); XZ42 ^= amd_bitalign(XZ101, XZ100, _offset); XZ43 ^= amd_bitalign(XZ102, XZ101, _offset); XZ44 ^= amd_bitalign(XZ103, XZ102, _offset); XZ45 ^= amd_bitalign(XZ104, XZ103, _offset); XZ46 ^= amd_bitalign(XZ105, XZ104, _offset); XZ47 ^= amd_bitalign(XZ106, XZ105, _offset); XZ48 ^= amd_bitalign(XZ107, XZ106, _offset); XZ49 ^= amd_bitalign(XZ108, XZ107, _offset); XZ50 ^= amd_bitalign(XZ109, XZ108, _offset); XZ51 ^= amd_bitalign(XZ110, XZ109, _offset); XZ52 ^= amd_bitalign(XZ111, XZ110, _offset); XZ53 ^= amd_bitalign(XZ112, XZ111, _offset); XZ54 ^= amd_bitalign(XZ113, XZ112, _offset); XZ55 ^= amd_bitalign(XZ114, XZ113, _offset); XZ56 ^= amd_bitalign(XZ115, XZ114, _offset); XZ57 ^= amd_bitalign(XZ116, XZ115, _offset); XZ58 ^= amd_bitalign(XZ117, XZ116, _offset); XZ59 ^= amd_bitalign(XZ118, XZ117, _offset); XZ60 ^= amd_bitalign(XZ119, XZ118, _offset); XZ61 ^= amd_bitalign(XZ120, XZ119, _offset); XZ62 ^= amd_bitalign(XZ121, XZ120, _offset); XZ63 ^= amd_bitalign(XZ122, XZ121, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ124, XZ123, _offset); XZ1 ^= amd_bitalign(XZ125, XZ124, _offset); XZ2 ^= amd_bitalign(XZ126, XZ125, _offset); XZ3 ^= amd_bitalign(XZ127, XZ126, _offset); XZ4 ^= amd_bitalign(XZ128, XZ127, _offset); XZ5 ^= amd_bitalign(XZ129, XZ128, _offset); XZ6 ^= amd_bitalign(XZ130, XZ129, _offset); XZ7 ^= amd_bitalign(XZ131, XZ130, _offset); XZ8 ^= amd_bitalign(XZ132, XZ131, _offset); XZ9 ^= amd_bitalign(XZ133, XZ132, _offset); XZ10 ^= amd_bitalign(XZ134, XZ133, _offset); XZ11 ^= amd_bitalign(XZ135, XZ134, _offset); XZ12 ^= amd_bitalign(XZ136, XZ135, _offset); XZ13 ^= amd_bitalign(XZ137, XZ136, _offset); XZ14 ^= amd_bitalign(XZ138, XZ137, _offset); XZ15 ^= amd_bitalign(XZ139, XZ138, _offset); XZ16 ^= amd_bitalign(XZ140, XZ139, _offset); XZ17 ^= amd_bitalign(XZ141, XZ140, _offset); XZ18 ^= amd_bitalign(XZ142, XZ141, _offset); XZ19 ^= amd_bitalign(XZ143, XZ142, _offset); XZ20 ^= amd_bitalign(XZ144, XZ143, _offset); XZ21 ^= amd_bitalign(XZ145, XZ144, _offset); XZ22 ^= amd_bitalign(XZ146, XZ145, _offset); XZ23 ^= amd_bitalign(XZ147, XZ146, _offset); XZ24 ^= amd_bitalign(XZ84, XZ83, _offset); XZ25 ^= amd_bitalign(XZ85, XZ84, _offset); XZ26 ^= amd_bitalign(XZ86, XZ85, _offset); XZ27 ^= amd_bitalign(XZ87, XZ86, _offset); XZ28 ^= amd_bitalign(XZ88, XZ87, _offset); XZ29 ^= amd_bitalign(XZ89, XZ88, _offset); XZ30 ^= amd_bitalign(XZ90, XZ89, _offset); XZ31 ^= amd_bitalign(XZ91, XZ90, _offset); XZ32 ^= amd_bitalign(XZ92, XZ91, _offset); XZ33 ^= amd_bitalign(XZ93, XZ92, _offset); XZ34 ^= amd_bitalign(XZ94, XZ93, _offset); XZ35 ^= amd_bitalign(XZ95, XZ94, _offset); XZ36 ^= amd_bitalign(XZ96, XZ95, _offset); XZ37 ^= amd_bitalign(XZ97, XZ96, _offset); XZ38 ^= amd_bitalign(XZ98, XZ97, _offset); XZ39 ^= amd_bitalign(XZ99, XZ98, _offset); XZ40 ^= amd_bitalign(XZ100, XZ99, _offset); XZ41 ^= amd_bitalign(XZ101, XZ100, _offset); XZ42 ^= amd_bitalign(XZ102, XZ101, _offset); XZ43 ^= amd_bitalign(XZ103, XZ102, _offset); XZ44 ^= amd_bitalign(XZ104, XZ103, _offset); XZ45 ^= amd_bitalign(XZ105, XZ104, _offset); XZ46 ^= amd_bitalign(XZ106, XZ105, _offset); XZ47 ^= amd_bitalign(XZ107, XZ106, _offset); XZ48 ^= amd_bitalign(XZ108, XZ107, _offset); XZ49 ^= amd_bitalign(XZ109, XZ108, _offset); XZ50 ^= amd_bitalign(XZ110, XZ109, _offset); XZ51 ^= amd_bitalign(XZ111, XZ110, _offset); XZ52 ^= amd_bitalign(XZ112, XZ111, _offset); XZ53 ^= amd_bitalign(XZ113, XZ112, _offset); XZ54 ^= amd_bitalign(XZ114, XZ113, _offset); XZ55 ^= amd_bitalign(XZ115, XZ114, _offset); XZ56 ^= amd_bitalign(XZ116, XZ115, _offset); XZ57 ^= amd_bitalign(XZ117, XZ116, _offset); XZ58 ^= amd_bitalign(XZ118, XZ117, _offset); XZ59 ^= amd_bitalign(XZ119, XZ118, _offset); XZ60 ^= amd_bitalign(XZ120, XZ119, _offset); XZ61 ^= amd_bitalign(XZ121, XZ120, _offset); XZ62 ^= amd_bitalign(XZ122, XZ121, _offset); XZ63 ^= amd_bitalign(XZ123, XZ122, _offset); }
+						else if (shifted_bufptr < 46) if (shifted_bufptr < 45) { XZ0 ^= amd_bitalign(XZ125, XZ124, _offset); XZ1 ^= amd_bitalign(XZ126, XZ125, _offset); XZ2 ^= amd_bitalign(XZ127, XZ126, _offset); XZ3 ^= amd_bitalign(XZ128, XZ127, _offset); XZ4 ^= amd_bitalign(XZ129, XZ128, _offset); XZ5 ^= amd_bitalign(XZ130, XZ129, _offset); XZ6 ^= amd_bitalign(XZ131, XZ130, _offset); XZ7 ^= amd_bitalign(XZ132, XZ131, _offset); XZ8 ^= amd_bitalign(XZ133, XZ132, _offset); XZ9 ^= amd_bitalign(XZ134, XZ133, _offset); XZ10 ^= amd_bitalign(XZ135, XZ134, _offset); XZ11 ^= amd_bitalign(XZ136, XZ135, _offset); XZ12 ^= amd_bitalign(XZ137, XZ136, _offset); XZ13 ^= amd_bitalign(XZ138, XZ137, _offset); XZ14 ^= amd_bitalign(XZ139, XZ138, _offset); XZ15 ^= amd_bitalign(XZ140, XZ139, _offset); XZ16 ^= amd_bitalign(XZ141, XZ140, _offset); XZ17 ^= amd_bitalign(XZ142, XZ141, _offset); XZ18 ^= amd_bitalign(XZ143, XZ142, _offset); XZ19 ^= amd_bitalign(XZ144, XZ143, _offset); XZ20 ^= amd_bitalign(XZ145, XZ144, _offset); XZ21 ^= amd_bitalign(XZ146, XZ145, _offset); XZ22 ^= amd_bitalign(XZ147, XZ146, _offset); XZ23 ^= amd_bitalign(XZ148, XZ147, _offset); XZ24 ^= amd_bitalign(XZ85, XZ84, _offset); XZ25 ^= amd_bitalign(XZ86, XZ85, _offset); XZ26 ^= amd_bitalign(XZ87, XZ86, _offset); XZ27 ^= amd_bitalign(XZ88, XZ87, _offset); XZ28 ^= amd_bitalign(XZ89, XZ88, _offset); XZ29 ^= amd_bitalign(XZ90, XZ89, _offset); XZ30 ^= amd_bitalign(XZ91, XZ90, _offset); XZ31 ^= amd_bitalign(XZ92, XZ91, _offset); XZ32 ^= amd_bitalign(XZ93, XZ92, _offset); XZ33 ^= amd_bitalign(XZ94, XZ93, _offset); XZ34 ^= amd_bitalign(XZ95, XZ94, _offset); XZ35 ^= amd_bitalign(XZ96, XZ95, _offset); XZ36 ^= amd_bitalign(XZ97, XZ96, _offset); XZ37 ^= amd_bitalign(XZ98, XZ97, _offset); XZ38 ^= amd_bitalign(XZ99, XZ98, _offset); XZ39 ^= amd_bitalign(XZ100, XZ99, _offset); XZ40 ^= amd_bitalign(XZ101, XZ100, _offset); XZ41 ^= amd_bitalign(XZ102, XZ101, _offset); XZ42 ^= amd_bitalign(XZ103, XZ102, _offset); XZ43 ^= amd_bitalign(XZ104, XZ103, _offset); XZ44 ^= amd_bitalign(XZ105, XZ104, _offset); XZ45 ^= amd_bitalign(XZ106, XZ105, _offset); XZ46 ^= amd_bitalign(XZ107, XZ106, _offset); XZ47 ^= amd_bitalign(XZ108, XZ107, _offset); XZ48 ^= amd_bitalign(XZ109, XZ108, _offset); XZ49 ^= amd_bitalign(XZ110, XZ109, _offset); XZ50 ^= amd_bitalign(XZ111, XZ110, _offset); XZ51 ^= amd_bitalign(XZ112, XZ111, _offset); XZ52 ^= amd_bitalign(XZ113, XZ112, _offset); XZ53 ^= amd_bitalign(XZ114, XZ113, _offset); XZ54 ^= amd_bitalign(XZ115, XZ114, _offset); XZ55 ^= amd_bitalign(XZ116, XZ115, _offset); XZ56 ^= amd_bitalign(XZ117, XZ116, _offset); XZ57 ^= amd_bitalign(XZ118, XZ117, _offset); XZ58 ^= amd_bitalign(XZ119, XZ118, _offset); XZ59 ^= amd_bitalign(XZ120, XZ119, _offset); XZ60 ^= amd_bitalign(XZ121, XZ120, _offset); XZ61 ^= amd_bitalign(XZ122, XZ121, _offset); XZ62 ^= amd_bitalign(XZ123, XZ122, _offset); XZ63 ^= amd_bitalign(XZ124, XZ123, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ126, XZ125, _offset); XZ1 ^= amd_bitalign(XZ127, XZ126, _offset); XZ2 ^= amd_bitalign(XZ128, XZ127, _offset); XZ3 ^= amd_bitalign(XZ129, XZ128, _offset); XZ4 ^= amd_bitalign(XZ130, XZ129, _offset); XZ5 ^= amd_bitalign(XZ131, XZ130, _offset); XZ6 ^= amd_bitalign(XZ132, XZ131, _offset); XZ7 ^= amd_bitalign(XZ133, XZ132, _offset); XZ8 ^= amd_bitalign(XZ134, XZ133, _offset); XZ9 ^= amd_bitalign(XZ135, XZ134, _offset); XZ10 ^= amd_bitalign(XZ136, XZ135, _offset); XZ11 ^= amd_bitalign(XZ137, XZ136, _offset); XZ12 ^= amd_bitalign(XZ138, XZ137, _offset); XZ13 ^= amd_bitalign(XZ139, XZ138, _offset); XZ14 ^= amd_bitalign(XZ140, XZ139, _offset); XZ15 ^= amd_bitalign(XZ141, XZ140, _offset); XZ16 ^= amd_bitalign(XZ142, XZ141, _offset); XZ17 ^= amd_bitalign(XZ143, XZ142, _offset); XZ18 ^= amd_bitalign(XZ144, XZ143, _offset); XZ19 ^= amd_bitalign(XZ145, XZ144, _offset); XZ20 ^= amd_bitalign(XZ146, XZ145, _offset); XZ21 ^= amd_bitalign(XZ147, XZ146, _offset); XZ22 ^= amd_bitalign(XZ148, XZ147, _offset); XZ23 ^= amd_bitalign(XZ149, XZ148, _offset); XZ24 ^= amd_bitalign(XZ86, XZ85, _offset); XZ25 ^= amd_bitalign(XZ87, XZ86, _offset); XZ26 ^= amd_bitalign(XZ88, XZ87, _offset); XZ27 ^= amd_bitalign(XZ89, XZ88, _offset); XZ28 ^= amd_bitalign(XZ90, XZ89, _offset); XZ29 ^= amd_bitalign(XZ91, XZ90, _offset); XZ30 ^= amd_bitalign(XZ92, XZ91, _offset); XZ31 ^= amd_bitalign(XZ93, XZ92, _offset); XZ32 ^= amd_bitalign(XZ94, XZ93, _offset); XZ33 ^= amd_bitalign(XZ95, XZ94, _offset); XZ34 ^= amd_bitalign(XZ96, XZ95, _offset); XZ35 ^= amd_bitalign(XZ97, XZ96, _offset); XZ36 ^= amd_bitalign(XZ98, XZ97, _offset); XZ37 ^= amd_bitalign(XZ99, XZ98, _offset); XZ38 ^= amd_bitalign(XZ100, XZ99, _offset); XZ39 ^= amd_bitalign(XZ101, XZ100, _offset); XZ40 ^= amd_bitalign(XZ102, XZ101, _offset); XZ41 ^= amd_bitalign(XZ103, XZ102, _offset); XZ42 ^= amd_bitalign(XZ104, XZ103, _offset); XZ43 ^= amd_bitalign(XZ105, XZ104, _offset); XZ44 ^= amd_bitalign(XZ106, XZ105, _offset); XZ45 ^= amd_bitalign(XZ107, XZ106, _offset); XZ46 ^= amd_bitalign(XZ108, XZ107, _offset); XZ47 ^= amd_bitalign(XZ109, XZ108, _offset); XZ48 ^= amd_bitalign(XZ110, XZ109, _offset); XZ49 ^= amd_bitalign(XZ111, XZ110, _offset); XZ50 ^= amd_bitalign(XZ112, XZ111, _offset); XZ51 ^= amd_bitalign(XZ113, XZ112, _offset); XZ52 ^= amd_bitalign(XZ114, XZ113, _offset); XZ53 ^= amd_bitalign(XZ115, XZ114, _offset); XZ54 ^= amd_bitalign(XZ116, XZ115, _offset); XZ55 ^= amd_bitalign(XZ117, XZ116, _offset); XZ56 ^= amd_bitalign(XZ118, XZ117, _offset); XZ57 ^= amd_bitalign(XZ119, XZ118, _offset); XZ58 ^= amd_bitalign(XZ120, XZ119, _offset); XZ59 ^= amd_bitalign(XZ121, XZ120, _offset); XZ60 ^= amd_bitalign(XZ122, XZ121, _offset); XZ61 ^= amd_bitalign(XZ123, XZ122, _offset); XZ62 ^= amd_bitalign(XZ124, XZ123, _offset); XZ63 ^= amd_bitalign(XZ125, XZ124, _offset); }
+						else if (shifted_bufptr < 47) { XZ0 ^= amd_bitalign(XZ127, XZ126, _offset); XZ1 ^= amd_bitalign(XZ128, XZ127, _offset); XZ2 ^= amd_bitalign(XZ129, XZ128, _offset); XZ3 ^= amd_bitalign(XZ130, XZ129, _offset); XZ4 ^= amd_bitalign(XZ131, XZ130, _offset); XZ5 ^= amd_bitalign(XZ132, XZ131, _offset); XZ6 ^= amd_bitalign(XZ133, XZ132, _offset); XZ7 ^= amd_bitalign(XZ134, XZ133, _offset); XZ8 ^= amd_bitalign(XZ135, XZ134, _offset); XZ9 ^= amd_bitalign(XZ136, XZ135, _offset); XZ10 ^= amd_bitalign(XZ137, XZ136, _offset); XZ11 ^= amd_bitalign(XZ138, XZ137, _offset); XZ12 ^= amd_bitalign(XZ139, XZ138, _offset); XZ13 ^= amd_bitalign(XZ140, XZ139, _offset); XZ14 ^= amd_bitalign(XZ141, XZ140, _offset); XZ15 ^= amd_bitalign(XZ142, XZ141, _offset); XZ16 ^= amd_bitalign(XZ143, XZ142, _offset); XZ17 ^= amd_bitalign(XZ144, XZ143, _offset); XZ18 ^= amd_bitalign(XZ145, XZ144, _offset); XZ19 ^= amd_bitalign(XZ146, XZ145, _offset); XZ20 ^= amd_bitalign(XZ147, XZ146, _offset); XZ21 ^= amd_bitalign(XZ148, XZ147, _offset); XZ22 ^= amd_bitalign(XZ149, XZ148, _offset); XZ23 ^= amd_bitalign(XZ150, XZ149, _offset); XZ24 ^= amd_bitalign(XZ87, XZ86, _offset); XZ25 ^= amd_bitalign(XZ88, XZ87, _offset); XZ26 ^= amd_bitalign(XZ89, XZ88, _offset); XZ27 ^= amd_bitalign(XZ90, XZ89, _offset); XZ28 ^= amd_bitalign(XZ91, XZ90, _offset); XZ29 ^= amd_bitalign(XZ92, XZ91, _offset); XZ30 ^= amd_bitalign(XZ93, XZ92, _offset); XZ31 ^= amd_bitalign(XZ94, XZ93, _offset); XZ32 ^= amd_bitalign(XZ95, XZ94, _offset); XZ33 ^= amd_bitalign(XZ96, XZ95, _offset); XZ34 ^= amd_bitalign(XZ97, XZ96, _offset); XZ35 ^= amd_bitalign(XZ98, XZ97, _offset); XZ36 ^= amd_bitalign(XZ99, XZ98, _offset); XZ37 ^= amd_bitalign(XZ100, XZ99, _offset); XZ38 ^= amd_bitalign(XZ101, XZ100, _offset); XZ39 ^= amd_bitalign(XZ102, XZ101, _offset); XZ40 ^= amd_bitalign(XZ103, XZ102, _offset); XZ41 ^= amd_bitalign(XZ104, XZ103, _offset); XZ42 ^= amd_bitalign(XZ105, XZ104, _offset); XZ43 ^= amd_bitalign(XZ106, XZ105, _offset); XZ44 ^= amd_bitalign(XZ107, XZ106, _offset); XZ45 ^= amd_bitalign(XZ108, XZ107, _offset); XZ46 ^= amd_bitalign(XZ109, XZ108, _offset); XZ47 ^= amd_bitalign(XZ110, XZ109, _offset); XZ48 ^= amd_bitalign(XZ111, XZ110, _offset); XZ49 ^= amd_bitalign(XZ112, XZ111, _offset); XZ50 ^= amd_bitalign(XZ113, XZ112, _offset); XZ51 ^= amd_bitalign(XZ114, XZ113, _offset); XZ52 ^= amd_bitalign(XZ115, XZ114, _offset); XZ53 ^= amd_bitalign(XZ116, XZ115, _offset); XZ54 ^= amd_bitalign(XZ117, XZ116, _offset); XZ55 ^= amd_bitalign(XZ118, XZ117, _offset); XZ56 ^= amd_bitalign(XZ119, XZ118, _offset); XZ57 ^= amd_bitalign(XZ120, XZ119, _offset); XZ58 ^= amd_bitalign(XZ121, XZ120, _offset); XZ59 ^= amd_bitalign(XZ122, XZ121, _offset); XZ60 ^= amd_bitalign(XZ123, XZ122, _offset); XZ61 ^= amd_bitalign(XZ124, XZ123, _offset); XZ62 ^= amd_bitalign(XZ125, XZ124, _offset); XZ63 ^= amd_bitalign(XZ126, XZ125, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ128, XZ127, _offset); XZ1 ^= amd_bitalign(XZ129, XZ128, _offset); XZ2 ^= amd_bitalign(XZ130, XZ129, _offset); XZ3 ^= amd_bitalign(XZ131, XZ130, _offset); XZ4 ^= amd_bitalign(XZ132, XZ131, _offset); XZ5 ^= amd_bitalign(XZ133, XZ132, _offset); XZ6 ^= amd_bitalign(XZ134, XZ133, _offset); XZ7 ^= amd_bitalign(XZ135, XZ134, _offset); XZ8 ^= amd_bitalign(XZ136, XZ135, _offset); XZ9 ^= amd_bitalign(XZ137, XZ136, _offset); XZ10 ^= amd_bitalign(XZ138, XZ137, _offset); XZ11 ^= amd_bitalign(XZ139, XZ138, _offset); XZ12 ^= amd_bitalign(XZ140, XZ139, _offset); XZ13 ^= amd_bitalign(XZ141, XZ140, _offset); XZ14 ^= amd_bitalign(XZ142, XZ141, _offset); XZ15 ^= amd_bitalign(XZ143, XZ142, _offset); XZ16 ^= amd_bitalign(XZ144, XZ143, _offset); XZ17 ^= amd_bitalign(XZ145, XZ144, _offset); XZ18 ^= amd_bitalign(XZ146, XZ145, _offset); XZ19 ^= amd_bitalign(XZ147, XZ146, _offset); XZ20 ^= amd_bitalign(XZ148, XZ147, _offset); XZ21 ^= amd_bitalign(XZ149, XZ148, _offset); XZ22 ^= amd_bitalign(XZ150, XZ149, _offset); XZ23 ^= amd_bitalign(XZ151, XZ150, _offset); XZ24 ^= amd_bitalign(XZ88, XZ87, _offset); XZ25 ^= amd_bitalign(XZ89, XZ88, _offset); XZ26 ^= amd_bitalign(XZ90, XZ89, _offset); XZ27 ^= amd_bitalign(XZ91, XZ90, _offset); XZ28 ^= amd_bitalign(XZ92, XZ91, _offset); XZ29 ^= amd_bitalign(XZ93, XZ92, _offset); XZ30 ^= amd_bitalign(XZ94, XZ93, _offset); XZ31 ^= amd_bitalign(XZ95, XZ94, _offset); XZ32 ^= amd_bitalign(XZ96, XZ95, _offset); XZ33 ^= amd_bitalign(XZ97, XZ96, _offset); XZ34 ^= amd_bitalign(XZ98, XZ97, _offset); XZ35 ^= amd_bitalign(XZ99, XZ98, _offset); XZ36 ^= amd_bitalign(XZ100, XZ99, _offset); XZ37 ^= amd_bitalign(XZ101, XZ100, _offset); XZ38 ^= amd_bitalign(XZ102, XZ101, _offset); XZ39 ^= amd_bitalign(XZ103, XZ102, _offset); XZ40 ^= amd_bitalign(XZ104, XZ103, _offset); XZ41 ^= amd_bitalign(XZ105, XZ104, _offset); XZ42 ^= amd_bitalign(XZ106, XZ105, _offset); XZ43 ^= amd_bitalign(XZ107, XZ106, _offset); XZ44 ^= amd_bitalign(XZ108, XZ107, _offset); XZ45 ^= amd_bitalign(XZ109, XZ108, _offset); XZ46 ^= amd_bitalign(XZ110, XZ109, _offset); XZ47 ^= amd_bitalign(XZ111, XZ110, _offset); XZ48 ^= amd_bitalign(XZ112, XZ111, _offset); XZ49 ^= amd_bitalign(XZ113, XZ112, _offset); XZ50 ^= amd_bitalign(XZ114, XZ113, _offset); XZ51 ^= amd_bitalign(XZ115, XZ114, _offset); XZ52 ^= amd_bitalign(XZ116, XZ115, _offset); XZ53 ^= amd_bitalign(XZ117, XZ116, _offset); XZ54 ^= amd_bitalign(XZ118, XZ117, _offset); XZ55 ^= amd_bitalign(XZ119, XZ118, _offset); XZ56 ^= amd_bitalign(XZ120, XZ119, _offset); XZ57 ^= amd_bitalign(XZ121, XZ120, _offset); XZ58 ^= amd_bitalign(XZ122, XZ121, _offset); XZ59 ^= amd_bitalign(XZ123, XZ122, _offset); XZ60 ^= amd_bitalign(XZ124, XZ123, _offset); XZ61 ^= amd_bitalign(XZ125, XZ124, _offset); XZ62 ^= amd_bitalign(XZ126, XZ125, _offset); XZ63 ^= amd_bitalign(XZ127, XZ126, _offset); }
+						else if (shifted_bufptr < 56) if (shifted_bufptr < 52) if (shifted_bufptr < 50) if (shifted_bufptr < 49) { XZ0 ^= amd_bitalign(XZ129, XZ128, _offset); XZ1 ^= amd_bitalign(XZ130, XZ129, _offset); XZ2 ^= amd_bitalign(XZ131, XZ130, _offset); XZ3 ^= amd_bitalign(XZ132, XZ131, _offset); XZ4 ^= amd_bitalign(XZ133, XZ132, _offset); XZ5 ^= amd_bitalign(XZ134, XZ133, _offset); XZ6 ^= amd_bitalign(XZ135, XZ134, _offset); XZ7 ^= amd_bitalign(XZ136, XZ135, _offset); XZ8 ^= amd_bitalign(XZ137, XZ136, _offset); XZ9 ^= amd_bitalign(XZ138, XZ137, _offset); XZ10 ^= amd_bitalign(XZ139, XZ138, _offset); XZ11 ^= amd_bitalign(XZ140, XZ139, _offset); XZ12 ^= amd_bitalign(XZ141, XZ140, _offset); XZ13 ^= amd_bitalign(XZ142, XZ141, _offset); XZ14 ^= amd_bitalign(XZ143, XZ142, _offset); XZ15 ^= amd_bitalign(XZ144, XZ143, _offset); XZ16 ^= amd_bitalign(XZ81, XZ80, _offset); XZ17 ^= amd_bitalign(XZ82, XZ81, _offset); XZ18 ^= amd_bitalign(XZ83, XZ82, _offset); XZ19 ^= amd_bitalign(XZ84, XZ83, _offset); XZ20 ^= amd_bitalign(XZ85, XZ84, _offset); XZ21 ^= amd_bitalign(XZ86, XZ85, _offset); XZ22 ^= amd_bitalign(XZ87, XZ86, _offset); XZ23 ^= amd_bitalign(XZ88, XZ87, _offset); XZ24 ^= amd_bitalign(XZ89, XZ88, _offset); XZ25 ^= amd_bitalign(XZ90, XZ89, _offset); XZ26 ^= amd_bitalign(XZ91, XZ90, _offset); XZ27 ^= amd_bitalign(XZ92, XZ91, _offset); XZ28 ^= amd_bitalign(XZ93, XZ92, _offset); XZ29 ^= amd_bitalign(XZ94, XZ93, _offset); XZ30 ^= amd_bitalign(XZ95, XZ94, _offset); XZ31 ^= amd_bitalign(XZ96, XZ95, _offset); XZ32 ^= amd_bitalign(XZ97, XZ96, _offset); XZ33 ^= amd_bitalign(XZ98, XZ97, _offset); XZ34 ^= amd_bitalign(XZ99, XZ98, _offset); XZ35 ^= amd_bitalign(XZ100, XZ99, _offset); XZ36 ^= amd_bitalign(XZ101, XZ100, _offset); XZ37 ^= amd_bitalign(XZ102, XZ101, _offset); XZ38 ^= amd_bitalign(XZ103, XZ102, _offset); XZ39 ^= amd_bitalign(XZ104, XZ103, _offset); XZ40 ^= amd_bitalign(XZ105, XZ104, _offset); XZ41 ^= amd_bitalign(XZ106, XZ105, _offset); XZ42 ^= amd_bitalign(XZ107, XZ106, _offset); XZ43 ^= amd_bitalign(XZ108, XZ107, _offset); XZ44 ^= amd_bitalign(XZ109, XZ108, _offset); XZ45 ^= amd_bitalign(XZ110, XZ109, _offset); XZ46 ^= amd_bitalign(XZ111, XZ110, _offset); XZ47 ^= amd_bitalign(XZ112, XZ111, _offset); XZ48 ^= amd_bitalign(XZ113, XZ112, _offset); XZ49 ^= amd_bitalign(XZ114, XZ113, _offset); XZ50 ^= amd_bitalign(XZ115, XZ114, _offset); XZ51 ^= amd_bitalign(XZ116, XZ115, _offset); XZ52 ^= amd_bitalign(XZ117, XZ116, _offset); XZ53 ^= amd_bitalign(XZ118, XZ117, _offset); XZ54 ^= amd_bitalign(XZ119, XZ118, _offset); XZ55 ^= amd_bitalign(XZ120, XZ119, _offset); XZ56 ^= amd_bitalign(XZ121, XZ120, _offset); XZ57 ^= amd_bitalign(XZ122, XZ121, _offset); XZ58 ^= amd_bitalign(XZ123, XZ122, _offset); XZ59 ^= amd_bitalign(XZ124, XZ123, _offset); XZ60 ^= amd_bitalign(XZ125, XZ124, _offset); XZ61 ^= amd_bitalign(XZ126, XZ125, _offset); XZ62 ^= amd_bitalign(XZ127, XZ126, _offset); XZ63 ^= amd_bitalign(XZ128, XZ127, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ130, XZ129, _offset); XZ1 ^= amd_bitalign(XZ131, XZ130, _offset); XZ2 ^= amd_bitalign(XZ132, XZ131, _offset); XZ3 ^= amd_bitalign(XZ133, XZ132, _offset); XZ4 ^= amd_bitalign(XZ134, XZ133, _offset); XZ5 ^= amd_bitalign(XZ135, XZ134, _offset); XZ6 ^= amd_bitalign(XZ136, XZ135, _offset); XZ7 ^= amd_bitalign(XZ137, XZ136, _offset); XZ8 ^= amd_bitalign(XZ138, XZ137, _offset); XZ9 ^= amd_bitalign(XZ139, XZ138, _offset); XZ10 ^= amd_bitalign(XZ140, XZ139, _offset); XZ11 ^= amd_bitalign(XZ141, XZ140, _offset); XZ12 ^= amd_bitalign(XZ142, XZ141, _offset); XZ13 ^= amd_bitalign(XZ143, XZ142, _offset); XZ14 ^= amd_bitalign(XZ144, XZ143, _offset); XZ15 ^= amd_bitalign(XZ145, XZ144, _offset); XZ16 ^= amd_bitalign(XZ82, XZ81, _offset); XZ17 ^= amd_bitalign(XZ83, XZ82, _offset); XZ18 ^= amd_bitalign(XZ84, XZ83, _offset); XZ19 ^= amd_bitalign(XZ85, XZ84, _offset); XZ20 ^= amd_bitalign(XZ86, XZ85, _offset); XZ21 ^= amd_bitalign(XZ87, XZ86, _offset); XZ22 ^= amd_bitalign(XZ88, XZ87, _offset); XZ23 ^= amd_bitalign(XZ89, XZ88, _offset); XZ24 ^= amd_bitalign(XZ90, XZ89, _offset); XZ25 ^= amd_bitalign(XZ91, XZ90, _offset); XZ26 ^= amd_bitalign(XZ92, XZ91, _offset); XZ27 ^= amd_bitalign(XZ93, XZ92, _offset); XZ28 ^= amd_bitalign(XZ94, XZ93, _offset); XZ29 ^= amd_bitalign(XZ95, XZ94, _offset); XZ30 ^= amd_bitalign(XZ96, XZ95, _offset); XZ31 ^= amd_bitalign(XZ97, XZ96, _offset); XZ32 ^= amd_bitalign(XZ98, XZ97, _offset); XZ33 ^= amd_bitalign(XZ99, XZ98, _offset); XZ34 ^= amd_bitalign(XZ100, XZ99, _offset); XZ35 ^= amd_bitalign(XZ101, XZ100, _offset); XZ36 ^= amd_bitalign(XZ102, XZ101, _offset); XZ37 ^= amd_bitalign(XZ103, XZ102, _offset); XZ38 ^= amd_bitalign(XZ104, XZ103, _offset); XZ39 ^= amd_bitalign(XZ105, XZ104, _offset); XZ40 ^= amd_bitalign(XZ106, XZ105, _offset); XZ41 ^= amd_bitalign(XZ107, XZ106, _offset); XZ42 ^= amd_bitalign(XZ108, XZ107, _offset); XZ43 ^= amd_bitalign(XZ109, XZ108, _offset); XZ44 ^= amd_bitalign(XZ110, XZ109, _offset); XZ45 ^= amd_bitalign(XZ111, XZ110, _offset); XZ46 ^= amd_bitalign(XZ112, XZ111, _offset); XZ47 ^= amd_bitalign(XZ113, XZ112, _offset); XZ48 ^= amd_bitalign(XZ114, XZ113, _offset); XZ49 ^= amd_bitalign(XZ115, XZ114, _offset); XZ50 ^= amd_bitalign(XZ116, XZ115, _offset); XZ51 ^= amd_bitalign(XZ117, XZ116, _offset); XZ52 ^= amd_bitalign(XZ118, XZ117, _offset); XZ53 ^= amd_bitalign(XZ119, XZ118, _offset); XZ54 ^= amd_bitalign(XZ120, XZ119, _offset); XZ55 ^= amd_bitalign(XZ121, XZ120, _offset); XZ56 ^= amd_bitalign(XZ122, XZ121, _offset); XZ57 ^= amd_bitalign(XZ123, XZ122, _offset); XZ58 ^= amd_bitalign(XZ124, XZ123, _offset); XZ59 ^= amd_bitalign(XZ125, XZ124, _offset); XZ60 ^= amd_bitalign(XZ126, XZ125, _offset); XZ61 ^= amd_bitalign(XZ127, XZ126, _offset); XZ62 ^= amd_bitalign(XZ128, XZ127, _offset); XZ63 ^= amd_bitalign(XZ129, XZ128, _offset); }
+						else if (shifted_bufptr < 51) { XZ0 ^= amd_bitalign(XZ131, XZ130, _offset); XZ1 ^= amd_bitalign(XZ132, XZ131, _offset); XZ2 ^= amd_bitalign(XZ133, XZ132, _offset); XZ3 ^= amd_bitalign(XZ134, XZ133, _offset); XZ4 ^= amd_bitalign(XZ135, XZ134, _offset); XZ5 ^= amd_bitalign(XZ136, XZ135, _offset); XZ6 ^= amd_bitalign(XZ137, XZ136, _offset); XZ7 ^= amd_bitalign(XZ138, XZ137, _offset); XZ8 ^= amd_bitalign(XZ139, XZ138, _offset); XZ9 ^= amd_bitalign(XZ140, XZ139, _offset); XZ10 ^= amd_bitalign(XZ141, XZ140, _offset); XZ11 ^= amd_bitalign(XZ142, XZ141, _offset); XZ12 ^= amd_bitalign(XZ143, XZ142, _offset); XZ13 ^= amd_bitalign(XZ144, XZ143, _offset); XZ14 ^= amd_bitalign(XZ145, XZ144, _offset); XZ15 ^= amd_bitalign(XZ146, XZ145, _offset); XZ16 ^= amd_bitalign(XZ83, XZ82, _offset); XZ17 ^= amd_bitalign(XZ84, XZ83, _offset); XZ18 ^= amd_bitalign(XZ85, XZ84, _offset); XZ19 ^= amd_bitalign(XZ86, XZ85, _offset); XZ20 ^= amd_bitalign(XZ87, XZ86, _offset); XZ21 ^= amd_bitalign(XZ88, XZ87, _offset); XZ22 ^= amd_bitalign(XZ89, XZ88, _offset); XZ23 ^= amd_bitalign(XZ90, XZ89, _offset); XZ24 ^= amd_bitalign(XZ91, XZ90, _offset); XZ25 ^= amd_bitalign(XZ92, XZ91, _offset); XZ26 ^= amd_bitalign(XZ93, XZ92, _offset); XZ27 ^= amd_bitalign(XZ94, XZ93, _offset); XZ28 ^= amd_bitalign(XZ95, XZ94, _offset); XZ29 ^= amd_bitalign(XZ96, XZ95, _offset); XZ30 ^= amd_bitalign(XZ97, XZ96, _offset); XZ31 ^= amd_bitalign(XZ98, XZ97, _offset); XZ32 ^= amd_bitalign(XZ99, XZ98, _offset); XZ33 ^= amd_bitalign(XZ100, XZ99, _offset); XZ34 ^= amd_bitalign(XZ101, XZ100, _offset); XZ35 ^= amd_bitalign(XZ102, XZ101, _offset); XZ36 ^= amd_bitalign(XZ103, XZ102, _offset); XZ37 ^= amd_bitalign(XZ104, XZ103, _offset); XZ38 ^= amd_bitalign(XZ105, XZ104, _offset); XZ39 ^= amd_bitalign(XZ106, XZ105, _offset); XZ40 ^= amd_bitalign(XZ107, XZ106, _offset); XZ41 ^= amd_bitalign(XZ108, XZ107, _offset); XZ42 ^= amd_bitalign(XZ109, XZ108, _offset); XZ43 ^= amd_bitalign(XZ110, XZ109, _offset); XZ44 ^= amd_bitalign(XZ111, XZ110, _offset); XZ45 ^= amd_bitalign(XZ112, XZ111, _offset); XZ46 ^= amd_bitalign(XZ113, XZ112, _offset); XZ47 ^= amd_bitalign(XZ114, XZ113, _offset); XZ48 ^= amd_bitalign(XZ115, XZ114, _offset); XZ49 ^= amd_bitalign(XZ116, XZ115, _offset); XZ50 ^= amd_bitalign(XZ117, XZ116, _offset); XZ51 ^= amd_bitalign(XZ118, XZ117, _offset); XZ52 ^= amd_bitalign(XZ119, XZ118, _offset); XZ53 ^= amd_bitalign(XZ120, XZ119, _offset); XZ54 ^= amd_bitalign(XZ121, XZ120, _offset); XZ55 ^= amd_bitalign(XZ122, XZ121, _offset); XZ56 ^= amd_bitalign(XZ123, XZ122, _offset); XZ57 ^= amd_bitalign(XZ124, XZ123, _offset); XZ58 ^= amd_bitalign(XZ125, XZ124, _offset); XZ59 ^= amd_bitalign(XZ126, XZ125, _offset); XZ60 ^= amd_bitalign(XZ127, XZ126, _offset); XZ61 ^= amd_bitalign(XZ128, XZ127, _offset); XZ62 ^= amd_bitalign(XZ129, XZ128, _offset); XZ63 ^= amd_bitalign(XZ130, XZ129, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ132, XZ131, _offset); XZ1 ^= amd_bitalign(XZ133, XZ132, _offset); XZ2 ^= amd_bitalign(XZ134, XZ133, _offset); XZ3 ^= amd_bitalign(XZ135, XZ134, _offset); XZ4 ^= amd_bitalign(XZ136, XZ135, _offset); XZ5 ^= amd_bitalign(XZ137, XZ136, _offset); XZ6 ^= amd_bitalign(XZ138, XZ137, _offset); XZ7 ^= amd_bitalign(XZ139, XZ138, _offset); XZ8 ^= amd_bitalign(XZ140, XZ139, _offset); XZ9 ^= amd_bitalign(XZ141, XZ140, _offset); XZ10 ^= amd_bitalign(XZ142, XZ141, _offset); XZ11 ^= amd_bitalign(XZ143, XZ142, _offset); XZ12 ^= amd_bitalign(XZ144, XZ143, _offset); XZ13 ^= amd_bitalign(XZ145, XZ144, _offset); XZ14 ^= amd_bitalign(XZ146, XZ145, _offset); XZ15 ^= amd_bitalign(XZ147, XZ146, _offset); XZ16 ^= amd_bitalign(XZ84, XZ83, _offset); XZ17 ^= amd_bitalign(XZ85, XZ84, _offset); XZ18 ^= amd_bitalign(XZ86, XZ85, _offset); XZ19 ^= amd_bitalign(XZ87, XZ86, _offset); XZ20 ^= amd_bitalign(XZ88, XZ87, _offset); XZ21 ^= amd_bitalign(XZ89, XZ88, _offset); XZ22 ^= amd_bitalign(XZ90, XZ89, _offset); XZ23 ^= amd_bitalign(XZ91, XZ90, _offset); XZ24 ^= amd_bitalign(XZ92, XZ91, _offset); XZ25 ^= amd_bitalign(XZ93, XZ92, _offset); XZ26 ^= amd_bitalign(XZ94, XZ93, _offset); XZ27 ^= amd_bitalign(XZ95, XZ94, _offset); XZ28 ^= amd_bitalign(XZ96, XZ95, _offset); XZ29 ^= amd_bitalign(XZ97, XZ96, _offset); XZ30 ^= amd_bitalign(XZ98, XZ97, _offset); XZ31 ^= amd_bitalign(XZ99, XZ98, _offset); XZ32 ^= amd_bitalign(XZ100, XZ99, _offset); XZ33 ^= amd_bitalign(XZ101, XZ100, _offset); XZ34 ^= amd_bitalign(XZ102, XZ101, _offset); XZ35 ^= amd_bitalign(XZ103, XZ102, _offset); XZ36 ^= amd_bitalign(XZ104, XZ103, _offset); XZ37 ^= amd_bitalign(XZ105, XZ104, _offset); XZ38 ^= amd_bitalign(XZ106, XZ105, _offset); XZ39 ^= amd_bitalign(XZ107, XZ106, _offset); XZ40 ^= amd_bitalign(XZ108, XZ107, _offset); XZ41 ^= amd_bitalign(XZ109, XZ108, _offset); XZ42 ^= amd_bitalign(XZ110, XZ109, _offset); XZ43 ^= amd_bitalign(XZ111, XZ110, _offset); XZ44 ^= amd_bitalign(XZ112, XZ111, _offset); XZ45 ^= amd_bitalign(XZ113, XZ112, _offset); XZ46 ^= amd_bitalign(XZ114, XZ113, _offset); XZ47 ^= amd_bitalign(XZ115, XZ114, _offset); XZ48 ^= amd_bitalign(XZ116, XZ115, _offset); XZ49 ^= amd_bitalign(XZ117, XZ116, _offset); XZ50 ^= amd_bitalign(XZ118, XZ117, _offset); XZ51 ^= amd_bitalign(XZ119, XZ118, _offset); XZ52 ^= amd_bitalign(XZ120, XZ119, _offset); XZ53 ^= amd_bitalign(XZ121, XZ120, _offset); XZ54 ^= amd_bitalign(XZ122, XZ121, _offset); XZ55 ^= amd_bitalign(XZ123, XZ122, _offset); XZ56 ^= amd_bitalign(XZ124, XZ123, _offset); XZ57 ^= amd_bitalign(XZ125, XZ124, _offset); XZ58 ^= amd_bitalign(XZ126, XZ125, _offset); XZ59 ^= amd_bitalign(XZ127, XZ126, _offset); XZ60 ^= amd_bitalign(XZ128, XZ127, _offset); XZ61 ^= amd_bitalign(XZ129, XZ128, _offset); XZ62 ^= amd_bitalign(XZ130, XZ129, _offset); XZ63 ^= amd_bitalign(XZ131, XZ130, _offset); }
+						else if (shifted_bufptr < 54) if (shifted_bufptr < 53) { XZ0 ^= amd_bitalign(XZ133, XZ132, _offset); XZ1 ^= amd_bitalign(XZ134, XZ133, _offset); XZ2 ^= amd_bitalign(XZ135, XZ134, _offset); XZ3 ^= amd_bitalign(XZ136, XZ135, _offset); XZ4 ^= amd_bitalign(XZ137, XZ136, _offset); XZ5 ^= amd_bitalign(XZ138, XZ137, _offset); XZ6 ^= amd_bitalign(XZ139, XZ138, _offset); XZ7 ^= amd_bitalign(XZ140, XZ139, _offset); XZ8 ^= amd_bitalign(XZ141, XZ140, _offset); XZ9 ^= amd_bitalign(XZ142, XZ141, _offset); XZ10 ^= amd_bitalign(XZ143, XZ142, _offset); XZ11 ^= amd_bitalign(XZ144, XZ143, _offset); XZ12 ^= amd_bitalign(XZ145, XZ144, _offset); XZ13 ^= amd_bitalign(XZ146, XZ145, _offset); XZ14 ^= amd_bitalign(XZ147, XZ146, _offset); XZ15 ^= amd_bitalign(XZ148, XZ147, _offset); XZ16 ^= amd_bitalign(XZ85, XZ84, _offset); XZ17 ^= amd_bitalign(XZ86, XZ85, _offset); XZ18 ^= amd_bitalign(XZ87, XZ86, _offset); XZ19 ^= amd_bitalign(XZ88, XZ87, _offset); XZ20 ^= amd_bitalign(XZ89, XZ88, _offset); XZ21 ^= amd_bitalign(XZ90, XZ89, _offset); XZ22 ^= amd_bitalign(XZ91, XZ90, _offset); XZ23 ^= amd_bitalign(XZ92, XZ91, _offset); XZ24 ^= amd_bitalign(XZ93, XZ92, _offset); XZ25 ^= amd_bitalign(XZ94, XZ93, _offset); XZ26 ^= amd_bitalign(XZ95, XZ94, _offset); XZ27 ^= amd_bitalign(XZ96, XZ95, _offset); XZ28 ^= amd_bitalign(XZ97, XZ96, _offset); XZ29 ^= amd_bitalign(XZ98, XZ97, _offset); XZ30 ^= amd_bitalign(XZ99, XZ98, _offset); XZ31 ^= amd_bitalign(XZ100, XZ99, _offset); XZ32 ^= amd_bitalign(XZ101, XZ100, _offset); XZ33 ^= amd_bitalign(XZ102, XZ101, _offset); XZ34 ^= amd_bitalign(XZ103, XZ102, _offset); XZ35 ^= amd_bitalign(XZ104, XZ103, _offset); XZ36 ^= amd_bitalign(XZ105, XZ104, _offset); XZ37 ^= amd_bitalign(XZ106, XZ105, _offset); XZ38 ^= amd_bitalign(XZ107, XZ106, _offset); XZ39 ^= amd_bitalign(XZ108, XZ107, _offset); XZ40 ^= amd_bitalign(XZ109, XZ108, _offset); XZ41 ^= amd_bitalign(XZ110, XZ109, _offset); XZ42 ^= amd_bitalign(XZ111, XZ110, _offset); XZ43 ^= amd_bitalign(XZ112, XZ111, _offset); XZ44 ^= amd_bitalign(XZ113, XZ112, _offset); XZ45 ^= amd_bitalign(XZ114, XZ113, _offset); XZ46 ^= amd_bitalign(XZ115, XZ114, _offset); XZ47 ^= amd_bitalign(XZ116, XZ115, _offset); XZ48 ^= amd_bitalign(XZ117, XZ116, _offset); XZ49 ^= amd_bitalign(XZ118, XZ117, _offset); XZ50 ^= amd_bitalign(XZ119, XZ118, _offset); XZ51 ^= amd_bitalign(XZ120, XZ119, _offset); XZ52 ^= amd_bitalign(XZ121, XZ120, _offset); XZ53 ^= amd_bitalign(XZ122, XZ121, _offset); XZ54 ^= amd_bitalign(XZ123, XZ122, _offset); XZ55 ^= amd_bitalign(XZ124, XZ123, _offset); XZ56 ^= amd_bitalign(XZ125, XZ124, _offset); XZ57 ^= amd_bitalign(XZ126, XZ125, _offset); XZ58 ^= amd_bitalign(XZ127, XZ126, _offset); XZ59 ^= amd_bitalign(XZ128, XZ127, _offset); XZ60 ^= amd_bitalign(XZ129, XZ128, _offset); XZ61 ^= amd_bitalign(XZ130, XZ129, _offset); XZ62 ^= amd_bitalign(XZ131, XZ130, _offset); XZ63 ^= amd_bitalign(XZ132, XZ131, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ134, XZ133, _offset); XZ1 ^= amd_bitalign(XZ135, XZ134, _offset); XZ2 ^= amd_bitalign(XZ136, XZ135, _offset); XZ3 ^= amd_bitalign(XZ137, XZ136, _offset); XZ4 ^= amd_bitalign(XZ138, XZ137, _offset); XZ5 ^= amd_bitalign(XZ139, XZ138, _offset); XZ6 ^= amd_bitalign(XZ140, XZ139, _offset); XZ7 ^= amd_bitalign(XZ141, XZ140, _offset); XZ8 ^= amd_bitalign(XZ142, XZ141, _offset); XZ9 ^= amd_bitalign(XZ143, XZ142, _offset); XZ10 ^= amd_bitalign(XZ144, XZ143, _offset); XZ11 ^= amd_bitalign(XZ145, XZ144, _offset); XZ12 ^= amd_bitalign(XZ146, XZ145, _offset); XZ13 ^= amd_bitalign(XZ147, XZ146, _offset); XZ14 ^= amd_bitalign(XZ148, XZ147, _offset); XZ15 ^= amd_bitalign(XZ149, XZ148, _offset); XZ16 ^= amd_bitalign(XZ86, XZ85, _offset); XZ17 ^= amd_bitalign(XZ87, XZ86, _offset); XZ18 ^= amd_bitalign(XZ88, XZ87, _offset); XZ19 ^= amd_bitalign(XZ89, XZ88, _offset); XZ20 ^= amd_bitalign(XZ90, XZ89, _offset); XZ21 ^= amd_bitalign(XZ91, XZ90, _offset); XZ22 ^= amd_bitalign(XZ92, XZ91, _offset); XZ23 ^= amd_bitalign(XZ93, XZ92, _offset); XZ24 ^= amd_bitalign(XZ94, XZ93, _offset); XZ25 ^= amd_bitalign(XZ95, XZ94, _offset); XZ26 ^= amd_bitalign(XZ96, XZ95, _offset); XZ27 ^= amd_bitalign(XZ97, XZ96, _offset); XZ28 ^= amd_bitalign(XZ98, XZ97, _offset); XZ29 ^= amd_bitalign(XZ99, XZ98, _offset); XZ30 ^= amd_bitalign(XZ100, XZ99, _offset); XZ31 ^= amd_bitalign(XZ101, XZ100, _offset); XZ32 ^= amd_bitalign(XZ102, XZ101, _offset); XZ33 ^= amd_bitalign(XZ103, XZ102, _offset); XZ34 ^= amd_bitalign(XZ104, XZ103, _offset); XZ35 ^= amd_bitalign(XZ105, XZ104, _offset); XZ36 ^= amd_bitalign(XZ106, XZ105, _offset); XZ37 ^= amd_bitalign(XZ107, XZ106, _offset); XZ38 ^= amd_bitalign(XZ108, XZ107, _offset); XZ39 ^= amd_bitalign(XZ109, XZ108, _offset); XZ40 ^= amd_bitalign(XZ110, XZ109, _offset); XZ41 ^= amd_bitalign(XZ111, XZ110, _offset); XZ42 ^= amd_bitalign(XZ112, XZ111, _offset); XZ43 ^= amd_bitalign(XZ113, XZ112, _offset); XZ44 ^= amd_bitalign(XZ114, XZ113, _offset); XZ45 ^= amd_bitalign(XZ115, XZ114, _offset); XZ46 ^= amd_bitalign(XZ116, XZ115, _offset); XZ47 ^= amd_bitalign(XZ117, XZ116, _offset); XZ48 ^= amd_bitalign(XZ118, XZ117, _offset); XZ49 ^= amd_bitalign(XZ119, XZ118, _offset); XZ50 ^= amd_bitalign(XZ120, XZ119, _offset); XZ51 ^= amd_bitalign(XZ121, XZ120, _offset); XZ52 ^= amd_bitalign(XZ122, XZ121, _offset); XZ53 ^= amd_bitalign(XZ123, XZ122, _offset); XZ54 ^= amd_bitalign(XZ124, XZ123, _offset); XZ55 ^= amd_bitalign(XZ125, XZ124, _offset); XZ56 ^= amd_bitalign(XZ126, XZ125, _offset); XZ57 ^= amd_bitalign(XZ127, XZ126, _offset); XZ58 ^= amd_bitalign(XZ128, XZ127, _offset); XZ59 ^= amd_bitalign(XZ129, XZ128, _offset); XZ60 ^= amd_bitalign(XZ130, XZ129, _offset); XZ61 ^= amd_bitalign(XZ131, XZ130, _offset); XZ62 ^= amd_bitalign(XZ132, XZ131, _offset); XZ63 ^= amd_bitalign(XZ133, XZ132, _offset); }
+						else if (shifted_bufptr < 55) { XZ0 ^= amd_bitalign(XZ135, XZ134, _offset); XZ1 ^= amd_bitalign(XZ136, XZ135, _offset); XZ2 ^= amd_bitalign(XZ137, XZ136, _offset); XZ3 ^= amd_bitalign(XZ138, XZ137, _offset); XZ4 ^= amd_bitalign(XZ139, XZ138, _offset); XZ5 ^= amd_bitalign(XZ140, XZ139, _offset); XZ6 ^= amd_bitalign(XZ141, XZ140, _offset); XZ7 ^= amd_bitalign(XZ142, XZ141, _offset); XZ8 ^= amd_bitalign(XZ143, XZ142, _offset); XZ9 ^= amd_bitalign(XZ144, XZ143, _offset); XZ10 ^= amd_bitalign(XZ145, XZ144, _offset); XZ11 ^= amd_bitalign(XZ146, XZ145, _offset); XZ12 ^= amd_bitalign(XZ147, XZ146, _offset); XZ13 ^= amd_bitalign(XZ148, XZ147, _offset); XZ14 ^= amd_bitalign(XZ149, XZ148, _offset); XZ15 ^= amd_bitalign(XZ150, XZ149, _offset); XZ16 ^= amd_bitalign(XZ87, XZ86, _offset); XZ17 ^= amd_bitalign(XZ88, XZ87, _offset); XZ18 ^= amd_bitalign(XZ89, XZ88, _offset); XZ19 ^= amd_bitalign(XZ90, XZ89, _offset); XZ20 ^= amd_bitalign(XZ91, XZ90, _offset); XZ21 ^= amd_bitalign(XZ92, XZ91, _offset); XZ22 ^= amd_bitalign(XZ93, XZ92, _offset); XZ23 ^= amd_bitalign(XZ94, XZ93, _offset); XZ24 ^= amd_bitalign(XZ95, XZ94, _offset); XZ25 ^= amd_bitalign(XZ96, XZ95, _offset); XZ26 ^= amd_bitalign(XZ97, XZ96, _offset); XZ27 ^= amd_bitalign(XZ98, XZ97, _offset); XZ28 ^= amd_bitalign(XZ99, XZ98, _offset); XZ29 ^= amd_bitalign(XZ100, XZ99, _offset); XZ30 ^= amd_bitalign(XZ101, XZ100, _offset); XZ31 ^= amd_bitalign(XZ102, XZ101, _offset); XZ32 ^= amd_bitalign(XZ103, XZ102, _offset); XZ33 ^= amd_bitalign(XZ104, XZ103, _offset); XZ34 ^= amd_bitalign(XZ105, XZ104, _offset); XZ35 ^= amd_bitalign(XZ106, XZ105, _offset); XZ36 ^= amd_bitalign(XZ107, XZ106, _offset); XZ37 ^= amd_bitalign(XZ108, XZ107, _offset); XZ38 ^= amd_bitalign(XZ109, XZ108, _offset); XZ39 ^= amd_bitalign(XZ110, XZ109, _offset); XZ40 ^= amd_bitalign(XZ111, XZ110, _offset); XZ41 ^= amd_bitalign(XZ112, XZ111, _offset); XZ42 ^= amd_bitalign(XZ113, XZ112, _offset); XZ43 ^= amd_bitalign(XZ114, XZ113, _offset); XZ44 ^= amd_bitalign(XZ115, XZ114, _offset); XZ45 ^= amd_bitalign(XZ116, XZ115, _offset); XZ46 ^= amd_bitalign(XZ117, XZ116, _offset); XZ47 ^= amd_bitalign(XZ118, XZ117, _offset); XZ48 ^= amd_bitalign(XZ119, XZ118, _offset); XZ49 ^= amd_bitalign(XZ120, XZ119, _offset); XZ50 ^= amd_bitalign(XZ121, XZ120, _offset); XZ51 ^= amd_bitalign(XZ122, XZ121, _offset); XZ52 ^= amd_bitalign(XZ123, XZ122, _offset); XZ53 ^= amd_bitalign(XZ124, XZ123, _offset); XZ54 ^= amd_bitalign(XZ125, XZ124, _offset); XZ55 ^= amd_bitalign(XZ126, XZ125, _offset); XZ56 ^= amd_bitalign(XZ127, XZ126, _offset); XZ57 ^= amd_bitalign(XZ128, XZ127, _offset); XZ58 ^= amd_bitalign(XZ129, XZ128, _offset); XZ59 ^= amd_bitalign(XZ130, XZ129, _offset); XZ60 ^= amd_bitalign(XZ131, XZ130, _offset); XZ61 ^= amd_bitalign(XZ132, XZ131, _offset); XZ62 ^= amd_bitalign(XZ133, XZ132, _offset); XZ63 ^= amd_bitalign(XZ134, XZ133, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ136, XZ135, _offset); XZ1 ^= amd_bitalign(XZ137, XZ136, _offset); XZ2 ^= amd_bitalign(XZ138, XZ137, _offset); XZ3 ^= amd_bitalign(XZ139, XZ138, _offset); XZ4 ^= amd_bitalign(XZ140, XZ139, _offset); XZ5 ^= amd_bitalign(XZ141, XZ140, _offset); XZ6 ^= amd_bitalign(XZ142, XZ141, _offset); XZ7 ^= amd_bitalign(XZ143, XZ142, _offset); XZ8 ^= amd_bitalign(XZ144, XZ143, _offset); XZ9 ^= amd_bitalign(XZ145, XZ144, _offset); XZ10 ^= amd_bitalign(XZ146, XZ145, _offset); XZ11 ^= amd_bitalign(XZ147, XZ146, _offset); XZ12 ^= amd_bitalign(XZ148, XZ147, _offset); XZ13 ^= amd_bitalign(XZ149, XZ148, _offset); XZ14 ^= amd_bitalign(XZ150, XZ149, _offset); XZ15 ^= amd_bitalign(XZ151, XZ150, _offset); XZ16 ^= amd_bitalign(XZ88, XZ87, _offset); XZ17 ^= amd_bitalign(XZ89, XZ88, _offset); XZ18 ^= amd_bitalign(XZ90, XZ89, _offset); XZ19 ^= amd_bitalign(XZ91, XZ90, _offset); XZ20 ^= amd_bitalign(XZ92, XZ91, _offset); XZ21 ^= amd_bitalign(XZ93, XZ92, _offset); XZ22 ^= amd_bitalign(XZ94, XZ93, _offset); XZ23 ^= amd_bitalign(XZ95, XZ94, _offset); XZ24 ^= amd_bitalign(XZ96, XZ95, _offset); XZ25 ^= amd_bitalign(XZ97, XZ96, _offset); XZ26 ^= amd_bitalign(XZ98, XZ97, _offset); XZ27 ^= amd_bitalign(XZ99, XZ98, _offset); XZ28 ^= amd_bitalign(XZ100, XZ99, _offset); XZ29 ^= amd_bitalign(XZ101, XZ100, _offset); XZ30 ^= amd_bitalign(XZ102, XZ101, _offset); XZ31 ^= amd_bitalign(XZ103, XZ102, _offset); XZ32 ^= amd_bitalign(XZ104, XZ103, _offset); XZ33 ^= amd_bitalign(XZ105, XZ104, _offset); XZ34 ^= amd_bitalign(XZ106, XZ105, _offset); XZ35 ^= amd_bitalign(XZ107, XZ106, _offset); XZ36 ^= amd_bitalign(XZ108, XZ107, _offset); XZ37 ^= amd_bitalign(XZ109, XZ108, _offset); XZ38 ^= amd_bitalign(XZ110, XZ109, _offset); XZ39 ^= amd_bitalign(XZ111, XZ110, _offset); XZ40 ^= amd_bitalign(XZ112, XZ111, _offset); XZ41 ^= amd_bitalign(XZ113, XZ112, _offset); XZ42 ^= amd_bitalign(XZ114, XZ113, _offset); XZ43 ^= amd_bitalign(XZ115, XZ114, _offset); XZ44 ^= amd_bitalign(XZ116, XZ115, _offset); XZ45 ^= amd_bitalign(XZ117, XZ116, _offset); XZ46 ^= amd_bitalign(XZ118, XZ117, _offset); XZ47 ^= amd_bitalign(XZ119, XZ118, _offset); XZ48 ^= amd_bitalign(XZ120, XZ119, _offset); XZ49 ^= amd_bitalign(XZ121, XZ120, _offset); XZ50 ^= amd_bitalign(XZ122, XZ121, _offset); XZ51 ^= amd_bitalign(XZ123, XZ122, _offset); XZ52 ^= amd_bitalign(XZ124, XZ123, _offset); XZ53 ^= amd_bitalign(XZ125, XZ124, _offset); XZ54 ^= amd_bitalign(XZ126, XZ125, _offset); XZ55 ^= amd_bitalign(XZ127, XZ126, _offset); XZ56 ^= amd_bitalign(XZ128, XZ127, _offset); XZ57 ^= amd_bitalign(XZ129, XZ128, _offset); XZ58 ^= amd_bitalign(XZ130, XZ129, _offset); XZ59 ^= amd_bitalign(XZ131, XZ130, _offset); XZ60 ^= amd_bitalign(XZ132, XZ131, _offset); XZ61 ^= amd_bitalign(XZ133, XZ132, _offset); XZ62 ^= amd_bitalign(XZ134, XZ133, _offset); XZ63 ^= amd_bitalign(XZ135, XZ134, _offset); }
+						else if (shifted_bufptr < 60) if (shifted_bufptr < 58) if (shifted_bufptr < 57) { XZ0 ^= amd_bitalign(XZ137, XZ136, _offset); XZ1 ^= amd_bitalign(XZ138, XZ137, _offset); XZ2 ^= amd_bitalign(XZ139, XZ138, _offset); XZ3 ^= amd_bitalign(XZ140, XZ139, _offset); XZ4 ^= amd_bitalign(XZ141, XZ140, _offset); XZ5 ^= amd_bitalign(XZ142, XZ141, _offset); XZ6 ^= amd_bitalign(XZ143, XZ142, _offset); XZ7 ^= amd_bitalign(XZ144, XZ143, _offset); XZ8 ^= amd_bitalign(XZ81, XZ80, _offset); XZ9 ^= amd_bitalign(XZ82, XZ81, _offset); XZ10 ^= amd_bitalign(XZ83, XZ82, _offset); XZ11 ^= amd_bitalign(XZ84, XZ83, _offset); XZ12 ^= amd_bitalign(XZ85, XZ84, _offset); XZ13 ^= amd_bitalign(XZ86, XZ85, _offset); XZ14 ^= amd_bitalign(XZ87, XZ86, _offset); XZ15 ^= amd_bitalign(XZ88, XZ87, _offset); XZ16 ^= amd_bitalign(XZ89, XZ88, _offset); XZ17 ^= amd_bitalign(XZ90, XZ89, _offset); XZ18 ^= amd_bitalign(XZ91, XZ90, _offset); XZ19 ^= amd_bitalign(XZ92, XZ91, _offset); XZ20 ^= amd_bitalign(XZ93, XZ92, _offset); XZ21 ^= amd_bitalign(XZ94, XZ93, _offset); XZ22 ^= amd_bitalign(XZ95, XZ94, _offset); XZ23 ^= amd_bitalign(XZ96, XZ95, _offset); XZ24 ^= amd_bitalign(XZ97, XZ96, _offset); XZ25 ^= amd_bitalign(XZ98, XZ97, _offset); XZ26 ^= amd_bitalign(XZ99, XZ98, _offset); XZ27 ^= amd_bitalign(XZ100, XZ99, _offset); XZ28 ^= amd_bitalign(XZ101, XZ100, _offset); XZ29 ^= amd_bitalign(XZ102, XZ101, _offset); XZ30 ^= amd_bitalign(XZ103, XZ102, _offset); XZ31 ^= amd_bitalign(XZ104, XZ103, _offset); XZ32 ^= amd_bitalign(XZ105, XZ104, _offset); XZ33 ^= amd_bitalign(XZ106, XZ105, _offset); XZ34 ^= amd_bitalign(XZ107, XZ106, _offset); XZ35 ^= amd_bitalign(XZ108, XZ107, _offset); XZ36 ^= amd_bitalign(XZ109, XZ108, _offset); XZ37 ^= amd_bitalign(XZ110, XZ109, _offset); XZ38 ^= amd_bitalign(XZ111, XZ110, _offset); XZ39 ^= amd_bitalign(XZ112, XZ111, _offset); XZ40 ^= amd_bitalign(XZ113, XZ112, _offset); XZ41 ^= amd_bitalign(XZ114, XZ113, _offset); XZ42 ^= amd_bitalign(XZ115, XZ114, _offset); XZ43 ^= amd_bitalign(XZ116, XZ115, _offset); XZ44 ^= amd_bitalign(XZ117, XZ116, _offset); XZ45 ^= amd_bitalign(XZ118, XZ117, _offset); XZ46 ^= amd_bitalign(XZ119, XZ118, _offset); XZ47 ^= amd_bitalign(XZ120, XZ119, _offset); XZ48 ^= amd_bitalign(XZ121, XZ120, _offset); XZ49 ^= amd_bitalign(XZ122, XZ121, _offset); XZ50 ^= amd_bitalign(XZ123, XZ122, _offset); XZ51 ^= amd_bitalign(XZ124, XZ123, _offset); XZ52 ^= amd_bitalign(XZ125, XZ124, _offset); XZ53 ^= amd_bitalign(XZ126, XZ125, _offset); XZ54 ^= amd_bitalign(XZ127, XZ126, _offset); XZ55 ^= amd_bitalign(XZ128, XZ127, _offset); XZ56 ^= amd_bitalign(XZ129, XZ128, _offset); XZ57 ^= amd_bitalign(XZ130, XZ129, _offset); XZ58 ^= amd_bitalign(XZ131, XZ130, _offset); XZ59 ^= amd_bitalign(XZ132, XZ131, _offset); XZ60 ^= amd_bitalign(XZ133, XZ132, _offset); XZ61 ^= amd_bitalign(XZ134, XZ133, _offset); XZ62 ^= amd_bitalign(XZ135, XZ134, _offset); XZ63 ^= amd_bitalign(XZ136, XZ135, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ138, XZ137, _offset); XZ1 ^= amd_bitalign(XZ139, XZ138, _offset); XZ2 ^= amd_bitalign(XZ140, XZ139, _offset); XZ3 ^= amd_bitalign(XZ141, XZ140, _offset); XZ4 ^= amd_bitalign(XZ142, XZ141, _offset); XZ5 ^= amd_bitalign(XZ143, XZ142, _offset); XZ6 ^= amd_bitalign(XZ144, XZ143, _offset); XZ7 ^= amd_bitalign(XZ145, XZ144, _offset); XZ8 ^= amd_bitalign(XZ82, XZ81, _offset); XZ9 ^= amd_bitalign(XZ83, XZ82, _offset); XZ10 ^= amd_bitalign(XZ84, XZ83, _offset); XZ11 ^= amd_bitalign(XZ85, XZ84, _offset); XZ12 ^= amd_bitalign(XZ86, XZ85, _offset); XZ13 ^= amd_bitalign(XZ87, XZ86, _offset); XZ14 ^= amd_bitalign(XZ88, XZ87, _offset); XZ15 ^= amd_bitalign(XZ89, XZ88, _offset); XZ16 ^= amd_bitalign(XZ90, XZ89, _offset); XZ17 ^= amd_bitalign(XZ91, XZ90, _offset); XZ18 ^= amd_bitalign(XZ92, XZ91, _offset); XZ19 ^= amd_bitalign(XZ93, XZ92, _offset); XZ20 ^= amd_bitalign(XZ94, XZ93, _offset); XZ21 ^= amd_bitalign(XZ95, XZ94, _offset); XZ22 ^= amd_bitalign(XZ96, XZ95, _offset); XZ23 ^= amd_bitalign(XZ97, XZ96, _offset); XZ24 ^= amd_bitalign(XZ98, XZ97, _offset); XZ25 ^= amd_bitalign(XZ99, XZ98, _offset); XZ26 ^= amd_bitalign(XZ100, XZ99, _offset); XZ27 ^= amd_bitalign(XZ101, XZ100, _offset); XZ28 ^= amd_bitalign(XZ102, XZ101, _offset); XZ29 ^= amd_bitalign(XZ103, XZ102, _offset); XZ30 ^= amd_bitalign(XZ104, XZ103, _offset); XZ31 ^= amd_bitalign(XZ105, XZ104, _offset); XZ32 ^= amd_bitalign(XZ106, XZ105, _offset); XZ33 ^= amd_bitalign(XZ107, XZ106, _offset); XZ34 ^= amd_bitalign(XZ108, XZ107, _offset); XZ35 ^= amd_bitalign(XZ109, XZ108, _offset); XZ36 ^= amd_bitalign(XZ110, XZ109, _offset); XZ37 ^= amd_bitalign(XZ111, XZ110, _offset); XZ38 ^= amd_bitalign(XZ112, XZ111, _offset); XZ39 ^= amd_bitalign(XZ113, XZ112, _offset); XZ40 ^= amd_bitalign(XZ114, XZ113, _offset); XZ41 ^= amd_bitalign(XZ115, XZ114, _offset); XZ42 ^= amd_bitalign(XZ116, XZ115, _offset); XZ43 ^= amd_bitalign(XZ117, XZ116, _offset); XZ44 ^= amd_bitalign(XZ118, XZ117, _offset); XZ45 ^= amd_bitalign(XZ119, XZ118, _offset); XZ46 ^= amd_bitalign(XZ120, XZ119, _offset); XZ47 ^= amd_bitalign(XZ121, XZ120, _offset); XZ48 ^= amd_bitalign(XZ122, XZ121, _offset); XZ49 ^= amd_bitalign(XZ123, XZ122, _offset); XZ50 ^= amd_bitalign(XZ124, XZ123, _offset); XZ51 ^= amd_bitalign(XZ125, XZ124, _offset); XZ52 ^= amd_bitalign(XZ126, XZ125, _offset); XZ53 ^= amd_bitalign(XZ127, XZ126, _offset); XZ54 ^= amd_bitalign(XZ128, XZ127, _offset); XZ55 ^= amd_bitalign(XZ129, XZ128, _offset); XZ56 ^= amd_bitalign(XZ130, XZ129, _offset); XZ57 ^= amd_bitalign(XZ131, XZ130, _offset); XZ58 ^= amd_bitalign(XZ132, XZ131, _offset); XZ59 ^= amd_bitalign(XZ133, XZ132, _offset); XZ60 ^= amd_bitalign(XZ134, XZ133, _offset); XZ61 ^= amd_bitalign(XZ135, XZ134, _offset); XZ62 ^= amd_bitalign(XZ136, XZ135, _offset); XZ63 ^= amd_bitalign(XZ137, XZ136, _offset); }
+						else if (shifted_bufptr < 59) { XZ0 ^= amd_bitalign(XZ139, XZ138, _offset); XZ1 ^= amd_bitalign(XZ140, XZ139, _offset); XZ2 ^= amd_bitalign(XZ141, XZ140, _offset); XZ3 ^= amd_bitalign(XZ142, XZ141, _offset); XZ4 ^= amd_bitalign(XZ143, XZ142, _offset); XZ5 ^= amd_bitalign(XZ144, XZ143, _offset); XZ6 ^= amd_bitalign(XZ145, XZ144, _offset); XZ7 ^= amd_bitalign(XZ146, XZ145, _offset); XZ8 ^= amd_bitalign(XZ83, XZ82, _offset); XZ9 ^= amd_bitalign(XZ84, XZ83, _offset); XZ10 ^= amd_bitalign(XZ85, XZ84, _offset); XZ11 ^= amd_bitalign(XZ86, XZ85, _offset); XZ12 ^= amd_bitalign(XZ87, XZ86, _offset); XZ13 ^= amd_bitalign(XZ88, XZ87, _offset); XZ14 ^= amd_bitalign(XZ89, XZ88, _offset); XZ15 ^= amd_bitalign(XZ90, XZ89, _offset); XZ16 ^= amd_bitalign(XZ91, XZ90, _offset); XZ17 ^= amd_bitalign(XZ92, XZ91, _offset); XZ18 ^= amd_bitalign(XZ93, XZ92, _offset); XZ19 ^= amd_bitalign(XZ94, XZ93, _offset); XZ20 ^= amd_bitalign(XZ95, XZ94, _offset); XZ21 ^= amd_bitalign(XZ96, XZ95, _offset); XZ22 ^= amd_bitalign(XZ97, XZ96, _offset); XZ23 ^= amd_bitalign(XZ98, XZ97, _offset); XZ24 ^= amd_bitalign(XZ99, XZ98, _offset); XZ25 ^= amd_bitalign(XZ100, XZ99, _offset); XZ26 ^= amd_bitalign(XZ101, XZ100, _offset); XZ27 ^= amd_bitalign(XZ102, XZ101, _offset); XZ28 ^= amd_bitalign(XZ103, XZ102, _offset); XZ29 ^= amd_bitalign(XZ104, XZ103, _offset); XZ30 ^= amd_bitalign(XZ105, XZ104, _offset); XZ31 ^= amd_bitalign(XZ106, XZ105, _offset); XZ32 ^= amd_bitalign(XZ107, XZ106, _offset); XZ33 ^= amd_bitalign(XZ108, XZ107, _offset); XZ34 ^= amd_bitalign(XZ109, XZ108, _offset); XZ35 ^= amd_bitalign(XZ110, XZ109, _offset); XZ36 ^= amd_bitalign(XZ111, XZ110, _offset); XZ37 ^= amd_bitalign(XZ112, XZ111, _offset); XZ38 ^= amd_bitalign(XZ113, XZ112, _offset); XZ39 ^= amd_bitalign(XZ114, XZ113, _offset); XZ40 ^= amd_bitalign(XZ115, XZ114, _offset); XZ41 ^= amd_bitalign(XZ116, XZ115, _offset); XZ42 ^= amd_bitalign(XZ117, XZ116, _offset); XZ43 ^= amd_bitalign(XZ118, XZ117, _offset); XZ44 ^= amd_bitalign(XZ119, XZ118, _offset); XZ45 ^= amd_bitalign(XZ120, XZ119, _offset); XZ46 ^= amd_bitalign(XZ121, XZ120, _offset); XZ47 ^= amd_bitalign(XZ122, XZ121, _offset); XZ48 ^= amd_bitalign(XZ123, XZ122, _offset); XZ49 ^= amd_bitalign(XZ124, XZ123, _offset); XZ50 ^= amd_bitalign(XZ125, XZ124, _offset); XZ51 ^= amd_bitalign(XZ126, XZ125, _offset); XZ52 ^= amd_bitalign(XZ127, XZ126, _offset); XZ53 ^= amd_bitalign(XZ128, XZ127, _offset); XZ54 ^= amd_bitalign(XZ129, XZ128, _offset); XZ55 ^= amd_bitalign(XZ130, XZ129, _offset); XZ56 ^= amd_bitalign(XZ131, XZ130, _offset); XZ57 ^= amd_bitalign(XZ132, XZ131, _offset); XZ58 ^= amd_bitalign(XZ133, XZ132, _offset); XZ59 ^= amd_bitalign(XZ134, XZ133, _offset); XZ60 ^= amd_bitalign(XZ135, XZ134, _offset); XZ61 ^= amd_bitalign(XZ136, XZ135, _offset); XZ62 ^= amd_bitalign(XZ137, XZ136, _offset); XZ63 ^= amd_bitalign(XZ138, XZ137, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ140, XZ139, _offset); XZ1 ^= amd_bitalign(XZ141, XZ140, _offset); XZ2 ^= amd_bitalign(XZ142, XZ141, _offset); XZ3 ^= amd_bitalign(XZ143, XZ142, _offset); XZ4 ^= amd_bitalign(XZ144, XZ143, _offset); XZ5 ^= amd_bitalign(XZ145, XZ144, _offset); XZ6 ^= amd_bitalign(XZ146, XZ145, _offset); XZ7 ^= amd_bitalign(XZ147, XZ146, _offset); XZ8 ^= amd_bitalign(XZ84, XZ83, _offset); XZ9 ^= amd_bitalign(XZ85, XZ84, _offset); XZ10 ^= amd_bitalign(XZ86, XZ85, _offset); XZ11 ^= amd_bitalign(XZ87, XZ86, _offset); XZ12 ^= amd_bitalign(XZ88, XZ87, _offset); XZ13 ^= amd_bitalign(XZ89, XZ88, _offset); XZ14 ^= amd_bitalign(XZ90, XZ89, _offset); XZ15 ^= amd_bitalign(XZ91, XZ90, _offset); XZ16 ^= amd_bitalign(XZ92, XZ91, _offset); XZ17 ^= amd_bitalign(XZ93, XZ92, _offset); XZ18 ^= amd_bitalign(XZ94, XZ93, _offset); XZ19 ^= amd_bitalign(XZ95, XZ94, _offset); XZ20 ^= amd_bitalign(XZ96, XZ95, _offset); XZ21 ^= amd_bitalign(XZ97, XZ96, _offset); XZ22 ^= amd_bitalign(XZ98, XZ97, _offset); XZ23 ^= amd_bitalign(XZ99, XZ98, _offset); XZ24 ^= amd_bitalign(XZ100, XZ99, _offset); XZ25 ^= amd_bitalign(XZ101, XZ100, _offset); XZ26 ^= amd_bitalign(XZ102, XZ101, _offset); XZ27 ^= amd_bitalign(XZ103, XZ102, _offset); XZ28 ^= amd_bitalign(XZ104, XZ103, _offset); XZ29 ^= amd_bitalign(XZ105, XZ104, _offset); XZ30 ^= amd_bitalign(XZ106, XZ105, _offset); XZ31 ^= amd_bitalign(XZ107, XZ106, _offset); XZ32 ^= amd_bitalign(XZ108, XZ107, _offset); XZ33 ^= amd_bitalign(XZ109, XZ108, _offset); XZ34 ^= amd_bitalign(XZ110, XZ109, _offset); XZ35 ^= amd_bitalign(XZ111, XZ110, _offset); XZ36 ^= amd_bitalign(XZ112, XZ111, _offset); XZ37 ^= amd_bitalign(XZ113, XZ112, _offset); XZ38 ^= amd_bitalign(XZ114, XZ113, _offset); XZ39 ^= amd_bitalign(XZ115, XZ114, _offset); XZ40 ^= amd_bitalign(XZ116, XZ115, _offset); XZ41 ^= amd_bitalign(XZ117, XZ116, _offset); XZ42 ^= amd_bitalign(XZ118, XZ117, _offset); XZ43 ^= amd_bitalign(XZ119, XZ118, _offset); XZ44 ^= amd_bitalign(XZ120, XZ119, _offset); XZ45 ^= amd_bitalign(XZ121, XZ120, _offset); XZ46 ^= amd_bitalign(XZ122, XZ121, _offset); XZ47 ^= amd_bitalign(XZ123, XZ122, _offset); XZ48 ^= amd_bitalign(XZ124, XZ123, _offset); XZ49 ^= amd_bitalign(XZ125, XZ124, _offset); XZ50 ^= amd_bitalign(XZ126, XZ125, _offset); XZ51 ^= amd_bitalign(XZ127, XZ126, _offset); XZ52 ^= amd_bitalign(XZ128, XZ127, _offset); XZ53 ^= amd_bitalign(XZ129, XZ128, _offset); XZ54 ^= amd_bitalign(XZ130, XZ129, _offset); XZ55 ^= amd_bitalign(XZ131, XZ130, _offset); XZ56 ^= amd_bitalign(XZ132, XZ131, _offset); XZ57 ^= amd_bitalign(XZ133, XZ132, _offset); XZ58 ^= amd_bitalign(XZ134, XZ133, _offset); XZ59 ^= amd_bitalign(XZ135, XZ134, _offset); XZ60 ^= amd_bitalign(XZ136, XZ135, _offset); XZ61 ^= amd_bitalign(XZ137, XZ136, _offset); XZ62 ^= amd_bitalign(XZ138, XZ137, _offset); XZ63 ^= amd_bitalign(XZ139, XZ138, _offset); }
+						else if (shifted_bufptr < 62) if (shifted_bufptr < 61) { XZ0 ^= amd_bitalign(XZ141, XZ140, _offset); XZ1 ^= amd_bitalign(XZ142, XZ141, _offset); XZ2 ^= amd_bitalign(XZ143, XZ142, _offset); XZ3 ^= amd_bitalign(XZ144, XZ143, _offset); XZ4 ^= amd_bitalign(XZ145, XZ144, _offset); XZ5 ^= amd_bitalign(XZ146, XZ145, _offset); XZ6 ^= amd_bitalign(XZ147, XZ146, _offset); XZ7 ^= amd_bitalign(XZ148, XZ147, _offset); XZ8 ^= amd_bitalign(XZ85, XZ84, _offset); XZ9 ^= amd_bitalign(XZ86, XZ85, _offset); XZ10 ^= amd_bitalign(XZ87, XZ86, _offset); XZ11 ^= amd_bitalign(XZ88, XZ87, _offset); XZ12 ^= amd_bitalign(XZ89, XZ88, _offset); XZ13 ^= amd_bitalign(XZ90, XZ89, _offset); XZ14 ^= amd_bitalign(XZ91, XZ90, _offset); XZ15 ^= amd_bitalign(XZ92, XZ91, _offset); XZ16 ^= amd_bitalign(XZ93, XZ92, _offset); XZ17 ^= amd_bitalign(XZ94, XZ93, _offset); XZ18 ^= amd_bitalign(XZ95, XZ94, _offset); XZ19 ^= amd_bitalign(XZ96, XZ95, _offset); XZ20 ^= amd_bitalign(XZ97, XZ96, _offset); XZ21 ^= amd_bitalign(XZ98, XZ97, _offset); XZ22 ^= amd_bitalign(XZ99, XZ98, _offset); XZ23 ^= amd_bitalign(XZ100, XZ99, _offset); XZ24 ^= amd_bitalign(XZ101, XZ100, _offset); XZ25 ^= amd_bitalign(XZ102, XZ101, _offset); XZ26 ^= amd_bitalign(XZ103, XZ102, _offset); XZ27 ^= amd_bitalign(XZ104, XZ103, _offset); XZ28 ^= amd_bitalign(XZ105, XZ104, _offset); XZ29 ^= amd_bitalign(XZ106, XZ105, _offset); XZ30 ^= amd_bitalign(XZ107, XZ106, _offset); XZ31 ^= amd_bitalign(XZ108, XZ107, _offset); XZ32 ^= amd_bitalign(XZ109, XZ108, _offset); XZ33 ^= amd_bitalign(XZ110, XZ109, _offset); XZ34 ^= amd_bitalign(XZ111, XZ110, _offset); XZ35 ^= amd_bitalign(XZ112, XZ111, _offset); XZ36 ^= amd_bitalign(XZ113, XZ112, _offset); XZ37 ^= amd_bitalign(XZ114, XZ113, _offset); XZ38 ^= amd_bitalign(XZ115, XZ114, _offset); XZ39 ^= amd_bitalign(XZ116, XZ115, _offset); XZ40 ^= amd_bitalign(XZ117, XZ116, _offset); XZ41 ^= amd_bitalign(XZ118, XZ117, _offset); XZ42 ^= amd_bitalign(XZ119, XZ118, _offset); XZ43 ^= amd_bitalign(XZ120, XZ119, _offset); XZ44 ^= amd_bitalign(XZ121, XZ120, _offset); XZ45 ^= amd_bitalign(XZ122, XZ121, _offset); XZ46 ^= amd_bitalign(XZ123, XZ122, _offset); XZ47 ^= amd_bitalign(XZ124, XZ123, _offset); XZ48 ^= amd_bitalign(XZ125, XZ124, _offset); XZ49 ^= amd_bitalign(XZ126, XZ125, _offset); XZ50 ^= amd_bitalign(XZ127, XZ126, _offset); XZ51 ^= amd_bitalign(XZ128, XZ127, _offset); XZ52 ^= amd_bitalign(XZ129, XZ128, _offset); XZ53 ^= amd_bitalign(XZ130, XZ129, _offset); XZ54 ^= amd_bitalign(XZ131, XZ130, _offset); XZ55 ^= amd_bitalign(XZ132, XZ131, _offset); XZ56 ^= amd_bitalign(XZ133, XZ132, _offset); XZ57 ^= amd_bitalign(XZ134, XZ133, _offset); XZ58 ^= amd_bitalign(XZ135, XZ134, _offset); XZ59 ^= amd_bitalign(XZ136, XZ135, _offset); XZ60 ^= amd_bitalign(XZ137, XZ136, _offset); XZ61 ^= amd_bitalign(XZ138, XZ137, _offset); XZ62 ^= amd_bitalign(XZ139, XZ138, _offset); XZ63 ^= amd_bitalign(XZ140, XZ139, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ142, XZ141, _offset); XZ1 ^= amd_bitalign(XZ143, XZ142, _offset); XZ2 ^= amd_bitalign(XZ144, XZ143, _offset); XZ3 ^= amd_bitalign(XZ145, XZ144, _offset); XZ4 ^= amd_bitalign(XZ146, XZ145, _offset); XZ5 ^= amd_bitalign(XZ147, XZ146, _offset); XZ6 ^= amd_bitalign(XZ148, XZ147, _offset); XZ7 ^= amd_bitalign(XZ149, XZ148, _offset); XZ8 ^= amd_bitalign(XZ86, XZ85, _offset); XZ9 ^= amd_bitalign(XZ87, XZ86, _offset); XZ10 ^= amd_bitalign(XZ88, XZ87, _offset); XZ11 ^= amd_bitalign(XZ89, XZ88, _offset); XZ12 ^= amd_bitalign(XZ90, XZ89, _offset); XZ13 ^= amd_bitalign(XZ91, XZ90, _offset); XZ14 ^= amd_bitalign(XZ92, XZ91, _offset); XZ15 ^= amd_bitalign(XZ93, XZ92, _offset); XZ16 ^= amd_bitalign(XZ94, XZ93, _offset); XZ17 ^= amd_bitalign(XZ95, XZ94, _offset); XZ18 ^= amd_bitalign(XZ96, XZ95, _offset); XZ19 ^= amd_bitalign(XZ97, XZ96, _offset); XZ20 ^= amd_bitalign(XZ98, XZ97, _offset); XZ21 ^= amd_bitalign(XZ99, XZ98, _offset); XZ22 ^= amd_bitalign(XZ100, XZ99, _offset); XZ23 ^= amd_bitalign(XZ101, XZ100, _offset); XZ24 ^= amd_bitalign(XZ102, XZ101, _offset); XZ25 ^= amd_bitalign(XZ103, XZ102, _offset); XZ26 ^= amd_bitalign(XZ104, XZ103, _offset); XZ27 ^= amd_bitalign(XZ105, XZ104, _offset); XZ28 ^= amd_bitalign(XZ106, XZ105, _offset); XZ29 ^= amd_bitalign(XZ107, XZ106, _offset); XZ30 ^= amd_bitalign(XZ108, XZ107, _offset); XZ31 ^= amd_bitalign(XZ109, XZ108, _offset); XZ32 ^= amd_bitalign(XZ110, XZ109, _offset); XZ33 ^= amd_bitalign(XZ111, XZ110, _offset); XZ34 ^= amd_bitalign(XZ112, XZ111, _offset); XZ35 ^= amd_bitalign(XZ113, XZ112, _offset); XZ36 ^= amd_bitalign(XZ114, XZ113, _offset); XZ37 ^= amd_bitalign(XZ115, XZ114, _offset); XZ38 ^= amd_bitalign(XZ116, XZ115, _offset); XZ39 ^= amd_bitalign(XZ117, XZ116, _offset); XZ40 ^= amd_bitalign(XZ118, XZ117, _offset); XZ41 ^= amd_bitalign(XZ119, XZ118, _offset); XZ42 ^= amd_bitalign(XZ120, XZ119, _offset); XZ43 ^= amd_bitalign(XZ121, XZ120, _offset); XZ44 ^= amd_bitalign(XZ122, XZ121, _offset); XZ45 ^= amd_bitalign(XZ123, XZ122, _offset); XZ46 ^= amd_bitalign(XZ124, XZ123, _offset); XZ47 ^= amd_bitalign(XZ125, XZ124, _offset); XZ48 ^= amd_bitalign(XZ126, XZ125, _offset); XZ49 ^= amd_bitalign(XZ127, XZ126, _offset); XZ50 ^= amd_bitalign(XZ128, XZ127, _offset); XZ51 ^= amd_bitalign(XZ129, XZ128, _offset); XZ52 ^= amd_bitalign(XZ130, XZ129, _offset); XZ53 ^= amd_bitalign(XZ131, XZ130, _offset); XZ54 ^= amd_bitalign(XZ132, XZ131, _offset); XZ55 ^= amd_bitalign(XZ133, XZ132, _offset); XZ56 ^= amd_bitalign(XZ134, XZ133, _offset); XZ57 ^= amd_bitalign(XZ135, XZ134, _offset); XZ58 ^= amd_bitalign(XZ136, XZ135, _offset); XZ59 ^= amd_bitalign(XZ137, XZ136, _offset); XZ60 ^= amd_bitalign(XZ138, XZ137, _offset); XZ61 ^= amd_bitalign(XZ139, XZ138, _offset); XZ62 ^= amd_bitalign(XZ140, XZ139, _offset); XZ63 ^= amd_bitalign(XZ141, XZ140, _offset); }
+						else if (shifted_bufptr < 63) { XZ0 ^= amd_bitalign(XZ143, XZ142, _offset); XZ1 ^= amd_bitalign(XZ144, XZ143, _offset); XZ2 ^= amd_bitalign(XZ145, XZ144, _offset); XZ3 ^= amd_bitalign(XZ146, XZ145, _offset); XZ4 ^= amd_bitalign(XZ147, XZ146, _offset); XZ5 ^= amd_bitalign(XZ148, XZ147, _offset); XZ6 ^= amd_bitalign(XZ149, XZ148, _offset); XZ7 ^= amd_bitalign(XZ150, XZ149, _offset); XZ8 ^= amd_bitalign(XZ87, XZ86, _offset); XZ9 ^= amd_bitalign(XZ88, XZ87, _offset); XZ10 ^= amd_bitalign(XZ89, XZ88, _offset); XZ11 ^= amd_bitalign(XZ90, XZ89, _offset); XZ12 ^= amd_bitalign(XZ91, XZ90, _offset); XZ13 ^= amd_bitalign(XZ92, XZ91, _offset); XZ14 ^= amd_bitalign(XZ93, XZ92, _offset); XZ15 ^= amd_bitalign(XZ94, XZ93, _offset); XZ16 ^= amd_bitalign(XZ95, XZ94, _offset); XZ17 ^= amd_bitalign(XZ96, XZ95, _offset); XZ18 ^= amd_bitalign(XZ97, XZ96, _offset); XZ19 ^= amd_bitalign(XZ98, XZ97, _offset); XZ20 ^= amd_bitalign(XZ99, XZ98, _offset); XZ21 ^= amd_bitalign(XZ100, XZ99, _offset); XZ22 ^= amd_bitalign(XZ101, XZ100, _offset); XZ23 ^= amd_bitalign(XZ102, XZ101, _offset); XZ24 ^= amd_bitalign(XZ103, XZ102, _offset); XZ25 ^= amd_bitalign(XZ104, XZ103, _offset); XZ26 ^= amd_bitalign(XZ105, XZ104, _offset); XZ27 ^= amd_bitalign(XZ106, XZ105, _offset); XZ28 ^= amd_bitalign(XZ107, XZ106, _offset); XZ29 ^= amd_bitalign(XZ108, XZ107, _offset); XZ30 ^= amd_bitalign(XZ109, XZ108, _offset); XZ31 ^= amd_bitalign(XZ110, XZ109, _offset); XZ32 ^= amd_bitalign(XZ111, XZ110, _offset); XZ33 ^= amd_bitalign(XZ112, XZ111, _offset); XZ34 ^= amd_bitalign(XZ113, XZ112, _offset); XZ35 ^= amd_bitalign(XZ114, XZ113, _offset); XZ36 ^= amd_bitalign(XZ115, XZ114, _offset); XZ37 ^= amd_bitalign(XZ116, XZ115, _offset); XZ38 ^= amd_bitalign(XZ117, XZ116, _offset); XZ39 ^= amd_bitalign(XZ118, XZ117, _offset); XZ40 ^= amd_bitalign(XZ119, XZ118, _offset); XZ41 ^= amd_bitalign(XZ120, XZ119, _offset); XZ42 ^= amd_bitalign(XZ121, XZ120, _offset); XZ43 ^= amd_bitalign(XZ122, XZ121, _offset); XZ44 ^= amd_bitalign(XZ123, XZ122, _offset); XZ45 ^= amd_bitalign(XZ124, XZ123, _offset); XZ46 ^= amd_bitalign(XZ125, XZ124, _offset); XZ47 ^= amd_bitalign(XZ126, XZ125, _offset); XZ48 ^= amd_bitalign(XZ127, XZ126, _offset); XZ49 ^= amd_bitalign(XZ128, XZ127, _offset); XZ50 ^= amd_bitalign(XZ129, XZ128, _offset); XZ51 ^= amd_bitalign(XZ130, XZ129, _offset); XZ52 ^= amd_bitalign(XZ131, XZ130, _offset); XZ53 ^= amd_bitalign(XZ132, XZ131, _offset); XZ54 ^= amd_bitalign(XZ133, XZ132, _offset); XZ55 ^= amd_bitalign(XZ134, XZ133, _offset); XZ56 ^= amd_bitalign(XZ135, XZ134, _offset); XZ57 ^= amd_bitalign(XZ136, XZ135, _offset); XZ58 ^= amd_bitalign(XZ137, XZ136, _offset); XZ59 ^= amd_bitalign(XZ138, XZ137, _offset); XZ60 ^= amd_bitalign(XZ139, XZ138, _offset); XZ61 ^= amd_bitalign(XZ140, XZ139, _offset); XZ62 ^= amd_bitalign(XZ141, XZ140, _offset); XZ63 ^= amd_bitalign(XZ142, XZ141, _offset); }
+						else { XZ0 ^= amd_bitalign(XZ144, XZ143, _offset); XZ1 ^= amd_bitalign(XZ145, XZ144, _offset); XZ2 ^= amd_bitalign(XZ146, XZ145, _offset); XZ3 ^= amd_bitalign(XZ147, XZ146, _offset); XZ4 ^= amd_bitalign(XZ148, XZ147, _offset); XZ5 ^= amd_bitalign(XZ149, XZ148, _offset); XZ6 ^= amd_bitalign(XZ150, XZ149, _offset); XZ7 ^= amd_bitalign(XZ151, XZ150, _offset); XZ8 ^= amd_bitalign(XZ88, XZ87, _offset); XZ9 ^= amd_bitalign(XZ89, XZ88, _offset); XZ10 ^= amd_bitalign(XZ90, XZ89, _offset); XZ11 ^= amd_bitalign(XZ91, XZ90, _offset); XZ12 ^= amd_bitalign(XZ92, XZ91, _offset); XZ13 ^= amd_bitalign(XZ93, XZ92, _offset); XZ14 ^= amd_bitalign(XZ94, XZ93, _offset); XZ15 ^= amd_bitalign(XZ95, XZ94, _offset); XZ16 ^= amd_bitalign(XZ96, XZ95, _offset); XZ17 ^= amd_bitalign(XZ97, XZ96, _offset); XZ18 ^= amd_bitalign(XZ98, XZ97, _offset); XZ19 ^= amd_bitalign(XZ99, XZ98, _offset); XZ20 ^= amd_bitalign(XZ100, XZ99, _offset); XZ21 ^= amd_bitalign(XZ101, XZ100, _offset); XZ22 ^= amd_bitalign(XZ102, XZ101, _offset); XZ23 ^= amd_bitalign(XZ103, XZ102, _offset); XZ24 ^= amd_bitalign(XZ104, XZ103, _offset); XZ25 ^= amd_bitalign(XZ105, XZ104, _offset); XZ26 ^= amd_bitalign(XZ106, XZ105, _offset); XZ27 ^= amd_bitalign(XZ107, XZ106, _offset); XZ28 ^= amd_bitalign(XZ108, XZ107, _offset); XZ29 ^= amd_bitalign(XZ109, XZ108, _offset); XZ30 ^= amd_bitalign(XZ110, XZ109, _offset); XZ31 ^= amd_bitalign(XZ111, XZ110, _offset); XZ32 ^= amd_bitalign(XZ112, XZ111, _offset); XZ33 ^= amd_bitalign(XZ113, XZ112, _offset); XZ34 ^= amd_bitalign(XZ114, XZ113, _offset); XZ35 ^= amd_bitalign(XZ115, XZ114, _offset); XZ36 ^= amd_bitalign(XZ116, XZ115, _offset); XZ37 ^= amd_bitalign(XZ117, XZ116, _offset); XZ38 ^= amd_bitalign(XZ118, XZ117, _offset); XZ39 ^= amd_bitalign(XZ119, XZ118, _offset); XZ40 ^= amd_bitalign(XZ120, XZ119, _offset); XZ41 ^= amd_bitalign(XZ121, XZ120, _offset); XZ42 ^= amd_bitalign(XZ122, XZ121, _offset); XZ43 ^= amd_bitalign(XZ123, XZ122, _offset); XZ44 ^= amd_bitalign(XZ124, XZ123, _offset); XZ45 ^= amd_bitalign(XZ125, XZ124, _offset); XZ46 ^= amd_bitalign(XZ126, XZ125, _offset); XZ47 ^= amd_bitalign(XZ127, XZ126, _offset); XZ48 ^= amd_bitalign(XZ128, XZ127, _offset); XZ49 ^= amd_bitalign(XZ129, XZ128, _offset); XZ50 ^= amd_bitalign(XZ130, XZ129, _offset); XZ51 ^= amd_bitalign(XZ131, XZ130, _offset); XZ52 ^= amd_bitalign(XZ132, XZ131, _offset); XZ53 ^= amd_bitalign(XZ133, XZ132, _offset); XZ54 ^= amd_bitalign(XZ134, XZ133, _offset); XZ55 ^= amd_bitalign(XZ135, XZ134, _offset); XZ56 ^= amd_bitalign(XZ136, XZ135, _offset); XZ57 ^= amd_bitalign(XZ137, XZ136, _offset); XZ58 ^= amd_bitalign(XZ138, XZ137, _offset); XZ59 ^= amd_bitalign(XZ139, XZ138, _offset); XZ60 ^= amd_bitalign(XZ140, XZ139, _offset); XZ61 ^= amd_bitalign(XZ141, XZ140, _offset); XZ62 ^= amd_bitalign(XZ142, XZ141, _offset); XZ63 ^= amd_bitalign(XZ143, XZ142, _offset); }
+				}
+
+        if(mode) break;
+
+        /* blkcpy(Z, X) */
+        // neoscrypt_copy256(&XZ[2], &XZ[0]);
+				XZ64 = XZ0;XZ65 = XZ1;XZ66 = XZ2;XZ67 = XZ3;XZ68 = XZ4;XZ69 = XZ5;XZ70 = XZ6;XZ71 = XZ7;
+				XZ72 = XZ8;XZ73 = XZ9;XZ74 = XZ10;XZ75 = XZ11;XZ76 = XZ12;XZ77 = XZ13;XZ78 = XZ14;XZ79 = XZ15;
+				XZ80 = XZ16;XZ81 = XZ17;XZ82 = XZ18;XZ83 = XZ19;XZ84 = XZ20;XZ85 = XZ21;XZ86 = XZ22;XZ87 = XZ23;
+				XZ88 = XZ24;XZ89 = XZ25;XZ90 = XZ26;XZ91 = XZ27;XZ92 = XZ28;XZ93 = XZ29;XZ94 = XZ30;XZ95 = XZ31;
+				XZ96 = XZ32;XZ97 = XZ33;XZ98 = XZ34;XZ99 = XZ35;XZ100 = XZ36;XZ101 = XZ37;XZ102 = XZ38;XZ103 = XZ39;
+				XZ104 = XZ40;XZ105 = XZ41;XZ106 = XZ42;XZ107 = XZ43;XZ108 = XZ44;XZ109 = XZ45;XZ110 = XZ46;XZ111 = XZ47;
+				XZ112 = XZ48;XZ113 = XZ49;XZ114 = XZ50;XZ115 = XZ51;XZ116 = XZ52;XZ117 = XZ53;XZ118 = XZ54;XZ119 = XZ55;
+				XZ120 = XZ56;XZ121 = XZ57;XZ122 = XZ58;XZ123 = XZ59;XZ124 = XZ60;XZ125 = XZ61;XZ126 = XZ62;XZ127 = XZ63;
+
+        /* X = SMix(X) and Z = SMix(Z) */
+#pragma unroll 1
+        for(i = 0; i < 2; i++) {
+					volatile uint const_2 = 2;
+#pragma unroll 1
+            for(uint xy = 0; xy < const_2; xy++) {
+#pragma unroll 1
+            for(j = 0; j < 128; j++) {
+	              if (!xy) {
+                /* blkcpy(G, X) */
+                k = rotate(mad24(j, (uint)WORKSIZE, lclid), 6U);
+                // G[k]     = XZ[0];
+                // G[k + 1] = XZ[1];
+								G[k + 0] = XZ0; G[k + 1] = XZ1; G[k + 2] = XZ2; G[k + 3] = XZ3; G[k + 4] = XZ4; G[k + 5] = XZ5; G[k + 6] = XZ6; G[k + 7] = XZ7; 
+								G[k + 8] = XZ8; G[k + 9] = XZ9; G[k + 10] = XZ10; G[k + 11] = XZ11; G[k + 12] = XZ12; G[k + 13] = XZ13; G[k + 14] = XZ14; G[k + 15] = XZ15; 
+								G[k + 16] = XZ16; G[k + 17] = XZ17; G[k + 18] = XZ18; G[k + 19] = XZ19; G[k + 20] = XZ20; G[k + 21] = XZ21; G[k + 22] = XZ22; G[k + 23] = XZ23; 
+								G[k + 24] = XZ24; G[k + 25] = XZ25; G[k + 26] = XZ26; G[k + 27] = XZ27; G[k + 28] = XZ28; G[k + 29] = XZ29; G[k + 30] = XZ30; G[k + 31] = XZ31; 
+								G[k + 32] = XZ32; G[k + 33] = XZ33; G[k + 34] = XZ34; G[k + 35] = XZ35; G[k + 36] = XZ36; G[k + 37] = XZ37; G[k + 38] = XZ38; G[k + 39] = XZ39; 
+								G[k + 40] = XZ40; G[k + 41] = XZ41; G[k + 42] = XZ42; G[k + 43] = XZ43; G[k + 44] = XZ44; G[k + 45] = XZ45; G[k + 46] = XZ46; G[k + 47] = XZ47; 
+								G[k + 48] = XZ48; G[k + 49] = XZ49; G[k + 50] = XZ50; G[k + 51] = XZ51; G[k + 52] = XZ52; G[k + 53] = XZ53; G[k + 54] = XZ54; G[k + 55] = XZ55; 
+								G[k + 56] = XZ56; G[k + 57] = XZ57; G[k + 58] = XZ58; G[k + 59] = XZ59; G[k + 60] = XZ60; G[k + 61] = XZ61; G[k + 62] = XZ62; G[k + 63] = XZ63; 
+								} else {
+               /* integerify(X) mod N */
+                k = rotate(mad24((XZ48 & 0x7F), (uint)WORKSIZE, lclid), 6U);
+
+                /* blkxor(X, G) */
+                // XZ[0] ^= G[k];
+                // XZ[1] ^= G[k + 1];
+											XZ0 ^= G[k + 0]; XZ1 ^= G[k + 1]; XZ2 ^= G[k + 2]; XZ3 ^= G[k + 3]; XZ4 ^= G[k + 4]; XZ5 ^= G[k + 5]; XZ6 ^= G[k + 6]; XZ7 ^= G[k + 7]; 
+											XZ8 ^= G[k + 8]; XZ9 ^= G[k + 9]; XZ10 ^= G[k + 10]; XZ11 ^= G[k + 11]; XZ12 ^= G[k + 12]; XZ13 ^= G[k + 13]; XZ14 ^= G[k + 14]; XZ15 ^= G[k + 15]; 
+											XZ16 ^= G[k + 16]; XZ17 ^= G[k + 17]; XZ18 ^= G[k + 18]; XZ19 ^= G[k + 19]; XZ20 ^= G[k + 20]; XZ21 ^= G[k + 21]; XZ22 ^= G[k + 22]; XZ23 ^= G[k + 23]; 
+											XZ24 ^= G[k + 24]; XZ25 ^= G[k + 25]; XZ26 ^= G[k + 26]; XZ27 ^= G[k + 27]; XZ28 ^= G[k + 28]; XZ29 ^= G[k + 29]; XZ30 ^= G[k + 30]; XZ31 ^= G[k + 31]; 
+											XZ32 ^= G[k + 32]; XZ33 ^= G[k + 33]; XZ34 ^= G[k + 34]; XZ35 ^= G[k + 35]; XZ36 ^= G[k + 36]; XZ37 ^= G[k + 37]; XZ38 ^= G[k + 38]; XZ39 ^= G[k + 39]; 
+											XZ40 ^= G[k + 40]; XZ41 ^= G[k + 41]; XZ42 ^= G[k + 42]; XZ43 ^= G[k + 43]; XZ44 ^= G[k + 44]; XZ45 ^= G[k + 45]; XZ46 ^= G[k + 46]; XZ47 ^= G[k + 47]; 
+											XZ48 ^= G[k + 48]; XZ49 ^= G[k + 49]; XZ50 ^= G[k + 50]; XZ51 ^= G[k + 51]; XZ52 ^= G[k + 52]; XZ53 ^= G[k + 53]; XZ54 ^= G[k + 54]; XZ55 ^= G[k + 55]; 
+											XZ56 ^= G[k + 56]; XZ57 ^= G[k + 57]; XZ58 ^= G[k + 58]; XZ59 ^= G[k + 59]; XZ60 ^= G[k + 60]; XZ61 ^= G[k + 61]; XZ62 ^= G[k + 62]; XZ63 ^= G[k + 63]; 
+  								}
+
+                /* blkmix(X) */
+								XZ0 ^= XZ48;XZ1 ^= XZ49;XZ2 ^= XZ50;XZ3 ^= XZ51;XZ4 ^= XZ52;XZ5 ^= XZ53;XZ6 ^= XZ54;XZ7 ^= XZ55;
+								XZ8 ^= XZ56;XZ9 ^= XZ57;XZ10 ^= XZ58;XZ11 ^= XZ59;XZ12 ^= XZ60;XZ13 ^= XZ61;XZ14 ^= XZ62;XZ15 ^= XZ63;
+								if(i) {
+										uint4 Y0 = (uint4)(XZ4, XZ9, XZ14, XZ3);
+										uint4 Y1 = (uint4)(XZ8, XZ13, XZ2, XZ7);
+										uint4 Y2 = (uint4)(XZ12, XZ1, XZ6, XZ11);
+										uint4 Y3 = (uint4)(XZ0, XZ5, XZ10, XZ15);
+										volatile uint const_10 = 10;
+										for (uint k = 0; k < const_10; k++) { SALSA_CORE_VECTOR(Y0, Y1, Y2, Y3); }
+										XZ0 += Y3.x;
+										XZ1 += Y2.y,
+										XZ2 += Y1.z,
+										XZ3 += Y0.w,
+										XZ4 += Y0.x,
+										XZ5 += Y3.y,
+										XZ6 += Y2.z,
+										XZ7 += Y1.w,
+										XZ8 += Y1.x,
+										XZ9 += Y0.y,
+										XZ10 += Y3.z,
+										XZ11 += Y2.w,
+										XZ12 += Y2.x,
+										XZ13 += Y1.y,
+										XZ14 += Y0.z,
+										XZ15 += Y3.w;
+										XZ16 ^= XZ0;XZ17 ^= XZ1;XZ18 ^= XZ2;XZ19 ^= XZ3;XZ20 ^= XZ4;XZ21 ^= XZ5;XZ22 ^= XZ6;XZ23 ^= XZ7;
+										XZ24 ^= XZ8;XZ25 ^= XZ9;XZ26 ^= XZ10;XZ27 ^= XZ11;XZ28 ^= XZ12;XZ29 ^= XZ13;XZ30 ^= XZ14;XZ31 ^= XZ15;
+										Y0 = (uint4)(XZ20, XZ25, XZ30, XZ19);
+										Y1 = (uint4)(XZ24, XZ29, XZ18, XZ23);
+										Y2 = (uint4)(XZ28, XZ17, XZ22, XZ27);
+										Y3 = (uint4)(XZ16, XZ21, XZ26, XZ31);
+										for (uint k = 0; k < const_10; k++) { SALSA_CORE_VECTOR(Y0, Y1, Y2, Y3); }
+										XZ16 += Y3.x;
+										XZ17 += Y2.y,
+										XZ18 += Y1.z,
+										XZ19 += Y0.w,
+										XZ20 += Y0.x,
+										XZ21 += Y3.y,
+										XZ22 += Y2.z,
+										XZ23 += Y1.w,
+										XZ24 += Y1.x,
+										XZ25 += Y0.y,
+										XZ26 += Y3.z,
+										XZ27 += Y2.w,
+										XZ28 += Y2.x,
+										XZ29 += Y1.y,
+										XZ30 += Y0.z,
+										XZ31 += Y3.w;
+										XZ32 ^= XZ16;XZ33 ^= XZ17;XZ34 ^= XZ18;XZ35 ^= XZ19;XZ36 ^= XZ20;XZ37 ^= XZ21;XZ38 ^= XZ22;XZ39 ^= XZ23;
+										XZ40 ^= XZ24;XZ41 ^= XZ25;XZ42 ^= XZ26;XZ43 ^= XZ27;XZ44 ^= XZ28;XZ45 ^= XZ29;XZ46 ^= XZ30;XZ47 ^= XZ31;
+										Y0 = (uint4)(XZ36, XZ41, XZ46, XZ35);
+										Y1 = (uint4)(XZ40, XZ45, XZ34, XZ39);
+										Y2 = (uint4)(XZ44, XZ33, XZ38, XZ43);
+										Y3 = (uint4)(XZ32, XZ37, XZ42, XZ47);
+										for (uint k = 0; k < const_10; k++) { SALSA_CORE_VECTOR(Y0, Y1, Y2, Y3); }
+										XZ32 += Y3.x;
+										XZ33 += Y2.y,
+										XZ34 += Y1.z,
+										XZ35 += Y0.w,
+										XZ36 += Y0.x,
+										XZ37 += Y3.y,
+										XZ38 += Y2.z,
+										XZ39 += Y1.w,
+										XZ40 += Y1.x,
+										XZ41 += Y0.y,
+										XZ42 += Y3.z,
+										XZ43 += Y2.w,
+										XZ44 += Y2.x,
+										XZ45 += Y1.y,
+										XZ46 += Y0.z,
+										XZ47 += Y3.w;
+										XZ48 ^= XZ32;XZ49 ^= XZ33;XZ50 ^= XZ34;XZ51 ^= XZ35;XZ52 ^= XZ36;XZ53 ^= XZ37;XZ54 ^= XZ38;XZ55 ^= XZ39;
+										XZ56 ^= XZ40;XZ57 ^= XZ41;XZ58 ^= XZ42;XZ59 ^= XZ43;XZ60 ^= XZ44;XZ61 ^= XZ45;XZ62 ^= XZ46;XZ63 ^= XZ47;
+										Y0 = (uint4)(XZ52, XZ57, XZ62, XZ51);
+										Y1 = (uint4)(XZ56, XZ61, XZ50, XZ55);
+										Y2 = (uint4)(XZ60, XZ49, XZ54, XZ59);
+										Y3 = (uint4)(XZ48, XZ53, XZ58, XZ63);
+										for (uint k = 0; k < const_10; k++) { SALSA_CORE_VECTOR(Y0, Y1, Y2, Y3); }
+										XZ48 += Y3.x;
+										XZ49 += Y2.y,
+										XZ50 += Y1.z,
+										XZ51 += Y0.w,
+										XZ52 += Y0.x,
+										XZ53 += Y3.y,
+										XZ54 += Y2.z,
+										XZ55 += Y1.w,
+										XZ56 += Y1.x,
+										XZ57 += Y0.y,
+										XZ58 += Y3.z,
+										XZ59 += Y2.w,
+										XZ60 += Y2.x,
+										XZ61 += Y1.y,
+										XZ62 += Y0.z,
+										XZ63 += Y3.w;
+                } else { 
+										uint4 Y0 = (uint4)(XZ0, XZ1, XZ2, XZ3);
+										uint4 Y1 = (uint4)(XZ4, XZ5, XZ6, XZ7);
+										uint4 Y2 = (uint4)(XZ8, XZ9, XZ10, XZ11);
+										uint4 Y3 = (uint4)(XZ12, XZ13, XZ14, XZ15);
+										volatile uint const_10 = 10;
+										for (uint k = 0; k < const_10; k++) { CHACHA_CORE_VECTOR(Y0, Y1, Y2, Y3); }
+										XZ0 += Y0.x;
+										XZ1 += Y0.y,
+										XZ2 += Y0.z,
+										XZ3 += Y0.w,
+										XZ4 += Y1.x,
+										XZ5 += Y1.y,
+										XZ6 += Y1.z,
+										XZ7 += Y1.w,
+										XZ8 += Y2.x,
+										XZ9 += Y2.y,
+										XZ10 += Y2.z,
+										XZ11 += Y2.w,
+										XZ12 += Y3.x,
+										XZ13 += Y3.y,
+										XZ14 += Y3.z,
+										XZ15 += Y3.w;
+										XZ16 ^= XZ0;XZ17 ^= XZ1;XZ18 ^= XZ2;XZ19 ^= XZ3;XZ20 ^= XZ4;XZ21 ^= XZ5;XZ22 ^= XZ6;XZ23 ^= XZ7;
+										XZ24 ^= XZ8;XZ25 ^= XZ9;XZ26 ^= XZ10;XZ27 ^= XZ11;XZ28 ^= XZ12;XZ29 ^= XZ13;XZ30 ^= XZ14;XZ31 ^= XZ15;
+										Y0 = (uint4)(XZ16, XZ17, XZ18, XZ19);
+										Y1 = (uint4)(XZ20, XZ21, XZ22, XZ23);
+										Y2 = (uint4)(XZ24, XZ25, XZ26, XZ27);
+										Y3 = (uint4)(XZ28, XZ29, XZ30, XZ31);
+										for (uint k = 0; k < const_10; k++) { CHACHA_CORE_VECTOR(Y0, Y1, Y2, Y3); }
+										XZ16 += Y0.x;
+										XZ17 += Y0.y,
+										XZ18 += Y0.z,
+										XZ19 += Y0.w,
+										XZ20 += Y1.x,
+										XZ21 += Y1.y,
+										XZ22 += Y1.z,
+										XZ23 += Y1.w,
+										XZ24 += Y2.x,
+										XZ25 += Y2.y,
+										XZ26 += Y2.z,
+										XZ27 += Y2.w,
+										XZ28 += Y3.x,
+										XZ29 += Y3.y,
+										XZ30 += Y3.z,
+										XZ31 += Y3.w;
+										XZ32 ^= XZ16;XZ33 ^= XZ17;XZ34 ^= XZ18;XZ35 ^= XZ19;XZ36 ^= XZ20;XZ37 ^= XZ21;XZ38 ^= XZ22;XZ39 ^= XZ23;
+										XZ40 ^= XZ24;XZ41 ^= XZ25;XZ42 ^= XZ26;XZ43 ^= XZ27;XZ44 ^= XZ28;XZ45 ^= XZ29;XZ46 ^= XZ30;XZ47 ^= XZ31;
+										Y0 = (uint4)(XZ32, XZ33, XZ34, XZ35);
+										Y1 = (uint4)(XZ36, XZ37, XZ38, XZ39);
+										Y2 = (uint4)(XZ40, XZ41, XZ42, XZ43);
+										Y3 = (uint4)(XZ44, XZ45, XZ46, XZ47);
+										for (uint k = 0; k < const_10; k++) { CHACHA_CORE_VECTOR(Y0, Y1, Y2, Y3); }
+										XZ32 += Y0.x;
+										XZ33 += Y0.y,
+										XZ34 += Y0.z,
+										XZ35 += Y0.w,
+										XZ36 += Y1.x,
+										XZ37 += Y1.y,
+										XZ38 += Y1.z,
+										XZ39 += Y1.w,
+										XZ40 += Y2.x,
+										XZ41 += Y2.y,
+										XZ42 += Y2.z,
+										XZ43 += Y2.w,
+										XZ44 += Y3.x,
+										XZ45 += Y3.y,
+										XZ46 += Y3.z,
+										XZ47 += Y3.w;
+										XZ48 ^= XZ32;XZ49 ^= XZ33;XZ50 ^= XZ34;XZ51 ^= XZ35;XZ52 ^= XZ36;XZ53 ^= XZ37;XZ54 ^= XZ38;XZ55 ^= XZ39;
+										XZ56 ^= XZ40;XZ57 ^= XZ41;XZ58 ^= XZ42;XZ59 ^= XZ43;XZ60 ^= XZ44;XZ61 ^= XZ45;XZ62 ^= XZ46;XZ63 ^= XZ47;
+										Y0 = (uint4)(XZ48, XZ49, XZ50, XZ51);
+										Y1 = (uint4)(XZ52, XZ53, XZ54, XZ55);
+										Y2 = (uint4)(XZ56, XZ57, XZ58, XZ59);
+										Y3 = (uint4)(XZ60, XZ61, XZ62, XZ63);
+										for (uint k = 0; k < const_10; k++) { CHACHA_CORE_VECTOR(Y0, Y1, Y2, Y3); }
+										XZ48 += Y0.x;
+										XZ49 += Y0.y,
+										XZ50 += Y0.z,
+										XZ51 += Y0.w,
+										XZ52 += Y1.x,
+										XZ53 += Y1.y,
+										XZ54 += Y1.z,
+										XZ55 += Y1.w,
+										XZ56 += Y2.x,
+										XZ57 += Y2.y,
+										XZ58 += Y2.z,
+										XZ59 += Y2.w,
+										XZ60 += Y3.x,
+										XZ61 += Y3.y,
+										XZ62 += Y3.z,
+										XZ63 += Y3.w;
+                }
+								
+								XZ16 ^= XZ32; XZ32 ^= XZ16; XZ16 ^= XZ32; XZ17 ^= XZ33; XZ33 ^= XZ17; XZ17 ^= XZ33; XZ18 ^= XZ34; XZ34 ^= XZ18; XZ18 ^= XZ34; XZ19 ^= XZ35; XZ35 ^= XZ19; XZ19 ^= XZ35; XZ20 ^= XZ36; XZ36 ^= XZ20; XZ20 ^= XZ36; XZ21 ^= XZ37; XZ37 ^= XZ21; XZ21 ^= XZ37; XZ22 ^= XZ38; XZ38 ^= XZ22; XZ22 ^= XZ38; XZ23 ^= XZ39; XZ39 ^= XZ23; XZ23 ^= XZ39; 
+								XZ24 ^= XZ40; XZ40 ^= XZ24; XZ24 ^= XZ40; XZ25 ^= XZ41; XZ41 ^= XZ25; XZ25 ^= XZ41; XZ26 ^= XZ42; XZ42 ^= XZ26; XZ26 ^= XZ42; XZ27 ^= XZ43; XZ43 ^= XZ27; XZ27 ^= XZ43; XZ28 ^= XZ44; XZ44 ^= XZ28; XZ28 ^= XZ44; XZ29 ^= XZ45; XZ45 ^= XZ29; XZ29 ^= XZ45; XZ30 ^= XZ46; XZ46 ^= XZ30; XZ30 ^= XZ46; XZ31 ^= XZ47; XZ47 ^= XZ31; XZ31 ^= XZ47; 
+            }
+					}
+
+
+            if(i) break;
+
+            /* Swap the buffers and repeat */
+						XZ0 ^= XZ64; XZ64 ^= XZ0; XZ0 ^= XZ64; XZ1 ^= XZ65; XZ65 ^= XZ1; XZ1 ^= XZ65; XZ2 ^= XZ66; XZ66 ^= XZ2; XZ2 ^= XZ66; XZ3 ^= XZ67; XZ67 ^= XZ3; XZ3 ^= XZ67; XZ4 ^= XZ68; XZ68 ^= XZ4; XZ4 ^= XZ68; XZ5 ^= XZ69; XZ69 ^= XZ5; XZ5 ^= XZ69; XZ6 ^= XZ70; XZ70 ^= XZ6; XZ6 ^= XZ70; XZ7 ^= XZ71; XZ71 ^= XZ7; XZ7 ^= XZ71; 
+						XZ8 ^= XZ72; XZ72 ^= XZ8; XZ8 ^= XZ72; XZ9 ^= XZ73; XZ73 ^= XZ9; XZ9 ^= XZ73; XZ10 ^= XZ74; XZ74 ^= XZ10; XZ10 ^= XZ74; XZ11 ^= XZ75; XZ75 ^= XZ11; XZ11 ^= XZ75; XZ12 ^= XZ76; XZ76 ^= XZ12; XZ12 ^= XZ76; XZ13 ^= XZ77; XZ77 ^= XZ13; XZ13 ^= XZ77; XZ14 ^= XZ78; XZ78 ^= XZ14; XZ14 ^= XZ78; XZ15 ^= XZ79; XZ79 ^= XZ15; XZ15 ^= XZ79; 
+						XZ16 ^= XZ80; XZ80 ^= XZ16; XZ16 ^= XZ80; XZ17 ^= XZ81; XZ81 ^= XZ17; XZ17 ^= XZ81; XZ18 ^= XZ82; XZ82 ^= XZ18; XZ18 ^= XZ82; XZ19 ^= XZ83; XZ83 ^= XZ19; XZ19 ^= XZ83; XZ20 ^= XZ84; XZ84 ^= XZ20; XZ20 ^= XZ84; XZ21 ^= XZ85; XZ85 ^= XZ21; XZ21 ^= XZ85; XZ22 ^= XZ86; XZ86 ^= XZ22; XZ22 ^= XZ86; XZ23 ^= XZ87; XZ87 ^= XZ23; XZ23 ^= XZ87; 
+						XZ24 ^= XZ88; XZ88 ^= XZ24; XZ24 ^= XZ88; XZ25 ^= XZ89; XZ89 ^= XZ25; XZ25 ^= XZ89; XZ26 ^= XZ90; XZ90 ^= XZ26; XZ26 ^= XZ90; XZ27 ^= XZ91; XZ91 ^= XZ27; XZ27 ^= XZ91; XZ28 ^= XZ92; XZ92 ^= XZ28; XZ28 ^= XZ92; XZ29 ^= XZ93; XZ93 ^= XZ29; XZ29 ^= XZ93; XZ30 ^= XZ94; XZ94 ^= XZ30; XZ30 ^= XZ94; XZ31 ^= XZ95; XZ95 ^= XZ31; XZ31 ^= XZ95; 
+						XZ32 ^= XZ96; XZ96 ^= XZ32; XZ32 ^= XZ96; XZ33 ^= XZ97; XZ97 ^= XZ33; XZ33 ^= XZ97; XZ34 ^= XZ98; XZ98 ^= XZ34; XZ34 ^= XZ98; XZ35 ^= XZ99; XZ99 ^= XZ35; XZ35 ^= XZ99; XZ36 ^= XZ100; XZ100 ^= XZ36; XZ36 ^= XZ100; XZ37 ^= XZ101; XZ101 ^= XZ37; XZ37 ^= XZ101; XZ38 ^= XZ102; XZ102 ^= XZ38; XZ38 ^= XZ102; XZ39 ^= XZ103; XZ103 ^= XZ39; XZ39 ^= XZ103; 
+						XZ40 ^= XZ104; XZ104 ^= XZ40; XZ40 ^= XZ104; XZ41 ^= XZ105; XZ105 ^= XZ41; XZ41 ^= XZ105; XZ42 ^= XZ106; XZ106 ^= XZ42; XZ42 ^= XZ106; XZ43 ^= XZ107; XZ107 ^= XZ43; XZ43 ^= XZ107; XZ44 ^= XZ108; XZ108 ^= XZ44; XZ44 ^= XZ108; XZ45 ^= XZ109; XZ109 ^= XZ45; XZ45 ^= XZ109; XZ46 ^= XZ110; XZ110 ^= XZ46; XZ46 ^= XZ110; XZ47 ^= XZ111; XZ111 ^= XZ47; XZ47 ^= XZ111; 
+						XZ48 ^= XZ112; XZ112 ^= XZ48; XZ48 ^= XZ112; XZ49 ^= XZ113; XZ113 ^= XZ49; XZ49 ^= XZ113; XZ50 ^= XZ114; XZ114 ^= XZ50; XZ50 ^= XZ114; XZ51 ^= XZ115; XZ115 ^= XZ51; XZ51 ^= XZ115; XZ52 ^= XZ116; XZ116 ^= XZ52; XZ52 ^= XZ116; XZ53 ^= XZ117; XZ117 ^= XZ53; XZ53 ^= XZ117; XZ54 ^= XZ118; XZ118 ^= XZ54; XZ54 ^= XZ118; XZ55 ^= XZ119; XZ119 ^= XZ55; XZ55 ^= XZ119; 
+						XZ56 ^= XZ120; XZ120 ^= XZ56; XZ56 ^= XZ120; XZ57 ^= XZ121; XZ121 ^= XZ57; XZ57 ^= XZ121; XZ58 ^= XZ122; XZ122 ^= XZ58; XZ58 ^= XZ122; XZ59 ^= XZ123; XZ123 ^= XZ59; XZ59 ^= XZ123; XZ60 ^= XZ124; XZ124 ^= XZ60; XZ60 ^= XZ124; XZ61 ^= XZ125; XZ125 ^= XZ61; XZ61 ^= XZ125; XZ62 ^= XZ126; XZ126 ^= XZ62; XZ62 ^= XZ126; XZ63 ^= XZ127; XZ127 ^= XZ63; XZ63 ^= XZ127; 
+						// neoscrypt_swap256(&XZ[2], &XZ[0]);
+
+        }
+
+        /* blkxor(X, Z) */
+        // neoscrypt_xor256(&XZ[0], &XZ[2]);
+				XZ0 ^= XZ64;XZ1 ^= XZ65;XZ2 ^= XZ66;XZ3 ^= XZ67;XZ4 ^= XZ68;XZ5 ^= XZ69;XZ6 ^= XZ70;XZ7 ^= XZ71;
+				XZ8 ^= XZ72;XZ9 ^= XZ73;XZ10 ^= XZ74;XZ11 ^= XZ75;XZ12 ^= XZ76;XZ13 ^= XZ77;XZ14 ^= XZ78;XZ15 ^= XZ79;
+				XZ16 ^= XZ80;XZ17 ^= XZ81;XZ18 ^= XZ82;XZ19 ^= XZ83;XZ20 ^= XZ84;XZ21 ^= XZ85;XZ22 ^= XZ86;XZ23 ^= XZ87;
+				XZ24 ^= XZ88;XZ25 ^= XZ89;XZ26 ^= XZ90;XZ27 ^= XZ91;XZ28 ^= XZ92;XZ29 ^= XZ93;XZ30 ^= XZ94;XZ31 ^= XZ95;
+				XZ32 ^= XZ96;XZ33 ^= XZ97;XZ34 ^= XZ98;XZ35 ^= XZ99;XZ36 ^= XZ100;XZ37 ^= XZ101;XZ38 ^= XZ102;XZ39 ^= XZ103;
+				XZ40 ^= XZ104;XZ41 ^= XZ105;XZ42 ^= XZ106;XZ43 ^= XZ107;XZ44 ^= XZ108;XZ45 ^= XZ109;XZ46 ^= XZ110;XZ47 ^= XZ111;
+				XZ48 ^= XZ112;XZ49 ^= XZ113;XZ50 ^= XZ114;XZ51 ^= XZ115;XZ52 ^= XZ116;XZ53 ^= XZ117;XZ54 ^= XZ118;XZ55 ^= XZ119;
+				XZ56 ^= XZ120;XZ57 ^= XZ121;XZ58 ^= XZ122;XZ59 ^= XZ123;XZ60 ^= XZ124;XZ61 ^= XZ125;XZ62 ^= XZ126;XZ63 ^= XZ127;
+   }
+
+#define NEOSCRYPT_FOUND (0xFF)
+#ifdef cl_khr_global_int32_base_atomics
+    #define SETFOUND(nonce) output[atomic_add(&output[NEOSCRYPT_FOUND], 1)] = nonce
+#else
+    #define SETFOUND(nonce) output[output[NEOSCRYPT_FOUND]++] = nonce
 #endif
 
+    if(XZ7 <= target) SETFOUND(glbid);
 
-
-#define SALSA_PERM		(uint16)(4, 9, 14, 3, 8, 13, 2, 7, 12, 1, 6, 11, 0, 5, 10, 15)
-#define SALSA_INV_PERM	(uint16)(12, 9, 6, 3, 0, 13, 10, 7, 4, 1, 14, 11, 8, 5, 2, 15)
-
-void SMix_Salsa(uint16 X[4], __global uint16 *V)
-{
-	#pragma unroll 1
-	for(int i = 0; i < 128; ++i)
-	{
-		ScratchpadStore(V, X, i);
-		neoscrypt_blkmix_salsa(X);
-	}
-
-	#pragma unroll 1
-	for(int i = 0; i < 128; ++i)
-	{
-		#ifdef SHITMAIN
-		const uint idx = convert_uchar(((uint *)X)[60] & 0x7F);
-		#else
-		const uint idx = convert_uchar(((uint *)X)[48] & 0x7F);
-		#endif
-		ScratchpadMix(X, V, idx);
-		neoscrypt_blkmix_salsa(X);
-	}
+    return;
 }
-
-void SMix_Chacha(uint16 X[4], __global uint16 *V)
-{
-	#pragma unroll 1
-	for(int i = 0; i < 128; ++i)
-	{
-		ScratchpadStore(V, X, i);
-		neoscrypt_blkmix_chacha(X);
-	}
-
-	#pragma unroll 1
-	for(int i = 0; i < 128; ++i)
-	{
-		const uint idx = convert_uchar(((uint *)X)[48] & 0x7F);
-		ScratchpadMix(X, V, idx);
-		neoscrypt_blkmix_chacha(X);
-	}
-}
-
-#define SALSA_PERM		(uint16)(4, 9, 14, 3, 8, 13, 2, 7, 12, 1, 6, 11, 0, 5, 10, 15)
-#define SALSA_INV_PERM	(uint16)(12, 9, 6, 3, 0, 13, 10, 7, 4, 1, 14, 11, 8, 5, 2, 15)
-
-__attribute__((reqd_work_group_size(WORKSIZE, 1, 1)))
-__kernel void search(__global const uchar* restrict input, __global uint* restrict output, __global uchar *padcache, const uint target)
-{
-#define CONSTANT_N 128
-#define CONSTANT_r 2
-	// X = CONSTANT_r * 2 * BLOCK_SIZE(64); Z is a copy of X for ChaCha
-	uint16 X[4], Z[4];
-	#ifdef WIDE_STRIPE
-	__global ulong16 *V = ((__global ulong16 *)padcache) + ((get_global_id(0) % get_global_size(0)) << 1);
-	#else
-	__global ulong16 *V = ((__global ulong16 *)(padcache) + (get_global_id(0) % get_global_size(0)));
-	#endif
-	//uchar outbuf[32];
-	uchar data[PASSWORD_LEN];
-
-	((ulong8 *)data)[0] = ((__global const ulong8 *)input)[0];
-	((ulong *)data)[8] = ((__global const ulong *)input)[8];
-	((uint *)data)[18] = ((__global const uint *)input)[18];
-	((uint *)data)[19] = get_global_id(0);
-
-    // X = KDF(password, salt)
-	//fastkdf(data, data, PASSWORD_LEN, (uchar *)X, 256);
-	fastkdf1(data, (uchar *)X);
-	
-	#ifndef SHITMAIN
-    // Process ChaCha 1st, Salsa 2nd and XOR them - run that through PBKDF2
-    CopyBytes128(Z, X, 2);
-	#else
-	
-	#pragma unroll
-    for(int i = 0; i < 4; ++i) ((uint16 *)Z)[i] = shuffle(((uint16 *)X)[i], SALSA_PERM);
-    
-    #endif
-	
-    // X = SMix(X); X & Z are swapped, repeat.
-    for(int i = 0;; ++i)
-    {
-		#ifdef SWAP
-		if (i) SMix_Salsa(X,V); else SMix_Chacha(X,V);
-		if(i) break;
-		SwapBytes128(X, Z, 256);
-		#else
-		if (i) SMix_Chacha(X,V); else SMix_Salsa(Z,V);
-		if(i) break;
-		#endif
-	}
-	
-	#if defined(SWAP) && defined(SHITMAIN)
-	#pragma unroll
-    for(int i = 0; i < 4; ++i) ((uint16 *)Z)[i] ^= shuffle(((uint16 *)X)[i], SALSA_INV_PERM);
-	fastkdf2(data, (uchar *)Z, output, target);
-	#elif defined(SHITMAIN)
-	#pragma unroll
-    for(int i = 0; i < 4; ++i) ((uint16 *)X)[i] ^= shuffle(((uint16 *)Z)[i], SALSA_INV_PERM);
-	fastkdf2(data, (uchar *)X, output, target);
-	#else
-	// blkxor(X, Z)
-	((ulong16 *)X)[0] ^= ((ulong16 *)Z)[0];
-	((ulong16 *)X)[1] ^= ((ulong16 *)Z)[1];
-
-	// output = KDF(password, X)
-	//fastkdf(data, (uchar *)X, FASTKDF_BUFFER_SIZE, outbuf, 32);
-	fastkdf2(data, (uchar *)X, output, target);
-	#endif
-}
-
-
-/*
-__attribute__((reqd_work_group_size(WORKSIZE, 1, 1)))
-__kernel void search(__global const uchar* restrict input, __global uint16 *XZOutput)
-{
-#define CONSTANT_N 128
-#define CONSTANT_r 2
-	// X = CONSTANT_r * 2 * BLOCK_SIZE(64); Z is a copy of X for ChaCha
-	uint16 X[4];
-	XZOutput += (4 * 2 * get_global_id(0));
-	
-	//uchar outbuf[32];
-	uchar data[PASSWORD_LEN];
-
-	((ulong8 *)data)[0] = ((__global const ulong8 *)input)[0];
-	((ulong *)data)[8] = ((__global const ulong *)input)[8];
-	((uint *)data)[18] = ((__global const uint *)input)[18];
-	((uint *)data)[19] = get_global_id(0);
-
-    // X = KDF(password, salt)
-	//fastkdf(data, data, PASSWORD_LEN, (uchar *)X, 256);
-	fastkdf1(data, (uchar *)X);
-	
-	for(int i = 0; i < 4; ++i) XZOutput[i] = X[i];
-	for(int i = 0; i < 4; ++i) XZOutput[i + 4] = X[i];
-	mem_fence(CLK_GLOBAL_MEM_FENCE);
-}
-
-__attribute__((reqd_work_group_size(WORKSIZE, 1, 1)))
-__kernel void search1(__global uint16 *XZOutput, __global uchar *padcache)
-{
-#define CONSTANT_N 128
-#define CONSTANT_r 2
-	// X = CONSTANT_r * 2 * BLOCK_SIZE(64); Z is a copy of X for ChaCha
-	uint16 X[4], Z[4];
-	#ifdef WIDE_STRIPE
-	__global ulong16 *V = ((__global ulong16 *)padcache) + ((get_global_id(0) % get_global_size(0)) << 1);
-	#else
-	__global ulong16 *V = ((__global ulong16 *)(padcache) + (get_global_id(0) % get_global_size(0)));
-	#endif
-	//uchar outbuf[32];
-	
-	XZOutput += (4 * 2 * get_global_id(0));
-	
-	for(int i = 0; i < 4; ++i) X[i] = XZOutput[i];
-	
-	SMix_Salsa(X,V);
-	
-	for(int i = 0; i < 4; ++i) XZOutput[i] = X[i];
-	mem_fence(CLK_GLOBAL_MEM_FENCE);
-}
-
-__attribute__((reqd_work_group_size(WORKSIZE, 1, 1)))
-__kernel void search2(__global uint16 *XZOutput, __global uchar *padcache)
-{
-#define CONSTANT_N 128
-#define CONSTANT_r 2
-	// X = CONSTANT_r * 2 * BLOCK_SIZE(64); Z is a copy of X for ChaCha
-	uint16 X[4], Z[4];
-	#ifdef WIDE_STRIPE
-	__global ulong16 *V = ((__global ulong16 *)padcache) + ((get_global_id(0) % get_global_size(0)) << 1);
-	#else
-	__global ulong16 *V = ((__global ulong16 *)(padcache) + (get_global_id(0) % get_global_size(0)));
-	#endif
-	//uchar outbuf[32];
-	
-	XZOutput += (4 * 2 * get_global_id(0));
-	
-	for(int i = 0; i < 4; ++i) X[i] = XZOutput[i + 4];
-	
-	SMix_Chacha(X,V);
-	
-	for(int i = 0; i < 4; ++i) XZOutput[i + 4] = X[i];
-	mem_fence(CLK_GLOBAL_MEM_FENCE);
-}
-
-__attribute__((reqd_work_group_size(WORKSIZE, 1, 1)))
-__kernel void search3(__global const uchar* restrict input, __global uint16 *XZOutput, __global uint* restrict output, const uint target)
-{
-	uint16 X[4], Z[4];
-	uchar data[PASSWORD_LEN];
-
-	((ulong8 *)data)[0] = ((__global const ulong8 *)input)[0];
-	((ulong *)data)[8] = ((__global const ulong *)input)[8];
-	((uint *)data)[18] = ((__global const uint *)input)[18];
-	((uint *)data)[19] = get_global_id(0);
-	
-	XZOutput += (4 * 2 * get_global_id(0));
-	
-	for(int i = 0; i < 4; ++i) X[i] = XZOutput[i];
-	for(int i = 0; i < 4; ++i) Z[i] = XZOutput[i + 4];
-	
-	// blkxor(X, Z)
-	((ulong16 *)X)[0] ^= ((ulong16 *)Z)[0];
-	((ulong16 *)X)[1] ^= ((ulong16 *)Z)[1];
-
-	// output = KDF(password, X)
-	//fastkdf(data, (uchar *)X, FASTKDF_BUFFER_SIZE, outbuf, 32);
-	fastkdf2(data, (uchar *)X, output, target);
-}
-*/

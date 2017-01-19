@@ -1,3 +1,31 @@
+#ifdef cl_amd_media_ops2
+#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable
+#else
+uint amd_bfe(uint src0, uint src1, uint src2)
+{
+    uint offset = src1 & 31;
+    uint width = src2 & 31;
+    if (width == 0)
+        return 0;
+    else if ((offset + width) < 32)
+        return (src0 << (32 - offset - width)) >> (32 - width);
+    else
+        return src0 >> offset;
+}
+#endif
+
+#ifdef cl_amd_media_ops
+#pragma OPENCL EXTENSION cl_amd_media_ops : enable
+#else
+#define amd_bitalign(src0, src1, src2) ((uint) (((((long)(src0)) << 32) | (long)(src1)) >> ((src2) & 31)))
+#endif
+
+#ifdef cl_nv_pragma_unroll
+#define as_ulong (ulong)
+#endif
+
+
+
 #define MAX_OUTPUTS 0xFFu
 #define barrier(x) mem_fence(x)
 
@@ -12,9 +40,6 @@
 #define THREADS_PER_HASH (128 / 16)
 #define HASHES_PER_LOOP (WORKSIZE / THREADS_PER_HASH)
 #define FNV_PRIME	0x01000193U
-
-#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable
-
 
 static __constant uint2 const Keccak_f1600_RC[24] = {
 	(uint2)(0x00000001, 0x00000000),

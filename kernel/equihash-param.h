@@ -1,5 +1,5 @@
 // Gateless Gate, a Zcash miner
-// Copyright 2016 zawawa @ bitcointalk.org
+// Copyright 2016-2017 zawawa @ bitcointalk.org
 //
 // The initial version of this software was based on:
 // SILENTARMY v5
@@ -72,6 +72,7 @@
 
 //#define OPTIM_FAST_INTEGER_DIVISION
 //#define OPTIM_COMPACT_ROW_COUNTERS
+#define OPTIM_IGNORE_ROW_COUNTER_OVERFLOWS
 
 #define ADJUSTED_LDS_ARRAY_SIZE(n) (n)
 

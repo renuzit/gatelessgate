@@ -71,7 +71,24 @@ static const __constant uint AES0_C[256] =
 	0xCBB0B07BU, 0xFC5454A8U, 0xD6BBBB6DU, 0x3A16162CU
 };
 
+#ifndef BYTE
+#ifdef cl_amd_media_ops2
+#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable
+#else
+uint amd_bfe(uint src0, uint src1, uint src2)
+{
+    uint offset = src1 & 31;
+    uint width = src2 & 31;
+    if (width == 0)
+        return 0;
+    else if ((offset + width) < 32)
+        return (src0 << (32 - offset - width)) >> (32 - width);
+    else
+        return src0 >> offset;
+}
+#endif
 #define BYTE(x, y)	(amd_bfe((x), (y) << 3U, 8U))
+#endif
 
 uint4 AES_Round(const __local uint *AES0, const __local uint *AES1, const __local uint *AES2, const __local uint *AES3, const uint4 X, const uint4 key)
 {

@@ -46,6 +46,7 @@ static inline int nanosleep(const struct timespec *req, struct timespec *rem)
 	cgtime(&tstart);
 	msecs = (req->tv_sec * 1000) + ((999999 + req->tv_nsec) / 1000000);
 
+    timeBeginPeriod(1);
 	if (SleepEx(msecs, true) == WAIT_IO_COMPLETION) {
 		if (rem) {
 			struct timeval tdone, tnow, tleft;
@@ -65,8 +66,10 @@ static inline int nanosleep(const struct timespec *req, struct timespec *rem)
 			rem->tv_nsec = tleft.tv_usec * 1000;
 		}
 		errno = EINTR;
+        timeEndPeriod(1);
 		return -1;
 	}
+    timeEndPeriod(1);
 	return 0;
 }
 #endif

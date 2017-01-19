@@ -128,7 +128,7 @@ static void append_ethash_compiler_options(struct _build_kernel_data *data, stru
 static void append_neoscrypt_compiler_options(struct _build_kernel_data *data, struct cgpu_info *cgpu, struct _algorithm_t *algorithm)
 {
     char buf[255];
-    sprintf(buf, " %s-D MAX_GLOBAL_THREADS=%lu ",
+    sprintf(buf, " -legacy %s-D MAX_GLOBAL_THREADS=%lu ",
         ((cgpu->lookup_gap > 0) ? " -D LOOKUP_GAP=2 " : ""), (unsigned long)cgpu->thread_concurrency);
     strcat(data->compiler_options, buf);
 
@@ -940,7 +940,7 @@ static cl_int queue_blake_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_un
 
     le_target = *(cl_ulong *)(blk->work->device_target + 24);
     flip80(clState->cldata, blk->work->data);
-    status = clEnqueueWriteBuffer(clState->commandQueue, clState->CLbuffer0, true, 0, 80, clState->cldata, 0, NULL, NULL);
+    status = clEnqueueWriteBuffer(clState->commandQueue, clState->CLbuffer0, CL_TRUE, 0, 80, clState->cldata, 0, NULL, NULL);
 
     CL_SET_ARG(clState->outputBuffer);
     CL_SET_ARG(blk->work->blk.ctx_a);
@@ -983,6 +983,7 @@ static cl_int queue_ethash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_u
     cg_ilock(&dag->lock);
     if (dag->current_epoch != blk->work->eth_epoch) {
         cl_ulong CacheSize = EthGetCacheSize(blk->work->eth_epoch);
+        applog(LOG_DEBUG, "CacheSize: %d", CacheSize);
         cg_ulock(&dag->lock);
         if (dag->dag_buffer == NULL || blk->work->eth_epoch > dag->max_epoch) {
             if (dag->dag_buffer != NULL) {
@@ -997,7 +998,9 @@ static cl_int queue_ethash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_u
                 cg_dwlock(&pool->data_lock);
             }
             dag->max_epoch = blk->work->eth_epoch + eth_future_epochs;
-            dag->dag_buffer = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, EthGetDAGSize(dag->max_epoch), NULL, &status);
+            size_t dag_size = EthGetDAGSize(dag->max_epoch);
+            applog(LOG_DEBUG, "dag_size: %d", dag_size);
+            dag->dag_buffer = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, dag_size, NULL, &status);
             if (status != CL_SUCCESS) {
                 cg_runlock(&pool->data_lock);
                 dag->max_epoch = 0;
@@ -1063,7 +1066,7 @@ static cl_int queue_ethash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_u
     cl_uint ItemsArg = DAGSize / 128;
 
     // DO NOT flip80.
-    status |= clEnqueueWriteBuffer(clState->commandQueue, clState->CLbuffer0, true, 0, 32, blk->work->data, 0, NULL, NULL);
+    status |= clEnqueueWriteBuffer(clState->commandQueue, clState->CLbuffer0, CL_FALSE, 0, 32, blk->work->data, 0, NULL, NULL);
 
     CL_SET_ARG(clState->outputBuffer);
     CL_SET_ARG(clState->CLbuffer0);
@@ -1201,8 +1204,6 @@ static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe
             work_items = NR_ROWS * worksize;
         }
         CL_SET_ARG(clState->padbuffer8);
-        //if (round == PARAM_K - 1)
-        //  CL_SET_ARG(clState->outputBuffer);
         status |= clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL, &work_items, &worksize, 0, NULL, NULL);
     }
 
