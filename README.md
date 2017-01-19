@@ -1,13 +1,28 @@
 # Gateless Gate
 
-- [Download precompiled binaries for 64-bit Windows (0.1.1)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.1/gatelessgate-0.1.1-win64.zip) 
-- [Download the source code for Linux (0.1.1)](https://github.com/zawawawa/gatelessgate/archive/v0.1.1.tar.gz)
+- [Download precompiled binaries for 64-bit Windows (0.1.2)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.2/gatelessgate-0.1.2-win64.zip) 
+- [Download the source code for Linux (0.1.2)](https://github.com/zawawawa/gatelessgate/archive/v0.1.2.tar.gz)
 
-Gateless Gate is a cross-platform OpenCL Zcash miner. It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://github.com/mbevand/silentarmy) with a significant speed boost combined with the well-tested user-interface and back-end of [sgminer-gm](https://github.com/genesismining/sgminer-gm). (This miner runs at around 223 sol/s on RX 480 and 163 sol/s on GTX 1060 3GB.) Although the current foci of development are Windows operating systems, you should be able to run on Linux without problems.
+Gateless Gate is a cross-platform OpenCL ZEC/ETH/XMR/FTC miner for AMD and NVIDIA video cards.
+It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://github.com/mbevand/silentarmy) with a significant speed
+boost combined with the well-tested user-interface and back-end of [sgminer-gm](https://github.com/genesismining/sgminer-gm).
+(This miner runs at around 223 sol/s on RX 480 and 163 sol/s on GTX 1060 3GB.)
+Although the current foci of development are Windows operating systems, 
+you should be able to run on Linux without problems.
 
-On 64-bit Windows operating systems, all you have to do for mining is to download the precompiled binary and edit and run `gatelessgate.bat`. On Linux, you should be able to build the miner with the Makefile in the repository. Note that fglrx drivers are not supported. Please refer to the documentation of the original sgminer-gm below for details. 
+On 64-bit Windows operating systems, all you have to do for mining is to download the precompiled binary and edit and run 
+one of the .BAT files. This miner has been tested against Crimson 16.9.2 and NVIDIA Display Driver 376.33.
 
-If you find this miner useful, please consider donations to:
+On Linux, you should be able to build the miner with the Makefile in the repository. Note that fglrx drivers are not supported
+and that you need RADEON PRO drivers. Please refer to the documentation of the original sgminer-gm below for details. 
+
+Please note that this software is still in the alpha stage, and some of its features are highly experimental. If you have questions or
+feedback, please post them to:
+
+https://bitcointalk.org/index.php?topic=1716584
+https://forum.z.cash/t/gateless-gate-a-fork-of-the-silentarmy-miner-has-arrived/12838
+
+If you find this miner useful or would like to contribute to further development, please consider donations to:
 
 * `1BHwDWVerUTiKxhHPf2ubqKKiBMiKQGomZ` (Bitcoin)
 * `t1NwUDeSKu4BxkD58mtEYKDjzw5toiLfmCu` (Zcash) 

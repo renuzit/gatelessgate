@@ -45,13 +45,28 @@
  */
 
 
-/* NeoScrypt(128, 2, 1) with Salsa20/20 and ChaCha20/20
- * Optimised for the AMD GCN, VLIW4 and VLIW5 architectures
- * v7, 20-Feb-2016 */
 
 
 /* Use amd_bitalign() because amd_bytealign() might be broken in old drivers */
+#ifdef cl_amd_media_ops
 #pragma OPENCL EXTENSION cl_amd_media_ops : enable
+#elif defined(cl_nv_pragma_unroll)
+uint amd_bitalign(uint src0, uint src1, uint src2) 
+{
+    uint dest;
+    asm("shf.r.wrap.b32 %0, %2, %1, %3;" : "=r"(dest) : "r"(src0), "r"(src1), "r"(src2));
+    return dest;
+}
+#else
+#define amd_bitalign(src0, src1, src2) ((uint) (((((ulong)(src0)) << 32) | (ulong)(src1)) >> ((src2) & 31)))
+#endif
+
+
+
+//#if defined(cl_nv_pragma_unroll)
+#define volatile
+//#endif
+
 
 
 /* memcpy() of 4-byte aligned memory */

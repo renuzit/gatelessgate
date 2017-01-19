@@ -128,7 +128,8 @@ static void append_ethash_compiler_options(struct _build_kernel_data *data, stru
 static void append_neoscrypt_compiler_options(struct _build_kernel_data *data, struct cgpu_info *cgpu, struct _algorithm_t *algorithm)
 {
     char buf[255];
-    sprintf(buf, " -legacy %s-D MAX_GLOBAL_THREADS=%lu ",
+    sprintf(buf, " %s %s-D MAX_GLOBAL_THREADS=%lu ",
+        (strcmp(platform_name, "AMD Accelerated Parallel Processing") == 0 ? "-legacy -O5" : ""),
         ((cgpu->lookup_gap > 0) ? " -D LOOKUP_GAP=2 " : ""), (unsigned long)cgpu->thread_concurrency);
     strcat(data->compiler_options, buf);
 

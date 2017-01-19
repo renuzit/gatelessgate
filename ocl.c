@@ -52,6 +52,7 @@
 
 
 int opt_platform_id = -1;
+char platform_name[256] = {'\0'};
 
 bool get_opencl_platform(int preferred_platform_id, cl_platform_id *platform) {
   cl_int status;
@@ -119,6 +120,7 @@ int clDevicesNum(void) {
   status = clGetPlatformInfo(platform, CL_PLATFORM_NAME, sizeof(pbuff), pbuff, NULL);
   if (status == CL_SUCCESS)
     applog(LOG_INFO, "CL Platform name: %s", pbuff);
+  strcpy(platform_name, pbuff);
   status = clGetPlatformInfo(platform, CL_PLATFORM_VERSION, sizeof(pbuff), pbuff, NULL);
   if (status == CL_SUCCESS)
     applog(LOG_INFO, "CL Platform version: %s", pbuff);

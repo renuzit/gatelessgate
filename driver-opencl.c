@@ -1389,22 +1389,26 @@ void double_to_timespec(double dt, struct timespec *t)
 #define exp9         1000000000i64     //1E+9
 #define w2ux 116444736000000000i64     //1.jan1601 to 1.jan1970
 void unix_time(struct timespec *spec)
-{  __int64 wintime; GetSystemTimeAsFileTime((FILETIME*)&wintime); 
-   wintime -=w2ux;  spec->tv_sec  =wintime / exp7;                 
-                    spec->tv_nsec =wintime % exp7 *100;
+{
+    __int64 wintime; GetSystemTimeAsFileTime((FILETIME*)&wintime);
+    wintime -= w2ux;  spec->tv_sec = wintime / exp7;
+    spec->tv_nsec = wintime % exp7 * 100;
 }
 int clock_gettime(int, timespec *spec)
-{  static  struct timespec startspec; static double ticks2nano;
-   static __int64 startticks, tps =0;    __int64 tmp, curticks;
-   QueryPerformanceFrequency((LARGE_INTEGER*)&tmp); //some strange system can
-   if (tps !=tmp) { tps =tmp; //init ~~ONCE         //possibly change freq ?
-                    QueryPerformanceCounter((LARGE_INTEGER*)&startticks);
-                    unix_time(&startspec); ticks2nano =(double)exp9 / tps; }
-   QueryPerformanceCounter((LARGE_INTEGER*)&curticks); curticks -=startticks;
-   spec->tv_sec  =startspec.tv_sec   +         (curticks / tps);
-   spec->tv_nsec =startspec.tv_nsec  + (double)(curticks % tps) * ticks2nano;
-         if (!(spec->tv_nsec < exp9)) { spec->tv_sec++; spec->tv_nsec -=exp9; }
-   return 0;
+{
+    static  struct timespec startspec; static double ticks2nano;
+    static __int64 startticks, tps = 0;    __int64 tmp, curticks;
+    QueryPerformanceFrequency((LARGE_INTEGER*)&tmp); //some strange system can
+    if (tps != tmp) {
+        tps = tmp; //init ~~ONCE         //possibly change freq ?
+        QueryPerformanceCounter((LARGE_INTEGER*)&startticks);
+        unix_time(&startspec); ticks2nano = (double)exp9 / tps;
+    }
+    QueryPerformanceCounter((LARGE_INTEGER*)&curticks); curticks -= startticks;
+    spec->tv_sec = startspec.tv_sec + (curticks / tps);
+    spec->tv_nsec = startspec.tv_nsec + (double)(curticks % tps) * ticks2nano;
+    if (!(spec->tv_nsec < exp9)) { spec->tv_sec++; spec->tv_nsec -= exp9; }
+    return 0;
 }
 #endif
 
@@ -1479,38 +1483,41 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
             status |= clEnqueueReadBuffer(clState->commandQueue, clState->outputBuffer, CL_FALSE, 0, length, thrdata->res, 0, NULL, &read_event);
 
             // NVIDIA busy CPU fix
+            if (strcmp(platform_name, "NVIDIA CUDA") == 0) {
+                struct timespec start_time, target_time;
+                get_time(&start_time);
 
-            struct timespec start_time, target_time;
-            get_time(&start_time);
+                double dstart, dtarget = 0;
+                dstart = timespec_to_double(&start_time);
+                dtarget = dstart + thrdata->kern_avg_run_time;
+                double_to_timespec(dtarget, &target_time);
 
-            double dstart, dtarget = 0;
-            dstart = timespec_to_double(&start_time);
-            dtarget = dstart + thrdata->kern_avg_run_time;
-            double_to_timespec(dtarget, &target_time);
-
-// Ratio of time to busy wait for the solution (0-1)
-// The higher value the higher CPU usage with Nvidia
+                // Ratio of time to busy wait for the solution (0-1)
+                // The higher value the higher CPU usage with Nvidia
 #define SLEEP_SKIP_RATIO 0.10
 
-            struct timespec t;
-            get_time(&t);
-            double dt = timespec_to_double(&t);
-            double delta = dtarget - dt;
-            if (delta > 0) {
-                double_to_timespec(delta * (1 - SLEEP_SKIP_RATIO), &t);
-                nanosleep(&t, NULL);
+                struct timespec t;
+                get_time(&t);
+                double dt = timespec_to_double(&t);
+                double delta = dtarget - dt;
+                if (delta > 0) {
+                    double_to_timespec(delta * (1 - SLEEP_SKIP_RATIO), &t);
+                    nanosleep(&t, NULL);
+                }
+                clWaitForEvents(1, &read_event);
+
+                struct timespec end_time;
+                get_time(&end_time);
+
+                double dend;
+                dstart = timespec_to_double(&start_time);
+                dend = timespec_to_double(&end_time);
+
+                delta = dend - dstart;
+                thrdata->kern_avg_run_time = thrdata->kern_avg_run_time * 6.0 / 10.0 + delta * ((4.0 / 10.0));
+            } else {
+                clWaitForEvents(1, &read_event);
             }
-            clWaitForEvents(1, &read_event);
-
-            struct timespec end_time;
-            get_time(&end_time);
-
-            double dend;
-            dstart = timespec_to_double(&start_time);
-            dend = timespec_to_double(&end_time);
-
-            delta = dend - dstart;
-            thrdata->kern_avg_run_time = thrdata->kern_avg_run_time * 6.0 / 10.0 + delta * ((4.0 / 10.0));
 
             if (status == CL_SUCCESS) {
                 if (sols->nr > MAX_SOLS) {

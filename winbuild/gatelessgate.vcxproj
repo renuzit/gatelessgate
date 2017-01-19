@@ -243,6 +243,7 @@ del  "$(OutDir)*.bin"</Command>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <WholeProgramOptimization>true</WholeProgramOptimization>
+      <AdditionalOptions>-D_VCRTIMP= -D_ACRTIMP= %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -250,12 +251,13 @@ del  "$(OutDir)*.bin"</Command>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>false</OptimizeReferences>
       <AdditionalLibraryDirectories>$(ProjectDir)dist\lib\x64;$(ProjectDir)jansson\Release\x64</AdditionalLibraryDirectories>
-      <AdditionalDependencies>%(AdditionalDependencies);OpenCL.lib;legacy_stdio_definitions.lib</AdditionalDependencies>
+      <AdditionalDependencies>libvcruntime.lib;libcmt.lib;%(AdditionalDependencies);OpenCL.lib;legacy_stdio_definitions.lib</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>LIBCMT</IgnoreSpecificDefaultLibraries>
       <LinkTimeCodeGeneration>
       </LinkTimeCodeGeneration>
       <StackReserveSize>16777216</StackReserveSize>
       <StackCommitSize>65536</StackCommitSize>
+      <AdditionalOptions>/nodefaultlib:vcruntime.lib /nodefaultlib:msvcrt.lib %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /Y /E /I "$(ProjectDir)..\kernel" "$(OutDir)kernel"
@@ -502,6 +504,7 @@ del  "$(OutDir)*.bin"</Command>
     <None Include="..\kernel\yescrypt.cl" />
     <None Include="..\kernel\yescrypt_essential.cl" />
     <None Include="..\kernel\zuikkis.cl" />
+    <None Include="..\README.md" />
     <None Include="README.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

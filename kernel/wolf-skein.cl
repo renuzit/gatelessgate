@@ -3,6 +3,13 @@
 
 #ifdef cl_amd_media_ops
 #pragma OPENCL EXTENSION cl_amd_media_ops : enable
+#elif defined(cl_nv_pragma_unroll)
+uint amd_bitalign(uint src0, uint src1, uint src2) 
+{
+    uint dest;
+    asm("shf.r.wrap.b32 %0, %2, %1, %3;" : "=r"(dest) : "r"(src0), "r"(src1), "r"(src2));
+    return dest;
+}
 #else
 #define amd_bitalign(src0, src1, src2) ((uint) (((((long)(src0)) << 32) | (long)(src1)) >> ((src2) & 31)))
 #endif
