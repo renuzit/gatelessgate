@@ -156,24 +156,27 @@ output.
 
 Single pool:
 
+```
 sgminer -o http://pool:port -u username -p password
+```
 
 Multiple pools:
-
+```
 sgminer -o http://pool1:port -u pool1username -p pool1password -o http://pool2:port -u pool2usernmae -p pool2password
+```
 
 Single pool with a standard http proxy, regular desktop:
-
+```
 sgminer -o "http:proxy:port|http://pool:port" -u username -p password
-
+```
 Single pool with a socks5 proxy, regular desktop:
-
+```
 sgminer -o "socks5:proxy:port|http://pool:port" -u username -p password
-
+```
 Single pool with stratum protocol support:
-
+```
 sgminer -o stratum+tcp://pool:port -u username -p password
-
+```
 The list of proxy types are:
  http:    standard http 1.1 proxy
  http0:   http 1.0 proxy
@@ -199,28 +202,28 @@ See `doc/GPU` for more information regarding GPU mining and
 ## Runtime usage
 
 The following options are available while running with a single keypress:
-
+```
 [P]ool management [G]PU management [S]ettings [D]isplay options [Q]uit
-
+```
 P gives you:
-
+```
 Current pool management strategy: Failover
 [F]ailover only disabled
 [A]dd pool [R]emove pool [D]isable pool [E]nable pool
 [C]hange management strategy [S]witch pool [I]nformation
-
+```
 
 S gives you:
-
+```
 [Q]ueue: 1
 [S]cantime: 60
 [E]xpiry: 120
 [W]rite config file
 [C]gminer restart
-
+```
 
 D gives you:
-
+```
 [N]ormal [C]lear [S]ilent mode (disable all output)
 [D]ebug:off
 [P]er-device:off
@@ -230,13 +233,13 @@ D gives you:
 [W]orkTime details:off
 co[M]pact: off
 [L]og interval:5
-
+```
 
 Q quits the application.
 
 
 G gives you something like:
-
+```
 GPU 0: [124.2 / 191.3 Mh/s] [A:77  R:33  HW:0  U:1.73/m  WU 1.73/m]
 Temp: 67.0 C
 Fan Speed: 35% (2500 RPM)
@@ -251,22 +254,23 @@ Thread 1: 60.2 Mh/s Enabled ALIVE
 
 [E]nable [D]isable [R]estart GPU [C]hange settings
 Or press any other key to continue
-
+```
 
 The running log shows output like this:
-
+```
  [2012-10-12 18:02:20] Accepted f0c05469 Diff 1/1 GPU 0 pool 1
  [2012-10-12 18:02:22] Accepted 218ac982 Diff 7/1 GPU 1 pool 1
  [2012-10-12 18:02:23] Accepted d8300795 Diff 1/1 GPU 3 pool 1
  [2012-10-12 18:02:24] Accepted 122c1ff1 Diff 14/1 GPU 1 pool 1
-
+```
 The 8 byte hex value are the 2nd 8 bytes of the share being submitted to the
 pool. The 2 diff values are the actual difficulty target that share reached
 followed by the difficulty target the pool is currently asking for.
 
 The output line shows the following:
+```
 (5s):1713.6 (avg):1707.8 Mh/s | A:729  R:8  HW:0  WU:22.53/m
-
+```
 Each column is as follows:
 5s:  A 5 second exponentially decaying average hash rate
 avg: An all time average hash rate
@@ -275,9 +279,9 @@ R:  The total difficulty of Rejected shares
 HW:  The number of HardWare errors
 WU:  The Work Utility defined as the number of diff1 shares work / minute
      (accepted or rejected).
-
+```
  GPU 1: 73.5C 2551RPM | 427.3/443.0Mh/s | A:8 R:0 HW:0 WU:4.39/m
-
+```
 Each column is as follows:
 Temperature (if supported)
 Fanspeed (if supported)
@@ -289,8 +293,9 @@ The number of hardware erorrs
 The work utility defined as the number of diff1 shares work / minute
 
 The sgminer status line shows:
+```
  ST: 1  SS: 0  NB: 1  LW: 8  GF: 1  RF: 1
-
+```
 ST is STaged work items (ready to use).
 SS is Stale Shares discarded (detected and not submitted so don't count as rejects)
 NB is New Blocks detected on the network
@@ -299,8 +304,9 @@ GF is Getwork Fail Occasions (server slow to provide work)
 RF is Remote Fail occasions (server slow to accept work)
 
 The block display shows:
+```
 Block: 0074c5e482e34a506d2a051a...  Started: [17:17:22]  Best share: 2.71K
-
+```
 This shows a short stretch of the current block, when the new block started,
 and the all time best difficulty share you've found since starting sgminer
 this time.
