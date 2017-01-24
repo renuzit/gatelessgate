@@ -24,7 +24,7 @@
 #define uint uint32_t
 #define uchar uint8_t
 #endif
-#ifdef cl_amd_fp64
+#if defined(cl_amd_fp64) && !defined(AMD)
 #define AMD
 #endif
 #if (defined(__Tahiti__) || defined(__Pitcairn__) || defined(__Capeverde__) || defined(__Oland__)) && !defined(AMD_LEGACY)
