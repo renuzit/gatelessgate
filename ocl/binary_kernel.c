@@ -12,14 +12,27 @@ cl_program load_opencl_binary_kernel(build_kernel_data *data)
   cl_program program;
   cl_program ret = NULL;
 
-  binaryfile = fopen(data->binary_filename, "rb");
+  char bin_path[1024];
+#ifdef _MSC_VER
+  strcpy(bin_path, "windows\\");
+#elif defined (WIN32)
+  strcpy(bin_path, "windows/");
+#else
+  strcpy(bin_path, "linux/");
+#endif
+  strcat(bin_path, data->binary_filename);
+  binaryfile = fopen(bin_path, "rb");
+  if (!binaryfile) {
+      binaryfile = fopen(data->binary_filename, "rb");
+      strcpy(bin_path, data->binary_filename);
+  }
   if (!binaryfile) {
     applog(LOG_DEBUG, "No binary found, generating from source");
     goto out;
   } else {
     struct stat binary_stat;
 
-    if (unlikely(stat(data->binary_filename, &binary_stat))) {
+    if (unlikely(stat(bin_path, &binary_stat))) {
       applog(LOG_DEBUG, "Unable to stat binary, generating from source");
       goto out;
     }
@@ -43,7 +56,7 @@ cl_program load_opencl_binary_kernel(build_kernel_data *data)
       goto out;
     }
 
-    applog(LOG_DEBUG, "Loaded binary image %s", data->binary_filename);
+    applog(LOG_DEBUG, "Loaded binary image %s", bin_path);
 
     /* create a cl program executable for all the devices specified */
     status = clBuildProgram(program, 1, data->device, NULL, NULL, NULL);
