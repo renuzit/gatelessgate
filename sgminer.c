@@ -149,8 +149,24 @@ int mining_threads;
 
 #ifdef HAVE_CURSES
 bool use_curses = true;
+#define COLOR_PAIR_WHITE   1
+#define COLOR_PAIR_RED     2
+#define COLOR_PAIR_GREEN   3
+#define COLOR_PAIR_BLUE    4
+#define COLOR_PAIR_CYAN    5
+#define COLOR_PAIR_YELLOW  6
+#define COLOR_PAIR_MAGENTA 7
+
+#define COLOR_PAIR_ERROR   COLOR_PAIR(COLOR_PAIR_RED)
+#define COLOR_PAIR_WARNING COLOR_PAIR(COLOR_PAIR_YELLOW)
+#define COLOR_PAIR_INFO    COLOR_PAIR(COLOR_PAIR_MAGENTA)
+#define COLOR_PAIR_MISC COLOR_PAIR(COLOR_PAIR_WHITE)
+#define COLOR_PAIR_STATUS COLOR_PAIR(COLOR_PAIR_GREEN)
+#define COLOR_PAIR_DEVICE_STATUS COLOR_PAIR(COLOR_PAIR_GREEN)
+#define COLOR_PAIR_BORDER COLOR_PAIR(COLOR_PAIR_CYAN)
+#define COLOR_PAIR_FIRST_LINE COLOR_PAIR(COLOR_PAIR_CYAN)
 #else
-bool use_curses;
+bool use_curses = false;
 #endif
 
 static bool opt_submit_stale = true;
@@ -2859,12 +2875,27 @@ static void curses_print_status(void)
     struct pool *pool = current_pool();
     unsigned short int line = 0;
 
+    if (has_colors())
+       wattron(statuswin, COLOR_PAIR_FIRST_LINE | A_BOLD);
+
     wattron(statuswin, A_BOLD);
     cg_mvwprintw(statuswin, line, 0, PACKAGE " " CGMINER_VERSION " - Started: %s", datestamp);
     curses_print_uptime(&launch_time);
     wattroff(statuswin, A_BOLD);
 
+    if (has_colors())
+       wattroff(statuswin, COLOR_PAIR_FIRST_LINE | A_BOLD);
+
+    if (has_colors())
+       wattron(statuswin, COLOR_PAIR_BORDER | A_BOLD);
+
     mvwhline(statuswin, ++line, 0, '-', 80);
+
+    if (has_colors())
+       wattroff(statuswin, COLOR_PAIR_BORDER | A_BOLD);
+
+    if (has_colors())
+       wattron(statuswin, COLOR_PAIR_STATUS | A_BOLD);
 
     cg_mvwprintw(statuswin, ++line, 0, "%s", statusline);
     wclrtoeol(statuswin);
@@ -2890,8 +2921,20 @@ static void curses_print_status(void)
     cg_mvwprintw(statuswin, ++line, 0, "Block: %s...  Diff:%s  Started: %s  Best share: %s   ",
         prev_block, block_diff, blocktime, best_share);
 
+    if (has_colors())
+       wattroff(statuswin, COLOR_PAIR_STATUS | A_BOLD);
+
+    if (has_colors())
+       wattron(statuswin, COLOR_PAIR_BORDER | A_BOLD);
+
     mvwhline(statuswin, ++line, 0, '-', 80);
     mvwhline(statuswin, statusy - 1, 0, '-', 80);
+
+    if (has_colors())
+       wattroff(statuswin, COLOR_PAIR_BORDER | A_BOLD);
+
+    if (has_colors())
+       wattron(statuswin, COLOR_PAIR_DEVICE_STATUS);
 
     cg_mvwprintw(statuswin, devcursor - 1, 0, "[P]ool management [G]PU management [S]ettings [D]isplay options [Q]uit");
 }
@@ -2934,6 +2977,9 @@ static void curses_print_devstatus(struct cgpu_info *cgpu, int count)
     cgpu->utility = cgpu->accepted / dev_runtime * 60;
     wu = cgpu->diff1 / dev_runtime * 60;
 
+    if (has_colors())
+        wattron(statuswin, COLOR_PAIR_DEVICE_STATUS | A_BOLD);
+
     wmove(statuswin, devcursor + count, 0);
     cg_wprintw(statuswin, "%s %*d: ", cgpu->drv->name, dev_width, cgpu->device_id);
     logline[0] = '\0';
@@ -2970,6 +3016,9 @@ static void curses_print_devstatus(struct cgpu_info *cgpu, int count)
     logline[0] = '\0';
     cgpu->drv->get_statline(logline, sizeof(logline), cgpu);
     cg_wprintw(statuswin, "%s", logline);
+
+    if (has_colors())
+        wattroff(statuswin, COLOR_PAIR_DEVICE_STATUS | A_BOLD);
 
     wclrtoeol(statuswin);
 }
@@ -3080,22 +3129,30 @@ bool _log_curses_only(int prio, const char *datetime, const char *str)
     if (curses_active) {
         if (!opt_loginput || high_prio) {
             if (has_colors()) {
-                start_color();
-                init_pair(1, COLOR_GREEN, COLOR_BLACK);
-                init_pair(2, COLOR_CYAN, COLOR_BLACK);
-                init_pair(3, COLOR_YELLOW, COLOR_BLACK);
-                init_pair(4, COLOR_RED, COLOR_BLACK);
-                wattron(logwin, ((prio == LOG_ERR)     ? COLOR_PAIR(4) :
-                                 (prio == LOG_WARNING) ? COLOR_PAIR(3) :
-                                 (prio == LOG_INFO)    ? COLOR_PAIR(1) :
-                                                         COLOR_PAIR(2)) | A_BOLD);
+                wattron(logwin, ((prio == LOG_ERR)     ? COLOR_PAIR_ERROR :
+                                 (prio == LOG_WARNING) ? COLOR_PAIR_WARNING :
+                                 (prio == LOG_INFO)    ? COLOR_PAIR_INFO :
+                                                         COLOR_PAIR_MISC));
             }
-            wprintw(logwin, "%s%s\n", datetime, str);
+            wprintw(logwin, "%s", datetime);
             if (has_colors()) {
-                wattroff(logwin, ((prio == LOG_ERR)     ? COLOR_PAIR(4) :
-                                  (prio == LOG_WARNING) ? COLOR_PAIR(3) :
-                                  (prio == LOG_INFO)    ? COLOR_PAIR(1) :
-                                                          COLOR_PAIR(2)) | A_BOLD);
+                wattroff(logwin, ((prio == LOG_ERR)     ? COLOR_PAIR_ERROR :
+                                 (prio == LOG_WARNING) ? COLOR_PAIR_WARNING :
+                                 (prio == LOG_INFO)    ? COLOR_PAIR_INFO :
+                                                         COLOR_PAIR_MISC));
+            }
+            if (has_colors()) {
+                wattron(logwin, ((prio == LOG_ERR)     ? COLOR_PAIR_ERROR :
+                                 (prio == LOG_WARNING) ? COLOR_PAIR_WARNING :
+                                 (prio == LOG_INFO)    ? COLOR_PAIR_INFO :
+                                                         COLOR_PAIR_MISC) | A_BOLD);
+            }
+            wprintw(logwin, "%s\n", str);
+            if (has_colors()) {
+                wattroff(logwin, ((prio == LOG_ERR)     ? COLOR_PAIR_ERROR :
+                                 (prio == LOG_WARNING) ? COLOR_PAIR_WARNING :
+                                 (prio == LOG_INFO)    ? COLOR_PAIR_INFO :
+                                                         COLOR_PAIR_MISC) | A_BOLD);
             }
             if (high_prio) {
                 touchwin(logwin);
@@ -8945,6 +9002,16 @@ void enable_curses(void) {
     enable_curses_windows();
     curses_active = true;
     statusy = logstart;
+    if (has_colors()) {
+        start_color();
+        init_pair(COLOR_PAIR_WHITE, COLOR_WHITE, COLOR_BLACK);
+        init_pair(COLOR_PAIR_RED, COLOR_RED, COLOR_BLACK);
+        init_pair(COLOR_PAIR_GREEN, COLOR_GREEN, COLOR_BLACK);
+        init_pair(COLOR_PAIR_BLUE, COLOR_BLUE, COLOR_BLACK);
+        init_pair(COLOR_PAIR_CYAN, COLOR_CYAN, COLOR_BLACK);
+        init_pair(COLOR_PAIR_YELLOW, COLOR_YELLOW, COLOR_BLACK);
+        init_pair(COLOR_PAIR_MAGENTA, COLOR_MAGENTA, COLOR_BLACK);
+    }
     unlock_curses();
 }
 #endif
