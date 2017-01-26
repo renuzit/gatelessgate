@@ -33,7 +33,6 @@
 #ifdef cl_nv_pragma_unroll
 #define NVIDIA
 #endif
-//#define ENABLE_DEBUG
 
 
 
@@ -47,14 +46,12 @@
 #define NR_ROWS_LOG              12  /* 12, 13, 14, 15, or 16. */
 #define NR_SLOTS                 684
 
-#define LDS_COLL_SIZE            (NR_SLOTS * 67 / 100)
+#define LDS_COLL_SIZE            793
 
-#define LOCAL_WORK_SIZE          WORKSIZE  
-#define LOCAL_WORK_SIZE_SOLS     WORKSIZE
 #define LOCAL_WORK_SIZE_ROUND0   WORKSIZE
-#define LOCAL_WORK_SIZE_POTENTIAL_SOLS WORKSIZE
-
-#define ROUND0_INPUTS_PER_WORK_ITEM 1
+#define LOCAL_WORK_SIZE          WORKSIZE
+#define LOCAL_WORK_SIZE_POTENTIAL_SOLS WORKSIZE  
+#define LOCAL_WORK_SIZE_SOLS     WORKSIZE
 
 #if defined(AMD)
 #define THREADS_PER_WRITE(round) (((round) <= 5) ? 2 : 1)
@@ -73,6 +70,9 @@
 //#define OPTIM_FAST_INTEGER_DIVISION
 //#define OPTIM_COMPACT_ROW_COUNTERS
 #define OPTIM_IGNORE_ROW_COUNTER_OVERFLOWS
+#if defined(AMD) && !defined(AMD_LEGACY)
+#define OPTIM_ON_THE_FLY_COLLISION_SEARCH
+#endif
 
 #define ADJUSTED_LDS_ARRAY_SIZE(n) (n)
 

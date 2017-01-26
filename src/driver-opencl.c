@@ -1478,7 +1478,7 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
         work->thr = thr;
         do {
 
-            status = thrdata->queue_kernel_parameters(clState, &work->blk, globalThreads[0]);
+            status = thrdata->queue_kernel_parameters(clState, &work->blk, thr->device_thread);
             cl_event read_event;
             status |= clEnqueueReadBuffer(clState->commandQueue, clState->outputBuffer, CL_FALSE, 0, length, thrdata->res, 0, NULL, &read_event);
 

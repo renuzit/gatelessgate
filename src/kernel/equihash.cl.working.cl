@@ -24,6 +24,7 @@
 #ifdef AMD
 #pragma OPENCL EXTENSION cl_amd_vec3 : enable
 #endif
+//#pragma OPENCL EXTENSION cl_ext_atomic_counters_32 : enable
 
 
 
@@ -117,22 +118,6 @@ __global uint *get_ref_ptr(__global char *ht, uint round, uint row, uint slot)
     return get_xi_ptr(ht, round, row, slot) + UINTS_IN_XI(round);
 }
 
-void get_row_counters_index(uint *rowIdx, uint *rowOffset, uint row)
-{
-    if (ROWS_PER_UINT == 3) {
-        uint r = (0x55555555 * row + (row >> 1) - (row >> 3)) >> 30;
-        *rowIdx = (row - r) * 0xAAAAAAAB;
-        *rowOffset = BITS_PER_ROW * r;
-    } else if (ROWS_PER_UINT == 6) {
-        uint r = (0x55555555 * row + (row >> 1) - (row >> 3)) >> 29;
-        *rowIdx = (row - r) * 0xAAAAAAAB * 2;
-        *rowOffset = BITS_PER_ROW * r;
-    } else {
-        *rowIdx = row / ROWS_PER_UINT;
-        *rowOffset = BITS_PER_ROW * (row % ROWS_PER_UINT);
-    }
-}
-
 uint get_row(uint round, uint xi0)
 {
     uint           row = 0;
@@ -167,25 +152,65 @@ uint get_row(uint round, uint xi0)
     return row;
 }
 
+void get_row_counters_index(uint *row_counter_index, uint *row_counter_offset, uint row)
+{
+    if (ROWS_PER_UINT == 3) {
+        uint r = (0x55555555 * row + (row >> 1) - (row >> 3)) >> 30;
+        *row_counter_index = (row - r) * 0xAAAAAAAB;
+        *row_counter_offset = BITS_PER_ROW * r;
+    } else if (ROWS_PER_UINT == 6) {
+        uint r = (0x55555555 * row + (row >> 1) - (row >> 3)) >> 29;
+        *row_counter_index = (row - r) * 0xAAAAAAAB * 2;
+        *row_counter_offset = BITS_PER_ROW * r;
+    } else {
+        *row_counter_index = row / ROWS_PER_UINT;
+        *row_counter_offset = BITS_PER_ROW * (row % ROWS_PER_UINT);
+    }
+}
+
 uint get_nr_slots(__global uint *row_counters, uint row_index)
 {
-    uint rowIdx, rowOffset, nr_slots;
-    get_row_counters_index(&rowIdx, &rowOffset, row_index);
-    nr_slots = (row_counters[rowIdx] >> rowOffset) & ROW_MASK;
+    uint row_counter_index, row_counter_offset, nr_slots;
+    get_row_counters_index(&row_counter_index, &row_counter_offset, row_index);
+    nr_slots = (row_counters[row_counter_index] >> row_counter_offset) & ROW_MASK;
     nr_slots = min(nr_slots, (uint)NR_SLOTS); // handle possible overflow in last round
     return nr_slots;
 }
 
-uint inc_row_counter(__global uint *rowCounters, uint row)
+uint get_nr_slots_local(__local uint *row_counters, uint row_index)
 {
-    uint rowIdx, rowOffset;
-    get_row_counters_index(&rowIdx, &rowOffset, row);
-    uint nr_slots = atomic_add(rowCounters + rowIdx, 1U << rowOffset);
-    nr_slots = (nr_slots >> rowOffset) & ROW_MASK;
+    uint row_counter_index, row_counter_offset, nr_slots;
+    get_row_counters_index(&row_counter_index, &row_counter_offset, row_index);
+    nr_slots = (row_counters[row_counter_index] >> row_counter_offset) & ROW_MASK;
+    nr_slots = min(nr_slots, (uint)NR_SLOTS); // handle possible overflow in last round
+    return nr_slots;
+}
+
+uint inc_row_counter(__global uint *row_counters, uint row)
+{
+    uint row_counter_index, row_counter_offset;
+    get_row_counters_index(&row_counter_index, &row_counter_offset, row);
+    uint nr_slots = atomic_add(row_counters + row_counter_index, 1U << row_counter_offset);
+    nr_slots = (nr_slots >> row_counter_offset) & ROW_MASK;
 #ifndef OPTIM_IGNORE_ROW_COUNTER_OVERFLOWS
     if (nr_slots >= NR_SLOTS) {
         // avoid overflows
-        atomic_sub(rowCounters + rowIdx, 1 << rowOffset);
+        atomic_sub(row_counters + row_counter_index, 1 << row_counter_offset);
+    }
+#endif
+    return nr_slots;
+}
+
+uint inc_local_row_counter(__local uint *row_counters, uint row)
+{
+    uint row_counter_index, row_counter_offset;
+    get_row_counters_index(&row_counter_index, &row_counter_offset, row);
+    uint nr_slots = atomic_add(row_counters + row_counter_index, 1U << row_counter_offset);
+    nr_slots = (nr_slots >> row_counter_offset) & ROW_MASK;
+#ifndef OPTIM_IGNORE_ROW_COUNTER_OVERFLOWS
+    if (nr_slots >= NR_SLOTS) {
+        // avoid overflows
+        atomic_sub(row_counters + row_counter_index, 1 << row_counter_offset);
     }
 #endif
     return nr_slots;
@@ -198,12 +223,24 @@ uint inc_row_counter(__global uint *rowCounters, uint row)
 */
 
 __kernel
-void kernel_init_ht(__global char *ht, __global uint *rowCounters, __global sols_t *sols, __global potential_sols_t *potential_sols)
+void kernel_init_ht(uint device_thread, uint round, __global uint *hash_table, __global uint *row_counters_src, __global uint *row_counters_dst, __global sols_t *sols, __global potential_sols_t *potential_sols, __global uint *sync_flags)
 {
+#ifdef AMD_GCN_ASM
+    __local volatile uint  gds_dummy_base[1];
+    __local volatile uint *gds_dummy_src = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 1) % 2));
+    __local volatile uint *gds_dummy_dst = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 0) % 2));
+#endif
     if (!get_global_id(0))
-        sols->nr = sols->likely_invalids = potential_sols->nr = 0;
-    if (get_global_id(0) < RC_SIZE / 4)
-        rowCounters[get_global_id(0)] = 0;
+        sols->nr = sols->likely_invalids = potential_sols->nr = sync_flags[0] = sync_flags[1] = 0;
+    if (get_global_id(0) < RC_SIZE / 4) {
+#ifdef AMD_GCN_ASM
+        if (round == 0)
+            gds_dummy_dst[get_global_id(0)] = 0;
+        if (round == 1)
+            row_counters_src[get_global_id(0)] = gds_dummy_src[get_global_id(0)];
+#endif
+        row_counters_dst[get_global_id(0)] = 0;
+    }
 }
 
 
@@ -244,146 +281,138 @@ vb = rotate((vb ^ vc), (ulong)64 - 63);
 #endif
 
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_ROUND0, 1, 1)))
-void kernel_round0(__constant ulong *blake_state, __global char *ht,
-    __global uint *rowCounters, __global uint *debug)
+void kernel_round0(uint device_thread, __constant ulong *blake_state, __global char *ht,
+    __global uint *row_counters, __global uint *sync_flags)
 {
-    uint                tid = get_global_id(0);
+#ifdef AMD_GCN_ASM
+    __local volatile uint gds_dummy_base[1];
+    __local volatile uint *gds_dummy = gds_dummy_base + (RC_SIZE / sizeof(uint)) * device_thread * 2;
+#endif
+
 #if defined(AMD) && !defined(AMD_LEGACY)
     volatile ulong      v[16];
-    uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
-    slot_t slot;
 #else
     ulong               v[16];
+#endif
     uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
     slot_t slot;
-#endif
     ulong               h[7];
-    uint                inputs_per_thread = (NR_INPUTS + get_global_size(0) - 1) / get_global_size(0);
     uint                dropped = 0;
 
-    for (uint chunk = 0; chunk < inputs_per_thread; ++chunk) {
-        uint input = tid + get_global_size(0) * chunk;
+    uint input = get_global_id(0);
 
-        if (input < NR_INPUTS) {
-            // shift "i" to occupy the high 32 bits of the second ulong word in the
-            // message block
-            ulong word1 = (ulong)input << 32;
-            // init vector v
-            v[0] = blake_state[0];
-            v[1] = blake_state[1];
-            v[2] = blake_state[2];
-            v[3] = blake_state[3];
-            v[4] = blake_state[4];
-            v[5] = blake_state[5];
-            v[6] = blake_state[6];
-            v[7] = blake_state[7];
-            v[8] = blake_iv[0];
-            v[9] = blake_iv[1];
-            v[10] = blake_iv[2];
-            v[11] = blake_iv[3];
-            v[12] = blake_iv[4];
-            v[13] = blake_iv[5];
-            v[14] = blake_iv[6];
-            v[15] = blake_iv[7];
-            // mix in length of data
-            v[12] ^= ZCASH_BLOCK_HEADER_LEN + 4 /* length of "i" */;
-            // last block
-            v[14] ^= (ulong)-1;
+    // shift "i" to occupy the high 32 bits of the second ulong word in the
+    // message block
+    ulong word1 = (ulong)input << 32;
+    // init vector v
+    v[0] = blake_state[0];
+    v[1] = blake_state[1];
+    v[2] = blake_state[2];
+    v[3] = blake_state[3];
+    v[4] = blake_state[4];
+    v[5] = blake_state[5];
+    v[6] = blake_state[6];
+    v[7] = blake_state[7];
+    v[8] = blake_iv[0];
+    v[9] = blake_iv[1];
+    v[10] = blake_iv[2];
+    v[11] = blake_iv[3];
+    v[12] = blake_iv[4];
+    v[13] = blake_iv[5];
+    v[14] = blake_iv[6];
+    v[15] = blake_iv[7];
+    // mix in length of data
+    v[12] ^= ZCASH_BLOCK_HEADER_LEN + 4 /* length of "i" */;
+    // last block
+    v[14] ^= (ulong)-1;
 
 #if defined(AMD) && !defined(AMD_LEGACY)
 #pragma unroll 1
-            for (uint blake_round = 1; blake_round <= 9; ++blake_round) {
+    for (uint blake_round = 1; blake_round <= 9; ++blake_round) {
 #else
 #pragma unroll 9
-            for (uint blake_round = 1; blake_round <= 9; ++blake_round) {
+    for (uint blake_round = 1; blake_round <= 9; ++blake_round) {
 #endif
-                mix(v[0], v[4], v[8], v[12], 0, (blake_round == 1) ? word1 : 0);
-                mix(v[1], v[5], v[9], v[13], (blake_round == 7) ? word1 : 0, (blake_round == 4) ? word1 : 0);
-                mix(v[2], v[6], v[10], v[14], 0, (blake_round == 8) ? word1 : 0);
-                mix(v[3], v[7], v[11], v[15], 0, 0);
-                mix(v[0], v[5], v[10], v[15], (blake_round == 2) ? word1 : 0, (blake_round == 5) ? word1 : 0);
-                mix(v[1], v[6], v[11], v[12], 0, 0);
-                mix(v[2], v[7], v[8], v[13], (blake_round == 9) ? word1 : 0, (blake_round == 3) ? word1 : 0);
-                mix(v[3], v[4], v[9], v[14], (blake_round == 6) ? word1 : 0, 0);
-            }
-            // round 10
-            mix(v[0], v[4], v[8], v[12], 0, 0);
-            mix(v[1], v[5], v[9], v[13], 0, 0);
-            mix(v[2], v[6], v[10], v[14], 0, 0);
-            mix(v[3], v[7], v[11], v[15], word1, 0);
-            mix(v[0], v[5], v[10], v[15], 0, 0);
-            mix(v[1], v[6], v[11], v[12], 0, 0);
-            mix(v[2], v[7], v[8], v[13], 0, 0);
-            mix(v[3], v[4], v[9], v[14], 0, 0);
-            // round 11
-            mix(v[0], v[4], v[8], v[12], 0, word1);
-            mix(v[1], v[5], v[9], v[13], 0, 0);
-            mix(v[2], v[6], v[10], v[14], 0, 0);
-            mix(v[3], v[7], v[11], v[15], 0, 0);
-            mix(v[0], v[5], v[10], v[15], 0, 0);
-            mix(v[1], v[6], v[11], v[12], 0, 0);
-            mix(v[2], v[7], v[8], v[13], 0, 0);
-            mix(v[3], v[4], v[9], v[14], 0, 0);
-            // round 12
-            mix(v[0], v[4], v[8], v[12], 0, 0);
-            mix(v[1], v[5], v[9], v[13], 0, 0);
-            mix(v[2], v[6], v[10], v[14], 0, 0);
-            mix(v[3], v[7], v[11], v[15], 0, 0);
-            mix(v[0], v[5], v[10], v[15], word1, 0);
-            mix(v[1], v[6], v[11], v[12], 0, 0);
-            mix(v[2], v[7], v[8], v[13], 0, 0);
-            mix(v[3], v[4], v[9], v[14], 0, 0);
+        mix(v[0], v[4], v[8], v[12], 0, (blake_round == 1) ? word1 : 0);
+        mix(v[1], v[5], v[9], v[13], (blake_round == 7) ? word1 : 0, (blake_round == 4) ? word1 : 0);
+        mix(v[2], v[6], v[10], v[14], 0, (blake_round == 8) ? word1 : 0);
+        mix(v[3], v[7], v[11], v[15], 0, 0);
+        mix(v[0], v[5], v[10], v[15], (blake_round == 2) ? word1 : 0, (blake_round == 5) ? word1 : 0);
+        mix(v[1], v[6], v[11], v[12], 0, 0);
+        mix(v[2], v[7], v[8], v[13], (blake_round == 9) ? word1 : 0, (blake_round == 3) ? word1 : 0);
+        mix(v[3], v[4], v[9], v[14], (blake_round == 6) ? word1 : 0, 0);
+    }
+    // round 10
+    mix(v[0], v[4], v[8], v[12], 0, 0);
+    mix(v[1], v[5], v[9], v[13], 0, 0);
+    mix(v[2], v[6], v[10], v[14], 0, 0);
+    mix(v[3], v[7], v[11], v[15], word1, 0);
+    mix(v[0], v[5], v[10], v[15], 0, 0);
+    mix(v[1], v[6], v[11], v[12], 0, 0);
+    mix(v[2], v[7], v[8], v[13], 0, 0);
+    mix(v[3], v[4], v[9], v[14], 0, 0);
+    // round 11
+    mix(v[0], v[4], v[8], v[12], 0, word1);
+    mix(v[1], v[5], v[9], v[13], 0, 0);
+    mix(v[2], v[6], v[10], v[14], 0, 0);
+    mix(v[3], v[7], v[11], v[15], 0, 0);
+    mix(v[0], v[5], v[10], v[15], 0, 0);
+    mix(v[1], v[6], v[11], v[12], 0, 0);
+    mix(v[2], v[7], v[8], v[13], 0, 0);
+    mix(v[3], v[4], v[9], v[14], 0, 0);
+    // round 12
+    mix(v[0], v[4], v[8], v[12], 0, 0);
+    mix(v[1], v[5], v[9], v[13], 0, 0);
+    mix(v[2], v[6], v[10], v[14], 0, 0);
+    mix(v[3], v[7], v[11], v[15], 0, 0);
+    mix(v[0], v[5], v[10], v[15], word1, 0);
+    mix(v[1], v[6], v[11], v[12], 0, 0);
+    mix(v[2], v[7], v[8], v[13], 0, 0);
+    mix(v[3], v[4], v[9], v[14], 0, 0);
 
-            // compress v into the blake state; this produces the 50-byte hash
-            // (two Xi values)
-            h[0] = blake_state[0] ^ v[0] ^ v[8];
-            h[1] = blake_state[1] ^ v[1] ^ v[9];
-            h[2] = blake_state[2] ^ v[2] ^ v[10];
-            h[3] = blake_state[3] ^ v[3] ^ v[11];
-            h[4] = blake_state[4] ^ v[4] ^ v[12];
-            h[5] = blake_state[5] ^ v[5] ^ v[13];
-            h[6] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
+    // compress v into the blake state; this produces the 50-byte hash
+    // (two Xi values)
+    h[0] = blake_state[0] ^ v[0] ^ v[8];
+    h[1] = blake_state[1] ^ v[1] ^ v[9];
+    h[2] = blake_state[2] ^ v[2] ^ v[10];
+    h[3] = blake_state[3] ^ v[3] ^ v[11];
+    h[4] = blake_state[4] ^ v[4] ^ v[12];
+    h[5] = blake_state[5] ^ v[5] ^ v[13];
+    h[6] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
+
+    // store the two Xi values in the hash table
+#pragma unroll 1
+    for (uint index = 0; index < 2; ++index) {
+        if (!index) {
+            xi0 = h[0] & 0xffffffff; xi1 = h[0] >> 32;
+            xi2 = h[1] & 0xffffffff; xi3 = h[1] >> 32;
+            xi4 = h[2] & 0xffffffff; xi5 = h[2] >> 32;
+            xi6 = h[3] & 0xffffffff;
+        } else {
+            xi0 = ((h[3] >> 8) | (h[4] << (64 - 8))) & 0xffffffff; xi1 = ((h[3] >> 8) | (h[4] << (64 - 8))) >> 32;
+            xi2 = ((h[4] >> 8) | (h[5] << (64 - 8))) & 0xffffffff; xi3 = ((h[4] >> 8) | (h[5] << (64 - 8))) >> 32;
+            xi4 = ((h[5] >> 8) | (h[6] << (64 - 8))) & 0xffffffff; xi5 = ((h[5] >> 8) | (h[6] << (64 - 8))) >> 32;
+            xi6 = (h[6] >> 8) & 0xffffffff;
         }
 
-        if (input < NR_INPUTS) {
-            // store the two Xi values in the hash table
-#pragma unroll 1
-            for (uint index = 0; index < 2; ++index) {
-                if (!index) {
-                    xi0 = h[0] & 0xffffffff; xi1 = h[0] >> 32;
-                    xi2 = h[1] & 0xffffffff; xi3 = h[1] >> 32;
-                    xi4 = h[2] & 0xffffffff; xi5 = h[2] >> 32;
-                    xi6 = h[3] & 0xffffffff;
-                } else {
-                    xi0 = ((h[3] >> 8) | (h[4] << (64 - 8))) & 0xffffffff; xi1 = ((h[3] >> 8) | (h[4] << (64 - 8))) >> 32;
-                    xi2 = ((h[4] >> 8) | (h[5] << (64 - 8))) & 0xffffffff; xi3 = ((h[4] >> 8) | (h[5] << (64 - 8))) >> 32;
-                    xi4 = ((h[5] >> 8) | (h[6] << (64 - 8))) & 0xffffffff; xi5 = ((h[5] >> 8) | (h[6] << (64 - 8))) >> 32;
-                    xi6 = (h[6] >> 8) & 0xffffffff;
-                }
-
-                uint row = get_row(0, xi0);
-                uint nr_slots = inc_row_counter(rowCounters, row);
-                if (nr_slots >= NR_SLOTS) {
-                    ++dropped;
-                } else {
-                    slot.slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
-                    slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
-                    slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
-                    slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
-                    slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
-                    slot.slot.xi[5] = ((xi6 << 24) | (xi5 >> 8));
-                    slot.slot.xi[UINTS_IN_XI(0)] = input * 2 + index;
-                    __global char *p = get_slot_ptr(ht, 0, row, nr_slots);
-                    *(__global uint8 *)p = slot.ui8;
-                }
-            }
+        uint row = get_row(0, xi0);
+#ifdef AMD_GCN_ASM
+        uint nr_slots = inc_local_row_counter(gds_dummy, row);
+#else
+        uint nr_slots = inc_row_counter(row_counters, row);
+#endif
+        if (nr_slots < NR_SLOTS) {
+            slot.slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
+            slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
+            slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
+            slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
+            slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
+            slot.slot.xi[5] = ((xi6 << 24) | (xi5 >> 8));
+            slot.slot.xi[UINTS_IN_XI(0)] = input * 2 + index;
+            __global char *p = get_slot_ptr(ht, 0, row, nr_slots);
+            *(__global uint8 *)p = slot.ui8;
         }
     }
-
-#ifdef ENABLE_DEBUG
-    debug[tid * 2] = 0;
-    debug[tid * 2 + 1] = dropped;
-#endif
 }
 
 /*
@@ -399,7 +428,7 @@ void kernel_round0(__constant ulong *blake_state, __global char *ht,
 
 uint xor_and_store(uint round, __global char *ht_src, __global char *ht_dst, uint row,
     uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
-    __global uint *rowCounters) {
+    __global uint *row_counters) {
     uint ret = 0;
     uint xi0, xi1, xi2, xi3, xi4, xi5;
 
@@ -448,7 +477,7 @@ uint xor_and_store(uint round, __global char *ht_src, __global char *ht_dst, uin
         // inputs and xor to zero, so discard them
         if (xi0 || xi1) {
             uint new_row = get_row(round, xi0);
-            uint new_slot_index = inc_row_counter(rowCounters, new_row);
+            uint new_slot_index = inc_row_counter(row_counters, new_row);
             if (new_slot_index >= NR_SLOTS) {
                 ret = 1;
             } else {
@@ -485,7 +514,7 @@ uint xor_and_store(uint round, __global char *ht_src, __global char *ht_dst, uin
 
 uint parallel_xor_and_store(uint round, __global char *ht_src, __global char *ht_dst, uint row,
     uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
-    __global uint *rowCounters,
+    __global uint *row_counters,
     __local SLOT_INDEX_TYPE *new_slot_indexes) {
     uint ret = 0;
     uint xi0, xi1, xi2, xi3, xi4, xi5;
@@ -544,7 +573,7 @@ uint parallel_xor_and_store(uint round, __global char *ht_src, __global char *ht
         // invalid solutions (which start happenning in round 5) have duplicate
         // inputs and xor to zero, so discard them
         if ((xi0 || xi1) && !write_thread_index) {
-            new_slot_indexes[write_index] = inc_row_counter(rowCounters, new_row);
+            new_slot_indexes[write_index] = inc_row_counter(row_counters, new_row);
 #ifdef ENABLE_DEBUG
             if (new_slot_index >= NR_SLOTS)
                 ret = 1;
@@ -566,7 +595,9 @@ uint parallel_xor_and_store(uint round, __global char *ht_src, __global char *ht
 ** store them in ht_dst. Each work group processes only one row at a time.
 */
 
-void equihash_round(uint round,
+void equihash_round(
+    uint device_thread,
+    uint round,
     __global char *ht_src,
     __global char *ht_dst,
     __global uint *debug,
@@ -578,13 +609,14 @@ void equihash_round(uint round,
     __global uint *rowCountersDst,
     __local uint *bin_first_slots,
     __local SLOT_INDEX_TYPE *bin_next_slots,
-    __local SLOT_INDEX_TYPE *new_slot_indexes)
+    __local SLOT_INDEX_TYPE *new_slot_indexes,
+    __local uint *gds_dummy_base)
 {
-    uint     i, j;
-#ifdef ENABLE_DEBUG
-    uint     dropped_coll = 0;
-    uint     dropped_stor = 0;
+#ifdef AMD_GCN_ASM
+    __local volatile uint *gds_dummy_src = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 1) % 2));
+    __local volatile uint *gds_dummy_dst = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 0) % 2));
 #endif
+    uint     i, j;
 
     // the mask is also computed to read data from the previous round
 #define BIN_MASK(round)        ((((round) + 1) % 2) ? 0xf000 : 0xf0000)
@@ -606,16 +638,9 @@ void equihash_round(uint round,
 
 
 
-
-    uint rows_per_work_item = (NR_ROWS + get_num_groups(0) - 1) / (get_num_groups(0));
-    uint rows_per_chunk = get_num_groups(0);
-
-    for (uint chunk = 0; chunk < rows_per_work_item; chunk++) {
-        uint nr_slots = 0;
-        uint assigned_row_index = get_group_id(0) + rows_per_chunk * chunk;
-        if (assigned_row_index >= NR_ROWS)
-            return;
-
+    uint nr_slots = 0;
+    uint assigned_row_index = get_group_id(0);
+    if (assigned_row_index < NR_ROWS) {
         for (i = get_local_id(0); i < NR_BINS; i += get_local_size(0))
             bin_first_slots[i] = NR_SLOTS;
         for (i = get_local_id(0); i < NR_SLOTS; i += get_local_size(0))
@@ -671,9 +696,6 @@ void equihash_round(uint round,
                     collision_array_b[coll_index] = slot_b_index;
                 } else {
                     atomic_dec(nr_collisions);
-#ifdef ENABLE_DEBUG
-                    ++dropped_coll;
-#endif
                 }
                 slot_b_index = bin_next_slots[slot_b_index];
             }
@@ -694,15 +716,9 @@ void equihash_round(uint round,
                 }
                 //barrier(CLK_LOCAL_MEM_FENCE);
                 if (THREADS_PER_WRITE(round) > 1) {
-#ifdef ENABLE_DEBUG
-                    //dropped_stor += 
-#endif
                     parallel_xor_and_store(round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst, new_slot_indexes);
                 } else {
-#ifdef ENABLE_DEBUG
-                    dropped_stor +=
-#endif
-                        xor_and_store(round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+                    xor_and_store(round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
                 }
 
                 if (!get_local_id(0))
@@ -714,14 +730,8 @@ void equihash_round(uint round,
             }
             barrier(CLK_LOCAL_MEM_FENCE);
         }
+        barrier(CLK_LOCAL_MEM_FENCE);
     }
-
-
-
-#ifdef ENABLE_DEBUG
-    debug[get_global_id(0) * 2] = dropped_coll;
-    debug[get_global_id(0) * 2 + 1] = dropped_stor;
-#endif
 }
 
 /*
@@ -730,10 +740,11 @@ void equihash_round(uint round,
 
 #define KERNEL_ROUND(kernel_name, N) \
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE, 1, 1))) \
-void kernel_name(__global char *ht_src, __global char *ht_dst, \
+void kernel_name(uint device_thread, __global char *ht_src, __global char *ht_dst, \
 	__global uint *rowCountersSrc, __global uint *rowCountersDst, \
        	__global uint *debug) \
 { \
+	__local uint  gds_dummy_base[1];\
     __local uint    slot_cache[ADJUSTED_LDS_ARRAY_SIZE(UINTS_IN_XI(N - 1) * NR_SLOTS)]; \
     __local SLOT_INDEX_TYPE collision_array_a[ADJUSTED_LDS_ARRAY_SIZE(LDS_COLL_SIZE)]; \
     __local SLOT_INDEX_TYPE collision_array_b[ADJUSTED_LDS_ARRAY_SIZE(LDS_COLL_SIZE)]; \
@@ -741,8 +752,8 @@ void kernel_name(__global char *ht_src, __global char *ht_dst, \
 	__local uint    bin_first_slots[ADJUSTED_LDS_ARRAY_SIZE(NR_BINS)]; \
 	__local SLOT_INDEX_TYPE bin_next_slots[ADJUSTED_LDS_ARRAY_SIZE(NR_SLOTS)]; \
 	__local SLOT_INDEX_TYPE new_slot_indexes[ADJUSTED_LDS_ARRAY_SIZE((THREADS_PER_WRITE(N) > 1) ? LOCAL_WORK_SIZE / THREADS_PER_WRITE(N) : 0)]; \
-	equihash_round((N), ht_src, ht_dst, debug, slot_cache, collision_array_a, collision_array_b, \
-	    &nr_collisions, rowCountersSrc, rowCountersDst, bin_first_slots, bin_next_slots, new_slot_indexes); \
+    equihash_round(device_thread, (N), ht_src, ht_dst, debug, slot_cache, collision_array_a, collision_array_b, \
+	    &nr_collisions, rowCountersSrc, rowCountersDst, bin_first_slots, bin_next_slots, new_slot_indexes, gds_dummy_base); \
 }
 
 KERNEL_ROUND(kernel_round1, 1)

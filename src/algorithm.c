@@ -1084,7 +1084,7 @@ static cl_int queue_ethash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_u
 
 static void append_equihash_compiler_options(struct _build_kernel_data *data, struct cgpu_info *cgpu, struct _algorithm_t *algorithm)
 {
-    strcat(data->compiler_options, "");
+    //strcat(data->compiler_options, " -DAMD_GCN_ASM ");
     //strcat(data->compiler_options, " -legacy -DAMD_LEGACY ");
 }
 
@@ -1121,7 +1121,7 @@ static cl_int queue_cryptonight_kernel(_clState *clState, dev_blk_ctx *blk, __ma
     CL_NEXTKERNEL_SET_ARG(clState->States);
     CL_SET_ARG(clState->BranchBuffer[0]);
     CL_SET_ARG(clState->outputBuffer);
-    CL_SET_ARG(tgt32);
+    CL_SET_ARG(tgt32);  
 
     // last to be set in driver-opencl.c
 
@@ -1152,10 +1152,10 @@ static cl_int queue_cryptonight_kernel(_clState *clState, dev_blk_ctx *blk, __ma
 
 #define WORKSIZE clState->wsize
 
-static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint threads)
+static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint device_thread)
 {
     cl_int status = 0;
-    size_t work_items = threads;
+    size_t work_items;
     size_t worksize = clState->wsize;
 
     uint64_t mid_hash[8];
@@ -1175,36 +1175,44 @@ static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe
         clState->buffer9,
         clState->buffer10,
     };
-    cl_mem rowCounters[2] = { clState->buffer2, clState->buffer3 };
+    cl_mem row_counters[2] = { clState->buffer2, clState->buffer3 };
     cl_mem buf_potential_sols = clState->buffer11;
-    for (int round = 0; round < PARAM_K; round++) {
+    for (cl_uint round = 0; round < PARAM_K; round++) {
         size_t global_ws = RC_SIZE;
         size_t local_ws = 256;
         unsigned int num = 0;
         cl_kernel *kernel = &clState->extra_kernels[0];
+        CL_SET_VARG(1, &device_thread);
+        CL_SET_VARG(1, &round);
         CL_SET_ARG(buf_ht[round]);
-        CL_SET_ARG(rowCounters[round % 2]);
+        CL_SET_ARG(row_counters[(round + 1) % 2]);
+        CL_SET_ARG(row_counters[round % 2]);
         CL_SET_ARG(clState->outputBuffer);
         CL_SET_ARG(buf_potential_sols);
+        CL_SET_ARG(clState->padbuffer8);
         status |= clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL, &global_ws, &local_ws, 0, NULL, NULL);
 
         num = 0;
         kernel = &clState->extra_kernels[1 + round];
         if (!round) {
+            CL_SET_VARG(1, &device_thread);
             CL_SET_ARG(clState->MidstateBuf);
             CL_SET_ARG(buf_ht[round]);
-            CL_SET_ARG(rowCounters[round % 2]);
+            CL_SET_ARG(row_counters[round % 2]);
             worksize = LOCAL_WORK_SIZE_ROUND0;
-            work_items = NR_INPUTS / ROUND0_INPUTS_PER_WORK_ITEM;
+            work_items = NR_INPUTS;
         } else {
+            CL_SET_VARG(1, &device_thread);
             CL_SET_ARG(buf_ht[(round - 1)]);
             CL_SET_ARG(buf_ht[round]);
-            CL_SET_ARG(rowCounters[(round - 1) % 2]);
-            CL_SET_ARG(rowCounters[round % 2]);
+            CL_SET_ARG(row_counters[(round - 1) % 2]);
+            CL_SET_ARG(row_counters[round % 2]);
             worksize = LOCAL_WORK_SIZE;
             work_items = NR_ROWS * worksize;
         }
         CL_SET_ARG(clState->padbuffer8);
+        if (work_items % worksize)
+            work_items += worksize - work_items % worksize;
         status |= clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL, &work_items, &worksize, 0, NULL, NULL);
     }
 
@@ -1212,7 +1220,7 @@ static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe
     cl_kernel *kernel = &clState->extra_kernels[1 + 8 + 1];
     CL_SET_ARG(buf_ht[8]);
     CL_SET_ARG(buf_potential_sols);
-    CL_SET_ARG(rowCounters[0]);
+    CL_SET_ARG(row_counters[0]);
     worksize = LOCAL_WORK_SIZE_POTENTIAL_SOLS;
     work_items = NR_ROWS * worksize;
     status |= clEnqueueNDRangeKernel(clState->commandQueue, clState->extra_kernels[1 + 8 + 1], 1, NULL, &work_items, &worksize, 0, NULL, NULL);
@@ -1222,8 +1230,8 @@ static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe
     CL_SET_ARG(buf_ht[0]);
     CL_SET_ARG(buf_ht[1]);
     CL_SET_ARG(clState->outputBuffer);
-    CL_SET_ARG(rowCounters[0]);
-    CL_SET_ARG(rowCounters[1]);
+    CL_SET_ARG(row_counters[0]);
+    CL_SET_ARG(row_counters[1]);
     CL_SET_ARG(buf_ht[2]);
     CL_SET_ARG(buf_ht[3]);
     CL_SET_ARG(buf_ht[4]);
