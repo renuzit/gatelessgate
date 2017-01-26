@@ -234,12 +234,7 @@ void kernel_init_ht(uint device_thread, uint round, __global uint *hash_table, _
         sols->nr = sols->likely_invalids = potential_sols->nr = sync_flags[0] = sync_flags[1] = 0;
     if (get_global_id(0) < RC_SIZE / 4) {
 #ifdef AMD_GCN_ASM
-        if (round == 0 || round == 1)
-            gds_dummy_dst[get_global_id(0)] = 0;
-        if (round == 2)
-            row_counters_src[get_global_id(0)] = gds_dummy_src[get_global_id(0)]; // This is faster.
-        if (round >= 2)
-            row_counters_dst[get_global_id(0)] = 0;
+        gds_dummy_dst[get_global_id(0)] = 0;
 #else
         row_counters_dst[get_global_id(0)] = 0;
 #endif
@@ -401,9 +396,16 @@ void kernel_round0(uint device_thread, __constant ulong *blake_state, __global c
 ** Return 0 if successfully stored, or 1 if the row overflowed.
 */
 
-uint xor_and_store(uint round, __global char *ht_src, __global char *ht_dst, uint row,
+uint xor_and_store(uint device_thread, uint round, __global char *ht_src, __global char *ht_dst, uint row,
     uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
-    __global uint *row_counters) {
+    __global uint *row_counters,
+    __local uint *gds_dummy_base)
+{
+#ifdef AMD_GCN_ASM
+    gds_dummy_base = 0;
+    __local volatile uint *gds_dummy_src = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 1) % 2));
+    __local volatile uint *gds_dummy_dst = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 0) % 2));
+#endif
     uint ret = 0;
     uint xi0, xi1, xi2, xi3, xi4, xi5;
 
@@ -452,7 +454,11 @@ uint xor_and_store(uint round, __global char *ht_src, __global char *ht_dst, uin
         // inputs and xor to zero, so discard them
         if (xi0 || xi1) {
             uint new_row = get_row(round, xi0);
+#ifdef AMD_GCN_ASM
+            uint new_slot_index = inc_local_row_counter(gds_dummy_dst, new_row);
+#else
             uint new_slot_index = inc_row_counter(row_counters, new_row);
+#endif
             if (new_slot_index >= NR_SLOTS) {
                 ret = 1;
             } else {
@@ -562,11 +568,10 @@ uint parallel_xor_and_store(
         // inputs and xor to zero, so discard them
         if ((xi0 || xi1) && !write_thread_index) {
 #ifdef AMD_GCN_ASM
-            if (round == 1)
-                new_slot_indexes[write_index] = inc_local_row_counter(gds_dummy_dst, new_row);
-            else
+            new_slot_indexes[write_index] = inc_local_row_counter(gds_dummy_dst, new_row);
+#else
+            new_slot_indexes[write_index] = inc_row_counter(row_counters, new_row);
 #endif
-                new_slot_indexes[write_index] = inc_row_counter(row_counters, new_row);
         }
     }
 
@@ -641,12 +646,12 @@ void equihash_round(
         bin_next_slots[i] = NR_SLOTS;
 
 #ifdef AMD_GCN_ASM
-    if (get_local_id(0) == 0 && round == 1)
+    if (get_local_id(0) == 0)
         *nr_collisions = nr_slots = get_nr_slots_local(gds_dummy_src, assigned_row_index);
-    else
-#endif
+#else
     if (get_local_id(0) == 0)
         nr_collisions[0] = nr_slots = get_nr_slots(rowCountersSrc, assigned_row_index);
+#endif
     barrier(CLK_LOCAL_MEM_FENCE);
     if (get_local_id(0))
         nr_slots = nr_collisions[0];
@@ -687,7 +692,7 @@ void equihash_round(
             if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * NR_SLOTS + slot_cache_index] = slot_data0.s4;
             if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * NR_SLOTS + slot_cache_index] = slot_data0.s5;
             xi0 = slot_data0.s0;
-        } else /*if (UINTS_IN_XI(round - 1) >= 3)*/ {
+        } else {
             uint4 slot_data0;
             slot_data0 = *((__global uint4 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
  
@@ -696,16 +701,7 @@ void equihash_round(
             if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * NR_SLOTS + slot_cache_index] = slot_data0.s2;
             if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * NR_SLOTS + slot_cache_index] = slot_data0.s3;
             xi0 = slot_data0.s0;
-        }/* else if (UINTS_IN_XI(round - 1) >= 2) {
-            uint2 slot_data0;
-            slot_data0 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
- 
-            if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * NR_SLOTS + slot_cache_index] = slot_data0.s0;
-            if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * NR_SLOTS + slot_cache_index] = slot_data0.s1;
-            xi0 = slot_data0.s0;
-        } else {
-            xi0 = slot_cache[0 * NR_SLOTS + slot_cache_index] = *((__global uint *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
-        }*/
+        }
 #else
         uint xi[6];
         for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
@@ -769,7 +765,7 @@ void equihash_round(
         if (THREADS_PER_WRITE(round) > 1) {
             parallel_xor_and_store(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst, new_slot_indexes, gds_dummy_base);
         } else {
-            xor_and_store(round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+            xor_and_store(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst, gds_dummy_base);
         }
 
         nr_collisions_copy -= min(nr_collisions_copy, (uint)get_local_size(0) / THREADS_PER_WRITE(round));
@@ -825,10 +821,15 @@ void mark_potential_sol(__global potential_sols_t *potential_sols, uint ref0, ui
 
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_POTENTIAL_SOLS, 1, 1)))
 void kernel_potential_sols(
+    uint device_thread,
     __global char *ht_src,
     __global potential_sols_t *potential_sols,
     __global uint *rowCountersSrc)
 {
+#ifdef AMD_GCN_ASM
+    __local uint gds_dummy_base[1];
+    __local volatile uint *gds_dummy_src = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2);
+#endif
     __local uint refs[ADJUSTED_LDS_ARRAY_SIZE(NR_SLOTS)];
     __local uint data[ADJUSTED_LDS_ARRAY_SIZE(NR_SLOTS)];
 
@@ -852,8 +853,13 @@ void kernel_potential_sols(
         bin_first_slots[i] = NR_SLOTS;
     for (i = get_local_id(0); i < NR_SLOTS; i += get_local_size(0))
         bin_next_slots[i] = NR_SLOTS;
+#ifdef AMD_GCN_ASM
+    if (get_local_id(0) == 0)
+        nr_slots_shared = nr_slots = get_nr_slots_local(gds_dummy_src, assigned_row_index);
+#else
     if (get_local_id(0) == 0)
         nr_slots_shared = nr_slots = get_nr_slots(rowCountersSrc, assigned_row_index);
+#endif
     barrier(CLK_LOCAL_MEM_FENCE);
     if (get_local_id(0))
         nr_slots = nr_slots_shared;

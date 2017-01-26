@@ -1218,6 +1218,7 @@ static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe
 
     unsigned int num = 0;
     cl_kernel *kernel = &clState->extra_kernels[1 + 8 + 1];
+    CL_SET_VARG(1, &device_thread);
     CL_SET_ARG(buf_ht[8]);
     CL_SET_ARG(buf_potential_sols);
     CL_SET_ARG(row_counters[0]);
