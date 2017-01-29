@@ -7722,12 +7722,14 @@ static void rebuild_nonce(struct work *work, uint32_t nonce)
     uint32_t nonce_pos = 76;
     if (work->pool->algorithm.type == ALGO_CRE)
         nonce_pos = 140;
-    else if (work->pool->algorithm.type == ALGO_CRYPTONIGHT)
-        nonce_pos = 39;
 
     if (work->pool->algorithm.type == ALGO_ETHASH) {
         uint64_t *work_nonce = (uint64_t *)(work->data + 32);
         *work_nonce = htole32(nonce);
+    } else if (work->pool->algorithm.type == ALGO_CRYPTONIGHT) {
+        uint32_t *work_nonce = (uint32_t *)(work->data + 39);
+        *work_nonce &= 0xFF000000;
+        *work_nonce |= (htole32(nonce) & 0xFFFFFF);
     } else {
         uint32_t *work_nonce = (uint32_t *)(work->data + nonce_pos);
 
@@ -7752,7 +7754,7 @@ bool test_nonce(struct work *work, uint32_t nonce)
     } else if (work->pool->algorithm.type == ALGO_ETHASH) {
         uint64_t target = *(uint64_t*)(work->device_target + 24);
         return (bswap_64(*(uint64_t*)work->hash) <= target);
-    } else if (work->pool->algorithm.type = ALGO_CRYPTONIGHT) {
+    } else if (work->pool->algorithm.type == ALGO_CRYPTONIGHT) {
         return (((uint32_t *)work->hash)[7] <= work->XMRTarget);
     } else {
         diff1targ = work->pool->algorithm.diff1targ;
