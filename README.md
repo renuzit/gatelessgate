@@ -2,6 +2,7 @@
 
 - [Download precompiled binaries for 64-bit Windows (0.1.2)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.2/gatelessgate-0.1.2-win64.zip) 
 - [Download the source code for Linux (0.1.2)](https://github.com/zawawawa/gatelessgate/archive/v0.1.2.tar.gz)
+- [Download precompiled binaries for 64-bit Windows (0.1.3-pre0)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.3-pre0/gatelessgate-0.1.3-pre0-win64.zip)
 
 Gateless Gate is a cross-platform OpenCL ZEC/ETH/XMR/FTC miner for video cards with the AMD GCN architecture and the NVIDIA Maxwell and Pascal architectures.
 It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://github.com/mbevand/silentarmy) with a significant speed
