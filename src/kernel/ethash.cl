@@ -27,7 +27,7 @@ uint amd_bfe(uint src0, uint src1, uint src2)
 
 
 #define MAX_OUTPUTS 0xFFu
-#define barrier(x) mem_fence(x)
+//#define barrier(x) mem_fence(x)
 
 #define OPENCL_PLATFORM_UNKNOWN 0
 #define OPENCL_PLATFORM_NVIDIA  1
