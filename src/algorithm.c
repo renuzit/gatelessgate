@@ -1178,7 +1178,7 @@ static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe
     cl_mem row_counters[2] = { clState->buffer2, clState->buffer3 };
     cl_mem buf_potential_sols = clState->buffer11;
     for (cl_uint round = 0; round < PARAM_K; round++) {
-        size_t global_ws = RC_SIZE;
+        size_t global_ws = (_NR_ROWS(round) + ROWS_PER_UINT - 1) / ROWS_PER_UINT;
         size_t local_ws = 256;
         unsigned int num = 0;
         cl_kernel *kernel = &clState->extra_kernels[0];
@@ -1208,7 +1208,7 @@ static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe
             CL_SET_ARG(row_counters[(round - 1) % 2]);
             CL_SET_ARG(row_counters[round % 2]);
             worksize = LOCAL_WORK_SIZE;
-            work_items = NR_ROWS * worksize;
+            work_items = _NR_ROWS(round - 1) * worksize;
         }
         CL_SET_ARG(clState->padbuffer8);
         if (work_items % worksize)
@@ -1223,7 +1223,7 @@ static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe
     CL_SET_ARG(buf_potential_sols);
     CL_SET_ARG(row_counters[0]);
     worksize = LOCAL_WORK_SIZE_POTENTIAL_SOLS;
-    work_items = NR_ROWS * worksize;
+    work_items = _NR_ROWS(8) * worksize;
     status |= clEnqueueNDRangeKernel(clState->commandQueue, clState->extra_kernels[1 + 8 + 1], 1, NULL, &work_items, &worksize, 0, NULL, NULL);
 
     num = 0;

@@ -63,16 +63,6 @@ typedef union {
 
 typedef __global slot_t *global_pointer_to_slot_t;
 
-#define UINTS_IN_XI(round) (((round) == 0) ? 6 : \
-                            ((round) == 1) ? 6 : \
-                            ((round) == 2) ? 5 : \
-                            ((round) == 3) ? 5 : \
-                            ((round) == 4) ? 4 : \
-                            ((round) == 5) ? 4 : \
-                            ((round) == 6) ? 3 : \
-                            ((round) == 7) ? 2 : \
-                                             1)
-
 
 
 /*
@@ -105,7 +95,7 @@ typedef __global slot_t *global_pointer_to_slot_t;
 
 __global char *get_slot_ptr(__global char *ht, uint round, uint row, uint slot)
 {
-    return ht + (row * NR_SLOTS + slot) * ADJUSTED_SLOT_LEN(round);
+    return ht + (row * _NR_SLOTS(round) + slot) * _SLOT_LEN(round);
 }
 
 __global uint *get_xi_ptr(__global char *ht, uint round, uint row, uint slot)
@@ -122,31 +112,16 @@ uint get_row(uint round, uint xi0)
 {
     uint           row = 0;
 
-    if (NR_ROWS_LOG == 12) {
+    if (_NR_ROWS_LOG(round) == 12) {
         if (!(round % 2))
             row = (xi0 & 0xfff);
         else
             row = ((xi0 & 0x0f0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
-    } else if (NR_ROWS_LOG == 13) {
+    } else if (_NR_ROWS_LOG(round) == 13) {
         if (!(round % 2))
             row = (xi0 & 0x1fff);
         else
             row = ((xi0 & 0x1f0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
-    } else if (NR_ROWS_LOG == 14) {
-        if (!(round % 2))
-            row = (xi0 & 0x3fff);
-        else
-            row = ((xi0 & 0x3f0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
-    } else if (NR_ROWS_LOG == 15) {
-        if (!(round % 2))
-            row = (xi0 & 0x7fff);
-        else
-            row = ((xi0 & 0x7f0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
-    } else if (NR_ROWS_LOG == 16) {
-        if (!(round % 2))
-            row = (xi0 & 0xffff);
-        else
-            row = ((xi0 & 0xff0f00) >> 8) | ((xi0 & 0xf0000000) >> 24);
     }
 
     return row;
@@ -168,32 +143,75 @@ void get_row_counters_index(uint *row_counter_index, uint *row_counter_offset, u
     }
 }
 
-uint get_nr_slots(__global uint *row_counters, uint row_index)
+#ifdef OPTIM_UINT_ROW_COUNTERS
+
+uint get_nr_slots(uint round, __global uint *row_counters, uint row_index)
+{
+    uint nr_slots = row_counters[row_index];
+    nr_slots = min(nr_slots, (uint)_NR_SLOTS(round)); // handle possible overflow in last round
+    return nr_slots;
+}
+
+uint get_nr_slots_local(uint round, __local uint *row_counters, uint row_index)
+{
+    uint nr_slots = row_counters[row_index];
+    nr_slots = min(nr_slots, (uint)_NR_SLOTS(round)); // handle possible overflow in last round
+    return nr_slots;
+}
+
+uint inc_row_counter(uint round, __global uint *row_counters, uint row_index)
+{
+    uint nr_slots = atomic_inc(row_counters + row_index);
+#ifndef OPTIM_IGNORE_ROW_COUNTER_OVERFLOWS
+    if (nr_slots >= _NR_SLOTS(round)) {
+        // avoid overflows
+        atomic_dec(row_counters + row_index);
+    }
+#endif
+    return nr_slots;
+}
+
+uint inc_local_row_counter(uint round, __local uint *row_counters, uint row_index)
+{
+    uint nr_slots = atomic_inc(row_counters + row_index);
+#ifndef OPTIM_IGNORE_ROW_COUNTER_OVERFLOWS
+    if (nr_slots >= _NR_SLOTS(round)) {
+        // avoid overflows
+        atomic_dec(row_counters + row_index);
+    }
+#endif
+    return nr_slots;
+}
+
+#else
+
+
+uint get_nr_slots(uint round, __global uint *row_counters, uint row_index)
 {
     uint row_counter_index, row_counter_offset, nr_slots;
     get_row_counters_index(&row_counter_index, &row_counter_offset, row_index);
     nr_slots = (row_counters[row_counter_index] >> row_counter_offset) & ROW_MASK;
-    nr_slots = min(nr_slots, (uint)NR_SLOTS); // handle possible overflow in last round
+    nr_slots = min(nr_slots, (uint)_NR_SLOTS(round)); // handle possible overflow in last round
     return nr_slots;
 }
 
-uint get_nr_slots_local(__local uint *row_counters, uint row_index)
+uint get_nr_slots_local(uint round, __local uint *row_counters, uint row_index)
 {
     uint row_counter_index, row_counter_offset, nr_slots;
     get_row_counters_index(&row_counter_index, &row_counter_offset, row_index);
     nr_slots = (row_counters[row_counter_index] >> row_counter_offset) & ROW_MASK;
-    nr_slots = min(nr_slots, (uint)NR_SLOTS); // handle possible overflow in last round
+    nr_slots = min(nr_slots, (uint)_NR_SLOTS(round)); // handle possible overflow in last round
     return nr_slots;
 }
 
-uint inc_row_counter(__global uint *row_counters, uint row)
+uint inc_row_counter(uint round, __global uint *row_counters, uint row)
 {
     uint row_counter_index, row_counter_offset;
     get_row_counters_index(&row_counter_index, &row_counter_offset, row);
     uint nr_slots = atomic_add(row_counters + row_counter_index, 1U << row_counter_offset);
     nr_slots = (nr_slots >> row_counter_offset) & ROW_MASK;
 #ifndef OPTIM_IGNORE_ROW_COUNTER_OVERFLOWS
-    if (nr_slots >= NR_SLOTS) {
+    if (nr_slots >= _NR_SLOTS(round)) {
         // avoid overflows
         atomic_sub(row_counters + row_counter_index, 1 << row_counter_offset);
     }
@@ -201,14 +219,14 @@ uint inc_row_counter(__global uint *row_counters, uint row)
     return nr_slots;
 }
 
-uint inc_local_row_counter(__local uint *row_counters, uint row)
+uint inc_local_row_counter(uint round, __local uint *row_counters, uint row)
 {
     uint row_counter_index, row_counter_offset;
     get_row_counters_index(&row_counter_index, &row_counter_offset, row);
     uint nr_slots = atomic_add(row_counters + row_counter_index, 1U << row_counter_offset);
     nr_slots = (nr_slots >> row_counter_offset) & ROW_MASK;
 #ifndef OPTIM_IGNORE_ROW_COUNTER_OVERFLOWS
-    if (nr_slots >= NR_SLOTS) {
+    if (nr_slots >= _NR_SLOTS(round)) {
         // avoid overflows
         atomic_sub(row_counters + row_counter_index, 1 << row_counter_offset);
     }
@@ -216,6 +234,7 @@ uint inc_local_row_counter(__local uint *row_counters, uint row)
     return nr_slots;
 }
 
+#endif
 
 
 /*
@@ -227,12 +246,12 @@ void kernel_init_ht(uint device_thread, uint round, __global uint *hash_table, _
 {
 #ifdef AMD_GCN_ASM
     __local volatile uint  gds_dummy_base[1];
-    __local volatile uint *gds_dummy_src = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 1) % 2));
-    __local volatile uint *gds_dummy_dst = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 0) % 2));
+    __local volatile uint *gds_dummy_src = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 1) % 2));
+    __local volatile uint *gds_dummy_dst = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 0) % 2));
 #endif
     if (!get_global_id(0))
         sols->nr = sols->likely_invalids = potential_sols->nr = sync_flags[0] = sync_flags[1] = 0;
-    if (get_global_id(0) < RC_SIZE / 4) {
+    if (get_global_id(0) < (_NR_ROWS(round) + ROWS_PER_UINT - 1) / ROWS_PER_UINT) {
 #ifdef AMD_GCN_ASM
         gds_dummy_dst[get_global_id(0)] = 0;
 #else
@@ -284,7 +303,7 @@ void kernel_round0(uint device_thread, __constant ulong *blake_state, __global c
 {
 #ifdef AMD_GCN_ASM
     __local volatile uint gds_dummy_base[1];
-    __local volatile uint *gds_dummy = gds_dummy_base + (RC_SIZE / sizeof(uint)) * device_thread * 2;
+    __local volatile uint *gds_dummy = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * device_thread * 2;
 #endif
 
 #if defined(AMD) && !defined(AMD_LEGACY)
@@ -351,8 +370,13 @@ void kernel_round0(uint device_thread, __constant ulong *blake_state, __global c
     h[6] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
 
     // store the two Xi values in the hash table
+#if 0//defined(AMD)
+#pragma unroll 1
+    for (uint index = 0; index < 2; ++index) {
+#else
 #pragma unroll 2
     for (uint index = 0; index < 2; ++index) {
+#endif
         if (!index) {
             xi0 = h[0] & 0xffffffff; xi1 = h[0] >> 32;
             xi2 = h[1] & 0xffffffff; xi3 = h[1] >> 32;
@@ -367,11 +391,11 @@ void kernel_round0(uint device_thread, __constant ulong *blake_state, __global c
 
         uint row = get_row(0, xi0);
 #ifdef AMD_GCN_ASM
-        uint nr_slots = inc_local_row_counter(gds_dummy, row);
+        uint nr_slots = inc_local_row_counter(0, gds_dummy, row);
 #else
-        uint nr_slots = inc_row_counter(row_counters, row);
+        uint nr_slots = inc_row_counter((0), row_counters, row);
 #endif
-        if (nr_slots < NR_SLOTS) {
+        if (nr_slots < _NR_SLOTS(0)) {
             slot.slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
             slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
             slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
@@ -403,33 +427,29 @@ uint xor_and_store(uint device_thread, uint round, __global char *ht_src, __glob
 {
 #ifdef AMD_GCN_ASM
     gds_dummy_base = 0;
-    __local volatile uint *gds_dummy_src = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 1) % 2));
-    __local volatile uint *gds_dummy_dst = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 0) % 2));
+    __local volatile uint *gds_dummy_src = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 1) % 2));
+    __local volatile uint *gds_dummy_dst = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 0) % 2));
 #endif
     uint ret = 0;
     uint xi0, xi1, xi2, xi3, xi4, xi5;
 
-#if NR_ROWS_LOG < 8 && NR_ROWS_LOG > 20
-#error "unsupported NR_ROWS_LOG"
-#endif
-
     slot_t slot;
     __global slot_t *p = 0;
 
-    if (slot_a < NR_SLOTS) {
+    if (slot_a < _NR_SLOTS(round - 1)) {
         xi0 = *ai;
-        xi1 = *(ai += NR_SLOTS);
-        if (round <= 7) xi2 = *(ai += NR_SLOTS);
-        if (round <= 6) xi3 = *(ai += NR_SLOTS);
-        if (round <= 4) xi4 = *(ai += NR_SLOTS);
-        if (round <= 2) xi5 = *(ai += NR_SLOTS);
+        xi1 = *(ai += _NR_SLOTS(round - 1));
+        if (round <= 7) xi2 = *(ai += _NR_SLOTS(round - 1));
+        if (round <= 6) xi3 = *(ai += _NR_SLOTS(round - 1));
+        if (round <= 4) xi4 = *(ai += _NR_SLOTS(round - 1));
+        if (round <= 2) xi5 = *(ai += _NR_SLOTS(round - 1));
 
         xi0 ^= *bi;
-        xi1 ^= *(bi += NR_SLOTS);
-        if (round <= 7) xi2 ^= *(bi += NR_SLOTS);
-        if (round <= 6) xi3 ^= *(bi += NR_SLOTS);
-        if (round <= 4) xi4 ^= *(bi += NR_SLOTS);
-        if (round <= 2) xi5 ^= *(bi += NR_SLOTS);
+        xi1 ^= *(bi += _NR_SLOTS(round - 1));
+        if (round <= 7) xi2 ^= *(bi += _NR_SLOTS(round - 1));
+        if (round <= 6) xi3 ^= *(bi += _NR_SLOTS(round - 1));
+        if (round <= 4) xi4 ^= *(bi += _NR_SLOTS(round - 1));
+        if (round <= 2) xi5 ^= *(bi += _NR_SLOTS(round - 1));
 
         if (!(round & 0x1)) {
             // skip padding bytes
@@ -448,18 +468,18 @@ uint xor_and_store(uint device_thread, uint round, __global char *ht_src, __glob
             if (round <= 3) slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
             if (round <= 1) slot.slot.xi[5] = ((xi5 >> 8));
         }
-        slot.slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(row, slot_a, slot_b);
+        slot.slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(round - 1, row, slot_a, slot_b);
 
         // invalid solutions (which start happenning in round 5) have duplicate
         // inputs and xor to zero, so discard them
         if (xi0 || xi1) {
             uint new_row = get_row(round, xi0);
 #ifdef AMD_GCN_ASM
-            uint new_slot_index = inc_local_row_counter(gds_dummy_dst, new_row);
+            uint new_slot_index = inc_local_row_counter(round, gds_dummy_dst, new_row);
 #else
-            uint new_slot_index = inc_row_counter(row_counters, new_row);
+            uint new_slot_index = inc_row_counter(round, row_counters, new_row);
 #endif
-            if (new_slot_index >= NR_SLOTS) {
+            if (new_slot_index >= _NR_SLOTS(round)) {
                 ret = 1;
             } else {
                 p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
@@ -509,8 +529,8 @@ uint parallel_xor_and_store(
 {
 #ifdef AMD_GCN_ASM
     gds_dummy_base = 0;
-    __local volatile uint *gds_dummy_src = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 1) % 2));
-    __local volatile uint *gds_dummy_dst = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 0) % 2));
+    __local volatile uint *gds_dummy_src = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 1) % 2));
+    __local volatile uint *gds_dummy_dst = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 0) % 2));
 #endif
 
     uint ret = 0;
@@ -518,31 +538,27 @@ uint parallel_xor_and_store(
     uint write_index = get_local_id(0) / THREADS_PER_WRITE(round);
     uint write_thread_index = get_local_id(0) % THREADS_PER_WRITE(round);
 
-#if NR_ROWS_LOG < 8 && NR_ROWS_LOG > 20
-#error "unsupported NR_ROWS_LOG"
-#endif
-
     slot_t slot;
     uint new_row;
 
     if (!write_thread_index)
-        new_slot_indexes[write_index] = NR_SLOTS;
+        new_slot_indexes[write_index] = _NR_SLOTS(round);
     //barrier(CLK_LOCAL_MEM_FENCE);
 
-    if (slot_a < NR_SLOTS) {
+    if (slot_a < _NR_SLOTS(round - 1)) {
         xi0 = *ai;
-        xi1 = *(ai += NR_SLOTS);
-        if (round <= 7) xi2 = *(ai += NR_SLOTS);
-        if (round <= 6) xi3 = *(ai += NR_SLOTS);
-        if (round <= 4) xi4 = *(ai += NR_SLOTS);
-        if (round <= 2) xi5 = *(ai += NR_SLOTS);
+        xi1 = *(ai += _NR_SLOTS(round - 1));
+        if (round <= 7) xi2 = *(ai += _NR_SLOTS(round - 1));
+        if (round <= 6) xi3 = *(ai += _NR_SLOTS(round - 1));
+        if (round <= 4) xi4 = *(ai += _NR_SLOTS(round - 1));
+        if (round <= 2) xi5 = *(ai += _NR_SLOTS(round - 1));
 
         xi0 ^= *bi;
-        xi1 ^= *(bi += NR_SLOTS);
-        if (round <= 7) xi2 ^= *(bi += NR_SLOTS);
-        if (round <= 6) xi3 ^= *(bi += NR_SLOTS);
-        if (round <= 4) xi4 ^= *(bi += NR_SLOTS);
-        if (round <= 2) xi5 ^= *(bi += NR_SLOTS);
+        xi1 ^= *(bi += _NR_SLOTS(round - 1));
+        if (round <= 7) xi2 ^= *(bi += _NR_SLOTS(round - 1));
+        if (round <= 6) xi3 ^= *(bi += _NR_SLOTS(round - 1));
+        if (round <= 4) xi4 ^= *(bi += _NR_SLOTS(round - 1));
+        if (round <= 2) xi5 ^= *(bi += _NR_SLOTS(round - 1));
 
         if (!(round & 0x1)) {
             // skip padding bytes
@@ -561,25 +577,25 @@ uint parallel_xor_and_store(
             if (round <= 3) slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
             if (round <= 1) slot.slot.xi[5] = ((xi5 >> 8));
         }
-        slot.slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(row, slot_a, slot_b);
+        slot.slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(round - 1, row, slot_a, slot_b);
         new_row = get_row(round, xi0);
 
         // invalid solutions (which start happenning in round 5) have duplicate
         // inputs and xor to zero, so discard them
         if ((xi0 || xi1) && !write_thread_index) {
 #ifdef AMD_GCN_ASM
-            new_slot_indexes[write_index] = inc_local_row_counter(gds_dummy_dst, new_row);
+            new_slot_indexes[write_index] = inc_local_row_counter(round, gds_dummy_dst, new_row);
 #else
-            new_slot_indexes[write_index] = inc_row_counter(row_counters, new_row);
+            new_slot_indexes[write_index] = inc_row_counter(round, row_counters, new_row);
 #endif
         }
     }
 
     barrier(CLK_LOCAL_MEM_FENCE);
-    if (THREADS_PER_WRITE(round) == 2 && new_slot_indexes[write_index] < NR_SLOTS) {
+    if (THREADS_PER_WRITE(round) == 2 && new_slot_indexes[write_index] < _NR_SLOTS(round)) {
         __global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_indexes[write_index]);
         *(((__global uint4 *)p) + write_thread_index) = slot.ui4[write_thread_index];
-    } else if (THREADS_PER_WRITE(round) == 4 && new_slot_indexes[write_index] < NR_SLOTS) {
+    } else if (THREADS_PER_WRITE(round) == 4 && new_slot_indexes[write_index] < _NR_SLOTS(round)) {
         __global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_indexes[write_index]);
         *(((__global uint2 *)p) + write_thread_index) = slot.ui2[write_thread_index];
     }
@@ -610,8 +626,8 @@ void equihash_round(
     __local uint *gds_dummy_base)
 {
 #ifdef AMD_GCN_ASM
-    __local volatile uint *gds_dummy_src = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 1) % 2));
-    __local volatile uint *gds_dummy_dst = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 0) % 2));
+    __local volatile uint *gds_dummy_src = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 1) % 2));
+    __local volatile uint *gds_dummy_dst = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 0) % 2));
 #endif
     uint     i, j;
 
@@ -619,38 +635,32 @@ void equihash_round(
 #define BIN_MASK(round)        ((((round) + 1) % 2) ? 0xf000 : 0xf0000)
 #define BIN_MASK_OFFSET(round) ((((round) + 1) % 2) ? 3 * 4 : 4 * 4)
 
-#define BIN_MASK2(round) ((NR_ROWS_LOG == 12) ? ((((round) + 1) % 2) ? 0x00f0 : 0xf000) : \
-                          (NR_ROWS_LOG == 13) ? ((((round) + 1) % 2) ? 0x00e0 : 0xe000) : \
-                          (NR_ROWS_LOG == 14) ? ((((round) + 1) % 2) ? 0x00c0 : 0xc000) : \
-                          (NR_ROWS_LOG == 15) ? ((((round) + 1) % 2) ? 0x0080 : 0x8000) : \
-                                                       0)
-#define BIN_MASK2_OFFSET(round) ((NR_ROWS_LOG == 12) ? ((((round) + 1) % 2) ? 0 : 8) : \
-                                 (NR_ROWS_LOG == 13) ? ((((round) + 1) % 2) ? 1 : 9) : \
-                                 (NR_ROWS_LOG == 14) ? ((((round) + 1) % 2) ? 2 : 10) : \
-                                 (NR_ROWS_LOG == 15) ? ((((round) + 1) % 2) ? 3 : 11) : \
-                                                              0)
+#define BIN_MASK2(round) ((_NR_ROWS_LOG(round) == 12) ? ((((round) + 1) % 2) ? 0x00f0 : 0xf000) : \
+                                                        ((((round) + 1) % 2) ? 0x00e0 : 0xe000))
+#define BIN_MASK2_OFFSET(round) ((_NR_ROWS_LOG(round) == 12) ? ((((round) + 1) % 2) ? 0 : 8) : \
+                                                               ((((round) + 1) % 2) ? 1 : 9))
 
-#define NR_BINS_LOG (20 - NR_ROWS_LOG)
-#define NR_BINS (1 << NR_BINS_LOG)
+#define _NR_BINS_LOG(round) (20 - _NR_ROWS_LOG(round))
+#define _NR_BINS(round) (1 << _NR_BINS_LOG(round))
 
 
 
     uint nr_slots = 0;
     uint assigned_row_index = get_group_id(0);
-    if (assigned_row_index >= NR_ROWS)
+    if (assigned_row_index >= _NR_ROWS(round - 1))
         return;
 
-    for (i = get_local_id(0); i < NR_BINS; i += get_local_size(0))
-        bin_first_slots[i] = NR_SLOTS;
-    for (i = get_local_id(0); i < NR_SLOTS; i += get_local_size(0))
-        bin_next_slots[i] = NR_SLOTS;
+    for (i = get_local_id(0); i < _NR_BINS(round - 1); i += get_local_size(0))
+        bin_first_slots[i] = _NR_SLOTS(round - 1);
+    for (i = get_local_id(0); i < _NR_SLOTS(round - 1); i += get_local_size(0))
+        bin_next_slots[i] = _NR_SLOTS(round - 1);
 
 #ifdef AMD_GCN_ASM
     if (get_local_id(0) == 0)
-        *nr_collisions = nr_slots = get_nr_slots_local(gds_dummy_src, assigned_row_index);
+        *nr_collisions = nr_slots = get_nr_slots_local(round - 1, gds_dummy_src, assigned_row_index);
 #else
     if (get_local_id(0) == 0)
-        nr_collisions[0] = nr_slots = get_nr_slots(rowCountersSrc, assigned_row_index);
+        nr_collisions[0] = nr_slots = get_nr_slots(round - 1, rowCountersSrc, assigned_row_index);
 #endif
     barrier(CLK_LOCAL_MEM_FENCE);
     if (get_local_id(0))
@@ -672,12 +682,12 @@ void equihash_round(
         if (UINTS_IN_XI(round - 1) >= 3) slot_data1 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 1);
         if (UINTS_IN_XI(round - 1) >= 5) slot_data2 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 2);
 
-        if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * NR_SLOTS + slot_cache_index] = slot_data0.s0;
-        if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * NR_SLOTS + slot_cache_index] = slot_data0.s1;
-        if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * NR_SLOTS + slot_cache_index] = slot_data1.s0;
-        if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * NR_SLOTS + slot_cache_index] = slot_data1.s1;
-        if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * NR_SLOTS + slot_cache_index] = slot_data2.s0;
-        if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * NR_SLOTS + slot_cache_index] = slot_data2.s1;
+        if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s0;
+        if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s1;
+        if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data1.s0;
+        if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data1.s1;
+        if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data2.s0;
+        if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data2.s1;
         uint xi0 = slot_data0.s0;
 #elif defined(AMD_LEGACY)
         uint xi0;
@@ -685,21 +695,21 @@ void equihash_round(
             uint8 slot_data0;
             slot_data0 = *((__global uint8 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
 
-            if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * NR_SLOTS + slot_cache_index] = slot_data0.s0;
-            if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * NR_SLOTS + slot_cache_index] = slot_data0.s1;
-            if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * NR_SLOTS + slot_cache_index] = slot_data0.s2;
-            if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * NR_SLOTS + slot_cache_index] = slot_data0.s3;
-            if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * NR_SLOTS + slot_cache_index] = slot_data0.s4;
-            if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * NR_SLOTS + slot_cache_index] = slot_data0.s5;
+            if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s0;
+            if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s1;
+            if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s2;
+            if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s3;
+            if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s4;
+            if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s5;
             xi0 = slot_data0.s0;
         } else {
             uint4 slot_data0;
             slot_data0 = *((__global uint4 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
  
-            if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * NR_SLOTS + slot_cache_index] = slot_data0.s0;
-            if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * NR_SLOTS + slot_cache_index] = slot_data0.s1;
-            if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * NR_SLOTS + slot_cache_index] = slot_data0.s2;
-            if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * NR_SLOTS + slot_cache_index] = slot_data0.s3;
+            if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s0;
+            if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s1;
+            if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s2;
+            if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s3;
             xi0 = slot_data0.s0;
         }
 #else
@@ -707,7 +717,7 @@ void equihash_round(
         for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
             xi[j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, assigned_row_index, slot_index) + j);
         for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-            slot_cache[j * NR_SLOTS + slot_cache_index] = xi[j];
+            slot_cache[j * _NR_SLOTS(round - 1) + slot_cache_index] = xi[j];
         uint xi0 = xi[0];
 #endif
 
@@ -719,9 +729,9 @@ void equihash_round(
         bin_next_slots[i] = slot_b_index = atomic_xchg(&bin_first_slots[bin_to_use], i);
 
 #ifdef OPTIM_ON_THE_FLY_COLLISION_SEARCH 
-        while (slot_b_index < NR_SLOTS) {
+        while (slot_b_index < _NR_SLOTS(round - 1)) {
             uint coll_index = atomic_inc(nr_collisions);
-            if (coll_index >= LDS_COLL_SIZE)
+            if (coll_index >= _LDS_COLL_SIZE(round - 1))
                 break;
             collision_array_a[coll_index] = slot_a_index;
             collision_array_b[coll_index] = slot_b_index;
@@ -733,11 +743,11 @@ void equihash_round(
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    for (uint slot_a_index = get_local_id(0); slot_a_index < NR_SLOTS; slot_a_index += get_local_size(0)) {
+    for (uint slot_a_index = get_local_id(0); slot_a_index < _NR_SLOTS(round - 1); slot_a_index += get_local_size(0)) {
         uint slot_b_index = bin_next_slots[slot_a_index];
-        while (slot_b_index < NR_SLOTS) {
+        while (slot_b_index < _NR_SLOTS(round - 1)) {
             uint coll_index = atomic_inc(nr_collisions);
-            if (coll_index >= LDS_COLL_SIZE)
+            if (coll_index >= _LDS_COLL_SIZE(round - 1))
                 break;
             collision_array_a[coll_index] = slot_a_index;
             collision_array_b[coll_index] = slot_b_index;
@@ -749,10 +759,10 @@ void equihash_round(
     barrier(CLK_LOCAL_MEM_FENCE);
 
     uint nr_collisions_copy = *nr_collisions;
-    if (nr_collisions_copy >= LDS_COLL_SIZE)
-        nr_collisions_copy = LDS_COLL_SIZE;
+    if (nr_collisions_copy >= _LDS_COLL_SIZE(round - 1))
+        nr_collisions_copy = _LDS_COLL_SIZE(round - 1);
     while (nr_collisions_copy > 0) {
-        uint collision, slot_index_a = NR_SLOTS, slot_index_b;
+        uint collision, slot_index_a = _NR_SLOTS(round - 1), slot_index_b;
         __local uint *slot_cache_a, *slot_cache_b;
         uint write_index = get_local_id(0) / THREADS_PER_WRITE(round);
         if (write_index < nr_collisions_copy) {
@@ -784,12 +794,12 @@ void kernel_name(uint device_thread, __global char *ht_src, __global char *ht_ds
        	__global uint *debug) \
 { \
 	__local uint  gds_dummy_base[1];\
-    __local uint    slot_cache[ADJUSTED_LDS_ARRAY_SIZE(UINTS_IN_XI(N - 1) * NR_SLOTS)]; \
-    __local SLOT_INDEX_TYPE collision_array_a[ADJUSTED_LDS_ARRAY_SIZE(LDS_COLL_SIZE)]; \
-    __local SLOT_INDEX_TYPE collision_array_b[ADJUSTED_LDS_ARRAY_SIZE(LDS_COLL_SIZE)]; \
+    __local uint    slot_cache[ADJUSTED_LDS_ARRAY_SIZE(UINTS_IN_XI(N - 1) * _NR_SLOTS(N - 1))]; \
+    __local SLOT_INDEX_TYPE collision_array_a[ADJUSTED_LDS_ARRAY_SIZE(_LDS_COLL_SIZE(N - 1))]; \
+    __local SLOT_INDEX_TYPE collision_array_b[ADJUSTED_LDS_ARRAY_SIZE(_LDS_COLL_SIZE(N - 1))]; \
     __local uint    nr_collisions[1]; \
-	__local uint    bin_first_slots[ADJUSTED_LDS_ARRAY_SIZE(NR_BINS)]; \
-	__local SLOT_INDEX_TYPE bin_next_slots[ADJUSTED_LDS_ARRAY_SIZE(NR_SLOTS)]; \
+	__local uint    bin_first_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_BINS(N - 1))]; \
+	__local SLOT_INDEX_TYPE bin_next_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS(N - 1))]; \
 	__local SLOT_INDEX_TYPE new_slot_indexes[ADJUSTED_LDS_ARRAY_SIZE((THREADS_PER_WRITE(N) > 1) ? LOCAL_WORK_SIZE / THREADS_PER_WRITE(N) : 0)]; \
     equihash_round(device_thread, (N), ht_src, ht_dst, debug, slot_cache, collision_array_a, collision_array_b, \
 	    nr_collisions, rowCountersSrc, rowCountersDst, bin_first_slots, bin_next_slots, new_slot_indexes, gds_dummy_base); \
@@ -828,37 +838,37 @@ void kernel_potential_sols(
 {
 #ifdef AMD_GCN_ASM
     __local uint gds_dummy_base[1];
-    __local volatile uint *gds_dummy_src = gds_dummy_base + (RC_SIZE / sizeof(uint)) * (device_thread * 2);
+    __local volatile uint *gds_dummy_src = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * (device_thread * 2);
 #endif
-    __local uint refs[ADJUSTED_LDS_ARRAY_SIZE(NR_SLOTS)];
-    __local uint data[ADJUSTED_LDS_ARRAY_SIZE(NR_SLOTS)];
+    __local uint refs[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS(8))];
+    __local uint data[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS(8))];
 
     uint		nr_slots;
     uint		i, j;
     __global char	*p;
     uint		ref_i, ref_j;
-    __local uint    bin_first_slots[ADJUSTED_LDS_ARRAY_SIZE(NR_BINS)];
-    __local SLOT_INDEX_TYPE    bin_next_slots[ADJUSTED_LDS_ARRAY_SIZE(NR_SLOTS)];
+    __local uint    bin_first_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_BINS(8))];
+    __local SLOT_INDEX_TYPE    bin_next_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS(8))];
 
     if (!get_global_id(0))
         potential_sols->nr = 0;
     barrier(CLK_GLOBAL_MEM_FENCE);
 
     uint assigned_row_index = (get_global_id(0) / get_local_size(0));
-    if (assigned_row_index >= NR_ROWS)
+    if (assigned_row_index >= _NR_ROWS(8))
         return;
 
     __local uint nr_slots_shared;
-    for (i = get_local_id(0); i < NR_BINS; i += get_local_size(0))
-        bin_first_slots[i] = NR_SLOTS;
-    for (i = get_local_id(0); i < NR_SLOTS; i += get_local_size(0))
-        bin_next_slots[i] = NR_SLOTS;
+    for (i = get_local_id(0); i < _NR_BINS(8); i += get_local_size(0))
+        bin_first_slots[i] = _NR_SLOTS(8);
+    for (i = get_local_id(0); i < _NR_SLOTS(8); i += get_local_size(0))
+        bin_next_slots[i] = _NR_SLOTS(8);
 #ifdef AMD_GCN_ASM
     if (get_local_id(0) == 0)
-        nr_slots_shared = nr_slots = get_nr_slots_local(gds_dummy_src, assigned_row_index);
+        nr_slots_shared = nr_slots = get_nr_slots_local(8, gds_dummy_src, assigned_row_index);
 #else
     if (get_local_id(0) == 0)
-        nr_slots_shared = nr_slots = get_nr_slots(rowCountersSrc, assigned_row_index);
+        nr_slots_shared = nr_slots = get_nr_slots(8, rowCountersSrc, assigned_row_index);
 #endif
     barrier(CLK_LOCAL_MEM_FENCE);
     if (get_local_id(0))
@@ -883,7 +893,7 @@ void kernel_potential_sols(
     for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
         uint data_i = data[i];
         j = bin_next_slots[i];
-        while (j < NR_SLOTS) {
+        while (j < _NR_SLOTS(8)) {
             if (data_i == data[j]) {
                 mark_potential_sol(potential_sols, refs[i], refs[j]);
                 return;
@@ -925,13 +935,13 @@ void kernel_sols(__global char *ht0,
         for (int round = 7; round >= 0; --round) {
             if (round % 2) {
                 for (uint i = get_local_id(0); i < (1 << (8 - round)); i += get_local_size(0)) {
-                    inputs_b[i * 2 + 1] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_a[i]), DECODE_SLOT1(inputs_a[i]));
-                    inputs_b[i * 2] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_a[i]), DECODE_SLOT0(inputs_a[i]));
+                    inputs_b[i * 2 + 1] = *get_ref_ptr(htabs[round], round, DECODE_ROW(round, inputs_a[i]), DECODE_SLOT1(round, inputs_a[i]));
+                    inputs_b[i * 2] = *get_ref_ptr(htabs[round], round, DECODE_ROW(round, inputs_a[i]), DECODE_SLOT0(round, inputs_a[i]));
                 }
             } else {
                 for (uint i = get_local_id(0); i < (1 << (8 - round)); i += get_local_size(0)) {
-                    inputs_a[i * 2 + 1] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_b[i]), DECODE_SLOT1(inputs_b[i]));
-                    inputs_a[i * 2] = *get_ref_ptr(htabs[round], round, DECODE_ROW(inputs_b[i]), DECODE_SLOT0(inputs_b[i]));
+                    inputs_a[i * 2 + 1] = *get_ref_ptr(htabs[round], round, DECODE_ROW(round, inputs_b[i]), DECODE_SLOT1(round, inputs_b[i]));
+                    inputs_a[i * 2] = *get_ref_ptr(htabs[round], round, DECODE_ROW(round, inputs_b[i]), DECODE_SLOT0(round, inputs_b[i]));
                 }
             }
             barrier(CLK_LOCAL_MEM_FENCE);

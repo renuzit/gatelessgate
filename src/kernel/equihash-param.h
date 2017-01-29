@@ -43,10 +43,18 @@
 // There are PARAM_K - 1 hash tables, and each hash table has NR_ROWS rows.
 // Each row contains NR_SLOTS slots.
 
-#define NR_ROWS_LOG              12  /* 12, 13, 14, 15, or 16. */
-#define NR_SLOTS                 684
+//#define NR_ROWS_LOG              12
+//#define NR_ROWS                  4096
+//#define NR_SLOTS                 684
+//#define LDS_COLL_SIZE            793
 
-#define LDS_COLL_SIZE            793
+#define NR_ROWS_LOG_13(round)    0//((round) <= 1)
+#define MAX_NR_ROWS              4096//8192
+
+#define _NR_ROWS_LOG(round)      (NR_ROWS_LOG_13(round) ? 13  : 12)
+#define _NR_SLOTS(round)         (NR_ROWS_LOG_13(round) ? 360 : 684)
+#define _LDS_COLL_SIZE(round)    (NR_ROWS_LOG_13(round) ? 400 : 794)
+#define _NR_ROWS(round)          (NR_ROWS_LOG_13(round) ? 8192 : 4096)
 
 #define LOCAL_WORK_SIZE_ROUND0   WORKSIZE
 #define LOCAL_WORK_SIZE          WORKSIZE
@@ -63,12 +71,13 @@
 #define OPTIM_24BYTE_WRITES
 #endif
 #define OPTIM_16BYTE_WRITES
-#if !defined(AMD_LEGACY)
+#if 1//!defined(AMD_LEGACY)
 #define OPTIM_8BYTE_WRITES
 #endif
 
+//#define OPTIM_UINT_ROW_COUNTERS
 //#define OPTIM_FAST_INTEGER_DIVISION
-//#define OPTIM_COMPACT_ROW_COUNTERS
+#define OPTIM_COMPACT_ROW_COUNTERS
 #define OPTIM_IGNORE_ROW_COUNTER_OVERFLOWS
 #if defined(AMD) && !defined(AMD_LEGACY)
 #define OPTIM_ON_THE_FLY_COLLISION_SEARCH
@@ -78,16 +87,27 @@
 
 
 
+#define UINTS_IN_XI(round) (((round) == 0) ? 6 : \
+                            ((round) == 1) ? 6 : \
+                            ((round) == 2) ? 5 : \
+                            ((round) == 3) ? 5 : \
+                            ((round) == 4) ? 4 : \
+                            ((round) == 5) ? 4 : \
+                            ((round) == 6) ? 3 : \
+                            ((round) == 7) ? 2 : \
+                                             1)
+
+
+
 #define PARAM_N				   200
 #define PARAM_K			       9
 #define PREFIX                 (PARAM_N / (PARAM_K + 1))
 #define NR_INPUTS              (1 << PREFIX)
-#define NR_ROWS                         (1 << NR_ROWS_LOG)
 // Length of 1 element (slot) in byte
-#define SLOT_LEN                 32
-#define ADJUSTED_SLOT_LEN(round) (((round) <= 5) ? SLOT_LEN : SLOT_LEN - 16)
+#define MAX_SLOT_LEN           32
+#define _SLOT_LEN(round)       ((UINTS_IN_XI(round) >= 4) ? 32 : (UINTS_IN_XI(round) >= 2) ? 16 : 8)
 // Total size of hash table
-#define HT_SIZE				(NR_ROWS * NR_SLOTS * SLOT_LEN)
+#define HASH_TABLE_SIZE(round)				(_NR_ROWS(round) * _NR_SLOTS(round) * _SLOT_LEN(round))
 // Length of Zcash block header, nonce (part of header)
 #define ZCASH_BLOCK_HEADER_LEN		140
 // Offset of nTime in header
@@ -115,26 +135,21 @@
 // Length of SHA256 target
 #define SHA256_TARGET_LEN               (256 / 8)
 
-#ifdef OPTIM_COMPACT_ROW_COUNTERS
-#define BITS_PER_ROW ((NR_SLOTS < 3)    ? 2 : \
-	                          (NR_SLOTS < 7)    ? 3 : \
-	                          (NR_SLOTS < 15)   ? 4 : \
-	                          (NR_SLOTS < 31)   ? 5 : \
-	                          (NR_SLOTS < 63)   ? 6 : \
-	                          (NR_SLOTS < 255)  ? 8 : \
-	                          (NR_SLOTS < 1023) ? 10 : \
-                                                         16)
-#else
-#define BITS_PER_ROW  ((NR_SLOTS < 3)   ? 2 : \
-	                          (NR_SLOTS < 15)  ? 4 : \
-	                          (NR_SLOTS < 255) ? 8 : \
-                                                        16)
-#endif
+#ifdef OPTIM_UINT_ROW_COUNTERS
+#define BITS_PER_ROW  32
+#define ROWS_PER_UINT 1
+#define ROW_MASK      0xffffffff
+#elif defined(OPTIM_COMPACT_ROW_COUNTERS)
+#define BITS_PER_ROW  10
 #define ROWS_PER_UINT (32 / BITS_PER_ROW)
 #define ROW_MASK      ((1 << BITS_PER_ROW) - 1)
+#else
+#define BITS_PER_ROW  16
+#define ROWS_PER_UINT (32 / BITS_PER_ROW)
+#define ROW_MASK      ((1 << BITS_PER_ROW) - 1)
+#endif
 
-
-#define RC_SIZE ((NR_ROWS * 4 + ROWS_PER_UINT - 1) / ROWS_PER_UINT)
+#define ROW_COUNTERS_SIZE (((MAX_NR_ROWS + ROWS_PER_UINT - 1) / ROWS_PER_UINT) * sizeof(uint))
 
 
 
@@ -154,57 +169,19 @@ typedef struct	potential_sols_s
     uint	values[MAX_POTENTIAL_SOLS][2];
 } potential_sols_t;
 
-#if NR_ROWS_LOG <= 12 && NR_SLOTS <= (1 << 10)
+#define INPUT_ENCODING_SLOT_BITS(round) ((32 - _NR_ROWS_LOG(round)) / 2)
+#define INPUT_ENCODING_SLOT_MASK(round) ((1 << INPUT_ENCODING_SLOT_BITS(round)) - 1)
+#define INPUT_ENCODING_ROW_POS(round)   (INPUT_ENCODING_SLOT_BITS(round) * 2)
 
-#define ENCODE_INPUTS(row, slot0, slot1) \
-    ((row << 20) | ((slot1 & 0x3ff) << 10) | (slot0 & 0x3ff))
-#define DECODE_ROW(REF)   (REF >> 20)
-#define DECODE_SLOT1(REF) ((REF >> 10) & 0x3ff)
-#define DECODE_SLOT0(REF) (REF & 0x3ff)
+#define ENCODE_INPUTS(round, row, slot0, slot1) (  ( (row)                                      << INPUT_ENCODING_ROW_POS(round)  ) \
+                                                 | (((slot1) & INPUT_ENCODING_SLOT_MASK(round)) << INPUT_ENCODING_SLOT_BITS(round)) \
+                                                 | ( (slot0) & INPUT_ENCODING_SLOT_MASK(round)                                    ))
 
-#elif NR_ROWS_LOG <= 14 && NR_SLOTS <= (1 << 9)
+#define DECODE_ROW(round, ref)   ((ref) >> INPUT_ENCODING_ROW_POS(round))
+#define DECODE_SLOT1(round, ref) (((ref) >> INPUT_ENCODING_SLOT_BITS(round)) & INPUT_ENCODING_SLOT_MASK(round))
+#define DECODE_SLOT0(round, ref) ( (ref)                                     & INPUT_ENCODING_SLOT_MASK(round))
 
-#define ENCODE_INPUTS(row, slot0, slot1) \
-    ((row << 18) | ((slot1 & 0x1ff) << 9) | (slot0 & 0x1ff))
-#define DECODE_ROW(REF)   (REF >> 18)
-#define DECODE_SLOT1(REF) ((REF >> 9) & 0x1ff)
-#define DECODE_SLOT0(REF) (REF & 0x1ff)
 
-#elif NR_ROWS_LOG <= 16 && NR_SLOTS <= (1 << 8)
-
-#define ENCODE_INPUTS(row, slot0, slot1) \
-    ((row << 16) | ((slot1 & 0xff) << 8) | (slot0 & 0xff))
-#define DECODE_ROW(REF)   (REF >> 16)
-#define DECODE_SLOT1(REF) ((REF >> 8) & 0xff)
-#define DECODE_SLOT0(REF) (REF & 0xff)
-
-#elif NR_ROWS_LOG <= 18 && NR_SLOTS <= (1 << 7)
-
-#define ENCODE_INPUTS(row, slot0, slot1) \
-    ((row << 14) | ((slot1 & 0x7f) << 7) | (slot0 & 0x7f))
-#define DECODE_ROW(REF)   (REF >> 14)
-#define DECODE_SLOT1(REF) ((REF >> 7) & 0x7f)
-#define DECODE_SLOT0(REF) (REF & 0x7f)
-
-#elif NR_ROWS_LOG == 19 && NR_SLOTS <= (1 << 6)
-
-#define ENCODE_INPUTS(row, slot0, slot1) \
-    ((row << 13) | ((slot1 & 0x3f) << 6) | (slot0 & 0x3f)) /* 1 spare bit */
-#define DECODE_ROW(REF)   (REF >> 13)
-#define DECODE_SLOT1(REF) ((REF >> 6) & 0x3f)
-#define DECODE_SLOT0(REF) (REF & 0x3f)
-
-#elif NR_ROWS_LOG == 20 && NR_SLOTS <= (1 << 6)
-
-#define ENCODE_INPUTS(row, slot0, slot1) \
-    ((row << 12) | ((slot1 & 0x3f) << 6) | (slot0 & 0x3f))
-#define DECODE_ROW(REF)   (REF >> 12)
-#define DECODE_SLOT1(REF) ((REF >> 6) & 0x3f)
-#define DECODE_SLOT0(REF) (REF & 0x3f)
-
-#else
-#error "unsupported NR_ROWS_LOG"
-#endif
 
 #define NEXT_PRIME_NO(n) \
 	(((n) <= 2) ? 2 : \
@@ -396,10 +373,4 @@ typedef struct	potential_sols_s
 	((n) <= 32768) ? 32768 : \
                      (n))
 
-#if NR_SLOTS < 255
-#define SLOT_INDEX_TYPE uchar
-#elif NR_SLOTS < 65535
 #define SLOT_INDEX_TYPE ushort
-#else
-#error "Unsupported NR_SLOTS"
-#endif

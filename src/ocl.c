@@ -792,47 +792,47 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize, algorithm_t *alg
     }
 
     char buffer[32];
-    clState->CLbuffer0 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HT_SIZE, NULL, &status);
+    clState->CLbuffer0 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(0), NULL, &status);
     snprintf(buffer, sizeof(buffer), "CLbuffer0");
     if (status != CL_SUCCESS)
       goto out;
-    clState->buffer1 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HT_SIZE, NULL, &status);
+    clState->buffer1 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(1), NULL, &status);
     snprintf(buffer, sizeof(buffer), "buffer1");
     if (status != CL_SUCCESS)
       goto out;
-    clState->buffer2 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, RC_SIZE, NULL, &status);
+    clState->buffer2 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, ROW_COUNTERS_SIZE, NULL, &status);
     snprintf(buffer, sizeof(buffer), "buffer2");
     if (status != CL_SUCCESS)
       goto out;
-    clState->buffer3 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, RC_SIZE, NULL, &status);
+    clState->buffer3 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, ROW_COUNTERS_SIZE, NULL, &status);
     snprintf(buffer, sizeof(buffer), "buffer3");
     if (status != CL_SUCCESS)
       goto out;
-    clState->buffer4 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HT_SIZE, NULL, &status);
+    clState->buffer4 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(2), NULL, &status);
     snprintf(buffer, sizeof(buffer), "buffer4");
     if (status != CL_SUCCESS)
       goto out;
-    clState->buffer5 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HT_SIZE, NULL, &status);
+    clState->buffer5 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(3), NULL, &status);
     snprintf(buffer, sizeof(buffer), "buffer5");
     if (status != CL_SUCCESS)
       goto out;
-	clState->buffer6 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HT_SIZE, NULL, &status);
+	clState->buffer6 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(4), NULL, &status);
 	snprintf(buffer, sizeof(buffer), "buffer6");
 	if (status != CL_SUCCESS)
 		goto out;
-	clState->buffer7 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HT_SIZE, NULL, &status);
+	clState->buffer7 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(5), NULL, &status);
 	snprintf(buffer, sizeof(buffer), "buffer7");
 	if (status != CL_SUCCESS)
 		goto out;
-	clState->buffer8 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HT_SIZE, NULL, &status);
+	clState->buffer8 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(6), NULL, &status);
 	snprintf(buffer, sizeof(buffer), "buffer8");
 	if (status != CL_SUCCESS)
 		goto out;
-	clState->buffer9 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HT_SIZE, NULL, &status);
+	clState->buffer9 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(7), NULL, &status);
 	snprintf(buffer, sizeof(buffer), "buffer9");
 	if (status != CL_SUCCESS)
 		goto out;
-	clState->buffer10 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HT_SIZE, NULL, &status);
+	clState->buffer10 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(8), NULL, &status);
 	snprintf(buffer, sizeof(buffer), "buffer10");
 	if (status != CL_SUCCESS)
 		goto out;
