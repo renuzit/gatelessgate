@@ -262,7 +262,12 @@ del  "$(OutDir)*.bin"</Command>
     <PostBuildEvent>
       <Command>xcopy /Y /E /I "$(ProjectDir)..\kernel" "$(OutDir)kernel"
 copy /Y "$(ProjectDir)..\*.bat" "$(OutDir)"
-del  "$(OutDir)*.bin"</Command>
+del  "$(OutDir)*.bin"
+clrxasm "$(ProjectDir)..\kernel\equihash-gcn1-ocl12-32bit.asm" -g Oland -o "$(OutDir)\binary-kernel\equihashOlandgw256l4.bin"
+clrxasm "$(ProjectDir)..\kernel\equihash-gcn1-ocl12-32bit.asm" -g Capeverde -o "$(OutDir)\binary-kernel\equihashCapeverdegw256l4.bin"
+clrxasm "$(ProjectDir)..\kernel\equihash-gcn1-ocl12-32bit.asm" -g Pitcairn -o "$(OutDir)\binary-kernel\equihashPitcairngw256l4.bin"
+clrxasm "$(ProjectDir)..\kernel\equihash-gcn1-ocl12-32bit.asm" -g Tahiti -o "$(OutDir)\binary-kernel\equihashTahitigw256l4.bin"
+</Command>
     </PostBuildEvent>
     <PreBuildEvent>
       <Command>
@@ -451,6 +456,7 @@ del  "$(OutDir)*.bin"</Command>
     <None Include="..\kernel\darkcoin.cl" />
     <None Include="..\kernel\diamond.cl" />
     <None Include="..\kernel\echo.cl" />
+    <None Include="..\kernel\equihash-gcn1-ocl12-32bit.asm" />
     <None Include="..\kernel\equihash.cl" />
     <None Include="..\kernel\ethash-genoil.cl" />
     <None Include="..\kernel\ethash.cl" />
