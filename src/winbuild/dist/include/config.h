@@ -68,11 +68,11 @@
 
 #endif
 
-#define VERSION "v0.1.2"
+#define VERSION "v0.1.3-pre0"
 #define PACKAGE_NAME "Gateless Gate"
 #define PACKAGE_TARNAME "gatelessgate"
-#define PACKAGE_VERSION "0.1.2"
-#define PACKAGE_STRING "Gateless Gate 0.1.2"
+#define PACKAGE_VERSION "0.1.3-pre0"
+#define PACKAGE_STRING "Gateless Gate 0.1.3-pre0"
 #define PACKAGE "Gateless Gate"
 
 #define SGMINER_PREFIX ""
