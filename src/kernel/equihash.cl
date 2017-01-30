@@ -494,29 +494,29 @@ uint xor_and_store(uint device_thread, uint round, __global char *ht_src, __glob
         else
 #endif
 #ifdef OPTIM_12BYTE_WRITES
-        if (round >= 7)
-            *(__global uint3 *)p = slot.ui3[0];
-        else
+            if (round >= 7)
+                *(__global uint3 *)p = slot.ui3[0];
+            else
 #endif
 #ifdef OPTIM_16BYTE_WRITES
-        if (round >= 6)
-            *(__global uint4 *)p = slot.ui4[0];
-        else
+                if (round >= 6)
+                    *(__global uint4 *)p = slot.ui4[0];
+                else
 #endif
 #ifdef OPTIM_24BYTE_WRITES
-        if (round >= 2)
-            *(__global ulong3 *)p = slot.ul3;
-        else
+                    if (round >= 2)
+                        *(__global ulong3 *)p = slot.ul3;
+                    else
 #endif
-            *(__global uint8 *)p = slot.ui8;
+                        *(__global uint8 *)p = slot.ui8;
     }
     return ret;
 }
 
 uint parallel_xor_and_store(
     uint device_thread,
-    uint round, 
-    __global char *ht_src, 
+    uint round,
+    __global char *ht_src,
     __global char *ht_dst,
     uint row,
     uint slot_a,
@@ -650,9 +650,9 @@ void equihash_round(
     if (assigned_row_index >= _NR_ROWS(round - 1))
         return;
 
-    for (i = get_local_id(0); i < _NR_BINS(round - 1); i += get_local_size(0))
+    for (i = get_local_id(0); i < _NR_BINS(round - 1); i += LOCAL_WORK_SIZE)
         bin_first_slots[i] = _NR_SLOTS(round - 1);
-    for (i = get_local_id(0); i < _NR_SLOTS(round - 1); i += get_local_size(0))
+    for (i = get_local_id(0); i < _NR_SLOTS(round - 1); i += LOCAL_WORK_SIZE)
         bin_next_slots[i] = _NR_SLOTS(round - 1);
 
 #ifdef AMD_GCN_ASM
@@ -673,77 +673,97 @@ void equihash_round(
 
     // Perform a radix sort as slots get loaded into LDS.
     // Make sure all the work items in the work group enter the loop.
-    for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
-        uint slot_index = i;
-        uint slot_cache_index = i;
-#ifdef NVIDIA
-        uint2 slot_data0, slot_data1, slot_data2;
-        if (UINTS_IN_XI(round - 1) >= 1) slot_data0 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
-        if (UINTS_IN_XI(round - 1) >= 3) slot_data1 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 1);
-        if (UINTS_IN_XI(round - 1) >= 5) slot_data2 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 2);
-
-        if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s0;
-        if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s1;
-        if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data1.s0;
-        if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data1.s1;
-        if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data2.s0;
-        if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data2.s1;
-        uint xi0 = slot_data0.s0;
-#elif defined(AMD_LEGACY)
-        uint xi0;
-        if (UINTS_IN_XI(round - 1) >= 5) {
-            uint8 slot_data0;
-            slot_data0 = *((__global uint8 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
-
-            if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s0;
-            if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s1;
-            if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s2;
-            if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s3;
-            if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s4;
-            if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s5;
-            xi0 = slot_data0.s0;
-        } else {
-            uint4 slot_data0;
-            slot_data0 = *((__global uint4 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
- 
-            if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s0;
-            if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s1;
-            if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s2;
-            if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s3;
-            xi0 = slot_data0.s0;
-        }
-#else
-        uint xi[6];
-        for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-            xi[j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, assigned_row_index, slot_index) + j);
-        for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-            slot_cache[j * _NR_SLOTS(round - 1) + slot_cache_index] = xi[j];
-        uint xi0 = xi[0];
-#endif
-
-        uint slot_a_index = i;
-        uint slot_b_index;
-        uint bin_to_use =
-            ((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
-            | ((xi0 & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
-        bin_next_slots[i] = slot_b_index = atomic_xchg(&bin_first_slots[bin_to_use], i);
-
-#ifdef OPTIM_ON_THE_FLY_COLLISION_SEARCH 
-        while (slot_b_index < _NR_SLOTS(round - 1)) {
-            uint coll_index = atomic_inc(nr_collisions);
-            if (coll_index >= _LDS_COLL_SIZE(round - 1))
-                break;
-            collision_array_a[coll_index] = slot_a_index;
-            collision_array_b[coll_index] = slot_b_index;
-            slot_b_index = bin_next_slots[slot_b_index];
-        }
+    uint foreground_thread_group_size = LOCAL_WORK_SIZE;
+    uint background_thread_group_size = 0;
+    uint i_max, coll_search_i_min = 0;
+    if (OPTIM_ON_THE_FLY_COLLISION_SEARCH(round)) {
+        foreground_thread_group_size -= 64;
+        background_thread_group_size += 64;
+        i_max = nr_slots + (foreground_thread_group_size - nr_slots % foreground_thread_group_size);
+        i_max = i_max / foreground_thread_group_size * LOCAL_WORK_SIZE - 1;
+    } else {
+        i_max = nr_slots;
+        i_max = i_max + (LOCAL_WORK_SIZE - i_max % LOCAL_WORK_SIZE) - 1;
     }
+#pragma unroll 1
+    for (i = get_local_id(0); i <= i_max; i += LOCAL_WORK_SIZE) {
+        if (!OPTIM_ON_THE_FLY_COLLISION_SEARCH(round) || get_local_id(0) < foreground_thread_group_size) {
+            uint slot_index = i / LOCAL_WORK_SIZE * foreground_thread_group_size + i % LOCAL_WORK_SIZE;
+            if (slot_index < nr_slots) {
+                uint slot_cache_index = slot_index;
+#ifdef NVIDIA
+                uint2 slot_data0, slot_data1, slot_data2;
+                if (UINTS_IN_XI(round - 1) >= 1) slot_data0 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
+                if (UINTS_IN_XI(round - 1) >= 3) slot_data1 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 1);
+                if (UINTS_IN_XI(round - 1) >= 5) slot_data2 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 2);
+
+                if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s0;
+                if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s1;
+                if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data1.s0;
+                if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data1.s1;
+                if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data2.s0;
+                if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data2.s1;
+                uint xi0 = slot_data0.s0;
+#elif defined(AMD_LEGACY)
+                uint xi0;
+                if (UINTS_IN_XI(round - 1) >= 5) {
+                    uint8 slot_data0;
+                    slot_data0 = *((__global uint8 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
+
+                    if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s0;
+                    if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s1;
+                    if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s2;
+                    if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s3;
+                    if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s4;
+                    if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s5;
+                    xi0 = slot_data0.s0;
+                } else {
+                    uint4 slot_data0;
+                    slot_data0 = *((__global uint4 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
+
+                    if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s0;
+                    if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s1;
+                    if (UINTS_IN_XI(round - 1) >= 3) slot_cache[2 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s2;
+                    if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s3;
+                    xi0 = slot_data0.s0;
+                }
 #else
+                uint xi[6];
+                for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
+                    xi[j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, assigned_row_index, slot_index) + j);
+                for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
+                    slot_cache[j * _NR_SLOTS(round - 1) + slot_cache_index] = xi[j];
+                uint xi0 = xi[0];
+#endif
+                uint bin_to_use =
+                    ((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
+                    | ((xi0 & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
+                bin_next_slots[slot_index] = atomic_xchg(&bin_first_slots[bin_to_use], slot_index);
+            }
+        } else if (   OPTIM_ON_THE_FLY_COLLISION_SEARCH(round) 
+                   && get_local_id(0) >= foreground_thread_group_size
+                   && i >= LOCAL_WORK_SIZE) {
+            uint slot_a_index = coll_search_i_min + i % LOCAL_WORK_SIZE - foreground_thread_group_size;
+            if (slot_a_index < nr_slots) {
+                uint slot_b_index = bin_next_slots[slot_a_index];
+                while (slot_b_index < _NR_SLOTS(round - 1)) {
+                    uint coll_index = atomic_inc(nr_collisions);
+                    if (coll_index >= _LDS_COLL_SIZE(round - 1))
+                        break;
+                    collision_array_a[coll_index] = slot_a_index;
+                    collision_array_b[coll_index] = slot_b_index;
+                    slot_b_index = bin_next_slots[slot_b_index];
+                }
+            }
+        }
+        if (i >= LOCAL_WORK_SIZE)
+            coll_search_i_min += background_thread_group_size;
+        barrier(CLK_LOCAL_MEM_FENCE);
     }
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    for (uint slot_a_index = get_local_id(0); slot_a_index < _NR_SLOTS(round - 1); slot_a_index += get_local_size(0)) {
+    for (uint slot_a_index = coll_search_i_min + get_local_id(0); slot_a_index < nr_slots; slot_a_index += LOCAL_WORK_SIZE) {
         uint slot_b_index = bin_next_slots[slot_a_index];
         while (slot_b_index < _NR_SLOTS(round - 1)) {
             uint coll_index = atomic_inc(nr_collisions);
@@ -754,7 +774,6 @@ void equihash_round(
             slot_b_index = bin_next_slots[slot_b_index];
         }
     }
-#endif
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -778,7 +797,7 @@ void equihash_round(
             xor_and_store(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst, gds_dummy_base);
         }
 
-        nr_collisions_copy -= min(nr_collisions_copy, (uint)get_local_size(0) / THREADS_PER_WRITE(round));
+        nr_collisions_copy -= min(nr_collisions_copy, (uint)LOCAL_WORK_SIZE / THREADS_PER_WRITE(round));
         //barrier(CLK_LOCAL_MEM_FENCE);
     }
 }
