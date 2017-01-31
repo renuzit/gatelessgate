@@ -60,6 +60,7 @@ char *curly = ":D";
 
 #include "algorithm.h"
 #include "algorithm/ethash.h"
+#include "algorithm/pascal.h"
 #include "gbt-util.h"
 #include "pool.h"
 #include "config_parser.h"
@@ -2293,7 +2294,9 @@ static void gen_gbt_work(struct pool *pool, struct work *work)
     }
 
     // Neoscrypt doesn't calc_midstate()
-    if (pool->algorithm.type != ALGO_NEOSCRYPT) {
+    if (pool->algorithm.type == ALGO_PASCAL) {
+        pascal_midstate(work);
+    } else if (pool->algorithm.type != ALGO_NEOSCRYPT) {
         calc_midstate(work);
     }
     local_work++;
@@ -2876,7 +2879,7 @@ static void curses_print_status(void)
     unsigned short int line = 0;
 
     if (has_colors())
-       wattron(statuswin, COLOR_PAIR_FIRST_LINE | A_BOLD);
+        wattron(statuswin, COLOR_PAIR_FIRST_LINE | A_BOLD);
 
     wattron(statuswin, A_BOLD);
     cg_mvwprintw(statuswin, line, 0, PACKAGE " " CGMINER_VERSION " - Started: %s", datestamp);
@@ -2884,18 +2887,18 @@ static void curses_print_status(void)
     wattroff(statuswin, A_BOLD);
 
     if (has_colors())
-       wattroff(statuswin, COLOR_PAIR_FIRST_LINE | A_BOLD);
+        wattroff(statuswin, COLOR_PAIR_FIRST_LINE | A_BOLD);
 
     if (has_colors())
-       wattron(statuswin, COLOR_PAIR_BORDER | A_BOLD);
+        wattron(statuswin, COLOR_PAIR_BORDER | A_BOLD);
 
     mvwhline(statuswin, ++line, 0, '-', 80);
 
     if (has_colors())
-       wattroff(statuswin, COLOR_PAIR_BORDER | A_BOLD);
+        wattroff(statuswin, COLOR_PAIR_BORDER | A_BOLD);
 
     if (has_colors())
-       wattron(statuswin, COLOR_PAIR_STATUS | A_BOLD);
+        wattron(statuswin, COLOR_PAIR_STATUS | A_BOLD);
 
     cg_mvwprintw(statuswin, ++line, 0, "%s", statusline);
     wclrtoeol(statuswin);
@@ -2922,19 +2925,19 @@ static void curses_print_status(void)
         prev_block, block_diff, blocktime, best_share);
 
     if (has_colors())
-       wattroff(statuswin, COLOR_PAIR_STATUS | A_BOLD);
+        wattroff(statuswin, COLOR_PAIR_STATUS | A_BOLD);
 
     if (has_colors())
-       wattron(statuswin, COLOR_PAIR_BORDER | A_BOLD);
+        wattron(statuswin, COLOR_PAIR_BORDER | A_BOLD);
 
     mvwhline(statuswin, ++line, 0, '-', 80);
     mvwhline(statuswin, statusy - 1, 0, '-', 80);
 
     if (has_colors())
-       wattroff(statuswin, COLOR_PAIR_BORDER | A_BOLD);
+        wattroff(statuswin, COLOR_PAIR_BORDER | A_BOLD);
 
     if (has_colors())
-       wattron(statuswin, COLOR_PAIR_DEVICE_STATUS);
+        wattron(statuswin, COLOR_PAIR_DEVICE_STATUS);
 
     cg_mvwprintw(statuswin, devcursor - 1, 0, "[P]ool management [G]PU management [S]ettings [D]isplay options [Q]uit");
 }
@@ -3129,30 +3132,30 @@ bool _log_curses_only(int prio, const char *datetime, const char *str)
     if (curses_active) {
         if (!opt_loginput || high_prio) {
             if (has_colors()) {
-                wattron(logwin, ((prio == LOG_ERR)     ? COLOR_PAIR_ERROR :
-                                 (prio == LOG_WARNING) ? COLOR_PAIR_WARNING :
-                                 (prio == LOG_INFO)    ? COLOR_PAIR_INFO :
-                                                         COLOR_PAIR_MISC));
+                wattron(logwin, ((prio == LOG_ERR) ? COLOR_PAIR_ERROR :
+                    (prio == LOG_WARNING) ? COLOR_PAIR_WARNING :
+                    (prio == LOG_INFO) ? COLOR_PAIR_INFO :
+                    COLOR_PAIR_MISC));
             }
             wprintw(logwin, "%s", datetime);
             if (has_colors()) {
-                wattroff(logwin, ((prio == LOG_ERR)     ? COLOR_PAIR_ERROR :
-                                 (prio == LOG_WARNING) ? COLOR_PAIR_WARNING :
-                                 (prio == LOG_INFO)    ? COLOR_PAIR_INFO :
-                                                         COLOR_PAIR_MISC));
+                wattroff(logwin, ((prio == LOG_ERR) ? COLOR_PAIR_ERROR :
+                    (prio == LOG_WARNING) ? COLOR_PAIR_WARNING :
+                    (prio == LOG_INFO) ? COLOR_PAIR_INFO :
+                    COLOR_PAIR_MISC));
             }
             if (has_colors()) {
-                wattron(logwin, ((prio == LOG_ERR)     ? COLOR_PAIR_ERROR :
-                                 (prio == LOG_WARNING) ? COLOR_PAIR_WARNING :
-                                 (prio == LOG_INFO)    ? COLOR_PAIR_INFO :
-                                                         COLOR_PAIR_MISC) | A_BOLD);
+                wattron(logwin, ((prio == LOG_ERR) ? COLOR_PAIR_ERROR :
+                    (prio == LOG_WARNING) ? COLOR_PAIR_WARNING :
+                    (prio == LOG_INFO) ? COLOR_PAIR_INFO :
+                    COLOR_PAIR_MISC) | A_BOLD);
             }
             wprintw(logwin, "%s\n", str);
             if (has_colors()) {
-                wattroff(logwin, ((prio == LOG_ERR)     ? COLOR_PAIR_ERROR :
-                                 (prio == LOG_WARNING) ? COLOR_PAIR_WARNING :
-                                 (prio == LOG_INFO)    ? COLOR_PAIR_INFO :
-                                                         COLOR_PAIR_MISC) | A_BOLD);
+                wattroff(logwin, ((prio == LOG_ERR) ? COLOR_PAIR_ERROR :
+                    (prio == LOG_WARNING) ? COLOR_PAIR_WARNING :
+                    (prio == LOG_INFO) ? COLOR_PAIR_INFO :
+                    COLOR_PAIR_MISC) | A_BOLD);
             }
             if (high_prio) {
                 touchwin(logwin);
@@ -6156,6 +6159,8 @@ static void *stratum_sthread(void *userdata)
             // Neoscrypt is little endian
             if (pool->algorithm.type == ALGO_NEOSCRYPT)
                 nonce = htobe32(*((uint32_t *)(work->data + 76)));
+            else if (pool->algorithm.type == ALGO_PASCAL)
+                nonce = htobe32(*((uint32_t *)(work->data + 196)));
             else
                 nonce = *((uint32_t *)(work->data + 76));
 
@@ -6812,6 +6817,15 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
 
     /* Update coinbase. Always use an LE encoded nonce2 to fill in values
     * from left to right and prevent overflow errors with small n2sizes */
+    if (pool->algorithm.type == ALGO_PASCAL) {
+        /* TODO: refactor this */
+        for (i = 0; i < 56; i += 8) {
+            if (((pool->nonce2 >> i) & 0xff) < 0x2d) pool->nonce2 = (pool->nonce2 & (0xffffffffffffff00 << i)) + (0x002d2d2d2d2d2d2d >> (48 - i));
+            if (((pool->nonce2 >> i) & 0xff) > 0xfe) pool->nonce2 = (pool->nonce2 & (0xffffffffffffff00 << i)) + (0x012d2d2d2d2d2d2d >> (48 - i));
+        }
+        if (((pool->nonce2 >> 56) & 0xff) < 0x2d) pool->nonce2 = 0x2d2d2d2d2d2d2d2d;
+        if (((pool->nonce2 >> 56) & 0xff) > 0xfe) pool->nonce2 = 0x2d2d2d2d2d2d2d2d;
+    }
     nonce2le = htole64(pool->nonce2);
     memcpy(pool->coinbase + pool->nonce2_offset, &nonce2le, pool->n2size);
     work->nonce2 = pool->nonce2++;
@@ -6820,13 +6834,15 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
     /* Downgrade to a read lock to read off the pool variables */
     cg_dwlock(&pool->data_lock);
 
-    /* Generate merkle root */
-    pool->algorithm.gen_hash(pool->coinbase, pool->swork.cb_len, merkle_root);
-    memcpy(merkle_sha, merkle_root, 32);
-    for (i = 0; i < pool->swork.merkles; i++) {
-        memcpy(merkle_sha + 32, pool->swork.merkle_bin[i], 32);
-        gen_hash(merkle_sha, 64, merkle_root);
+    if (pool->algorithm.type != ALGO_PASCAL) {
+        /* Generate merkle root */
+        pool->algorithm.gen_hash(pool->coinbase, pool->swork.cb_len, merkle_root);
         memcpy(merkle_sha, merkle_root, 32);
+        for (i = 0; i < pool->swork.merkles; i++) {
+            memcpy(merkle_sha + 32, pool->swork.merkle_bin[i], 32);
+            gen_hash(merkle_sha, 64, merkle_root);
+            memcpy(merkle_sha, merkle_root, 32);
+        }
     }
 
     applog(LOG_DEBUG, "[THR%d] gen_stratum_work() - algorithm = %s", work->thr_id, pool->algorithm.name);
@@ -6859,6 +6875,13 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
         ((uint32_t *)work->data)[18] = be32toh(temp);
         ((uint32_t *)work->data)[20] = 0x80000000;
         ((uint32_t *)work->data)[31] = 0x00000280;
+    } else if (pool->algorithm.type == ALGO_PASCAL) {
+        uint32_t temp;
+        memcpy(work->data, pool->coinbase, pool->swork.cb_len);
+        hex2bin((unsigned char *)&temp, pool->swork.ntime, 4);
+        /* Add the nbits (big endianess). */
+        ((uint32_t *)work->data)[48] = be32toh(temp);
+        ((uint32_t *)work->data)[49] = 0;
     } else {
         data32 = (uint32_t *)merkle_sha;
         swap32 = (uint32_t *)merkle_root;
@@ -6881,15 +6904,19 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
 
     if (opt_debug) {
         char *header, *merkle_hash;
+        int datasize = 128;
+        if (pool->algorithm.type == ALGO_PASCAL) datasize = 256;
 
-        header = bin2hex(work->data, 128);
-        merkle_hash = bin2hex((const unsigned char *)merkle_root, 32);
-        applog(LOG_DEBUG, "[THR%d] Generated stratum merkle %s", work->thr_id, merkle_hash);
+        header = bin2hex(work->data, datasize);
+        if (pool->algorithm.type != ALGO_PASCAL) {
+            merkle_hash = bin2hex((const unsigned char *)merkle_root, 32);
+            applog(LOG_DEBUG, "[THR%d] Generated stratum merkle %s", work->thr_id, merkle_hash);
+            free(merkle_hash);
+        }
         applog(LOG_DEBUG, "[THR%d] Generated stratum header %s", work->thr_id, header);
         applog(LOG_DEBUG, "[THR%d] Work job_id %s nonce2 %" PRIu64 " ntime %s", work->thr_id, work->job_id,
             work->nonce2, work->ntime);
         free(header);
-        free(merkle_hash);
     }
 
     // For Neoscrypt use set_target_neoscrypt() function
@@ -7720,8 +7747,8 @@ void inc_hw_errors(struct thr_info *thr)
 static void rebuild_nonce(struct work *work, uint32_t nonce)
 {
     uint32_t nonce_pos = 76;
-    if (work->pool->algorithm.type == ALGO_CRE)
-        nonce_pos = 140;
+    if (work->pool->algorithm.type == ALGO_CRE) nonce_pos = 140;
+    else if (work->pool->algorithm.type == ALGO_PASCAL) nonce_pos = 196;
 
     if (work->pool->algorithm.type == ALGO_ETHASH) {
         uint64_t *work_nonce = (uint64_t *)(work->data + 32);
@@ -8975,7 +9002,7 @@ static void fork_monitor()
         perror("close - failed to close read end of pipe for --monitor");
         exit(1);
     }
-}
+    }
 #endif // defined(unix)
 
 #ifdef HAVE_CURSES
@@ -9918,4 +9945,4 @@ retry:
     }
 
     return 0;
-}
+        }

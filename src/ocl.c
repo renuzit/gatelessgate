@@ -926,6 +926,9 @@ out:
     case ALGO_ETHASH:
       readbufsize = 32;
       break;
+    case ALGO_PASCAL:
+      readbufsize = 196;
+      break;
     default:
       readbufsize = 128;
   }

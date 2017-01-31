@@ -16,6 +16,7 @@ typedef enum {
   ALGO_CRE,
   ALGO_SCRYPT,
   ALGO_NSCRYPT,
+  ALGO_PASCAL,
   ALGO_X11,
   ALGO_X13,
   ALGO_X14,
@@ -39,7 +40,7 @@ typedef enum {
   ALGO_VANILLA,
   ALGO_ETHASH,
   ALGO_CRYPTONIGHT,
-  ALGO_EQUIHASH
+  ALGO_EQUIHASH,
 } algorithm_type_t;
 
 extern const char *algorithm_type_str[];
