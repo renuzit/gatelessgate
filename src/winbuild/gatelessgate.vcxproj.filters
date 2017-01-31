@@ -53,9 +53,6 @@
     <ClCompile Include="..\logging.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\sgminer.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\util.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -264,6 +261,12 @@
       <Filter>Source Files\sph</Filter>
     </ClCompile>
     <ClCompile Include="..\gbt-util.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\algorithm\pascal.c">
+      <Filter>Source Files\algorithm</Filter>
+    </ClCompile>
+    <ClCompile Include="..\gatelessgate.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -480,6 +483,9 @@
     </ClInclude>
     <ClInclude Include="..\kernel\equihash-param.h">
       <Filter>Resource Files\kernel</Filter>
+    </ClInclude>
+    <ClInclude Include="..\algorithm\pascal.h">
+      <Filter>Header Files\algorithm</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
