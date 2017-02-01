@@ -6923,7 +6923,11 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
     if (pool->algorithm.type == ALGO_NEOSCRYPT) {
         set_target_neoscrypt(work->target, work->sdiff, work->thr_id);
     } else {
-        calc_midstate(work);
+        if (pool->algorithm.type == ALGO_PASCAL) {
+	    pascal_midstate(work);
+        } else {
+            calc_midstate(work);
+        }
         set_target(work->target, work->sdiff, pool->algorithm.diff_multiplier2, work->thr_id);
     }
 

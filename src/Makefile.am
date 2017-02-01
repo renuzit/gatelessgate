@@ -83,6 +83,7 @@ gatelessgate_SOURCES += algorithm/blakecoin.c algorithm/blakecoin.h
 gatelessgate_SOURCES += algorithm/ethash.c algorithm/ethgencache.c algorithm/ethash.h algorithm/eth-sha3.c algorithm/eth-sha3.h
 gatelessgate_SOURCES += algorithm/cryptonight.c algorithm/cryptonight.h algorithm/cn-aes-tbls.h
 gatelessgate_SOURCES += algorithm/equihash.c algorithm/equihash.h
+gatelessgate_SOURCES += algorithm/pascal.c algorithm/pascal.h
 gatelessgate_SOURCES += gbt-util.c gbt-util.h
 
 bin_SCRIPTS	= $(top_srcdir)/kernel/*.cl
