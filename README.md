@@ -21,8 +21,8 @@ and that you need RADEON PRO drivers. Please refer to the documentation of the o
 Please note that this software is still in the alpha stage, and some of its features are highly experimental. If you have questions or
 feedback, please post them to:
 
-https://bitcointalk.org/index.php?topic=1716584
-https://forum.z.cash/t/gateless-gate-a-fork-of-the-silentarmy-miner-has-arrived/12838
+* https://bitcointalk.org/index.php?topic=1716584
+* https://forum.z.cash/t/gateless-gate-a-fork-of-the-silentarmy-miner-has-arrived/12838
 
 If you find this miner useful or would like to contribute to further development, please consider donations to:
 
