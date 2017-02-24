@@ -45,17 +45,17 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\MultiMiner.Engine\MultiMiner.Engine.csproj">
+    <ProjectReference Include="..\MultiMiner.Engine\GatelessGate.Engine.csproj">
       <Project>{845687BB-EC47-46D3-AC9D-6FCFB63DE8F5}</Project>
-      <Name>MultiMiner.Engine</Name>
+      <Name>GatelessGate.Engine</Name>
     </ProjectReference>
     <ProjectReference Include="..\MultiMiner.Utility\MultiMiner.Utility.csproj">
       <Project>{99B0F266-EFF7-4416-8C36-8356396A11CA}</Project>
       <Name>MultiMiner.Utility</Name>
     </ProjectReference>
-    <ProjectReference Include="..\MultiMiner.Xgminer\MultiMiner.Xgminer.csproj">
+    <ProjectReference Include="..\MultiMiner.Xgminer\GatelessGate.GatelessGate.csproj">
       <Project>{0DBEF993-1B34-4D80-AB6A-F662604325DC}</Project>
-      <Name>MultiMiner.Xgminer</Name>
+      <Name>GatelessGate.GatelessGate</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

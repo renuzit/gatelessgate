@@ -129,9 +129,9 @@ namespace MultiMiner.Win.Forms
         private void showLinuxInstallationInstructions()
         {
             downloadingMinerLabel.Text =
-@"Unfortunately, prebuilt binaries of " + MinerNames.BFGMiner + @" are not available for Linux at this time.
+@"Unfortunately, prebuilt binaries of " + MinerNames.GatelessGate + @" are not available for Linux at this time.
 
-To install " + MinerNames.BFGMiner + @" on Linux please consult the website for " + MinerNames.BFGMiner + @". There are repositories for many popular Linux distributions.";
+To install " + MinerNames.GatelessGate + @" on Linux please consult the website for " + MinerNames.GatelessGate + @". There are repositories for many popular Linux distributions.";
         }
 
         private bool ValidateInput()

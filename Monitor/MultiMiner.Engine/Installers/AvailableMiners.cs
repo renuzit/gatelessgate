@@ -19,7 +19,7 @@ namespace MultiMiner.Engine.Installers
             if (OSVersionPlatform.GetConcretePlatform() == PlatformID.MacOSX)
                 platform = "osx64";
             
-            string url = "https://github.com/zawawawa/gatelessgate/Misc/miners/" + platform;
+            string url = "https://raw.githubusercontent.com/zawawawa/gatelessgate/Misc/Miners-" + platform + ".json";
             string response = webClient.DownloadString(new Uri(url));
 
             List<AvailableMiner> availableMiners = JsonConvert.DeserializeObject<List<AvailableMiner>>(response);

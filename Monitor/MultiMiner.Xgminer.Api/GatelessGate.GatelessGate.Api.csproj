@@ -1,17 +1,19 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{4B0C2EDD-9A3E-41AF-B8EF-9A7A541D2E80}</ProjectGuid>
+    <ProjectGuid>{5B43AD9D-8B67-4AA8-B76D-AA83CAF9D29F}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>MultiMiner.WhatMine</RootNamespace>
-    <AssemblyName>MultiMiner.WhatMine</AssemblyName>
+    <RootNamespace>MultiMiner.Xgminer.Api</RootNamespace>
+    <AssemblyName>MultiMiner.Xgminer.Api</AssemblyName>
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile>Client</TargetFrameworkProfile>
+    <ProductVersion>12.0.0</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -31,10 +33,6 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\Newtonsoft.Json.6.0.8\lib\net40\Newtonsoft.Json.dll</HintPath>
-    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -44,25 +42,32 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ApiContext.cs" />
-    <Compile Include="Extensions\CoinInformationExtensions.cs" />
+    <Compile Include="Data\MinerStatistics.cs" />
+    <Compile Include="Data\NetworkCoinInformation.cs" />
+    <Compile Include="Data\VersionInformation.cs" />
+    <Compile Include="Extensions\IntegerExtensions.cs" />
+    <Compile Include="Extensions\TcpClientExtensions.cs" />
+    <Compile Include="Parsers\MinerStatisticsParser.cs" />
+    <Compile Include="Parsers\NetworkCoinInformationParser.cs" />
+    <Compile Include="Parsers\DeviceDetailsParser.cs" />
+    <Compile Include="Parsers\PoolInformationParser.cs" />
+    <Compile Include="Parsers\ResponseTextParser.cs" />
+    <Compile Include="Data\DeviceDetails.cs" />
+    <Compile Include="Data\DeviceInformation.cs" />
+    <Compile Include="LogEventArgs.cs" />
+    <Compile Include="Parsers\DeviceInformationParser.cs" />
+    <Compile Include="Parsers\SummaryInformationParser.cs" />
+    <Compile Include="Parsers\VersionInformationParser.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ApiVerb.cs" />
+    <Compile Include="Data\PoolInformation.cs" />
+    <Compile Include="Data\SummaryInformation.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\MultiMiner.CoinApi\GatelessGate.CoinApi.csproj">
-      <Project>{9e86f77a-68b9-4d72-82d2-855878ba8cb1}</Project>
-      <Name>GatelessGate.CoinApi</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\MultiMiner.Utility\MultiMiner.Utility.csproj">
-      <Project>{99b0f266-eff7-4416-8c36-8356396a11ca}</Project>
-      <Name>MultiMiner.Utility</Name>
-    </ProjectReference>
     <ProjectReference Include="..\MultiMiner.Xgminer\GatelessGate.GatelessGate.csproj">
       <Project>{0dbef993-1b34-4d80-ab6a-f662604325dc}</Project>
       <Name>GatelessGate.GatelessGate</Name>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

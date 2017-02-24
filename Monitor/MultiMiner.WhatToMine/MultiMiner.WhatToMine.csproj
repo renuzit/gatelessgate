@@ -49,17 +49,17 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\MultiMiner.CoinApi\MultiMiner.CoinApi.csproj">
+    <ProjectReference Include="..\MultiMiner.CoinApi\GatelessGate.CoinApi.csproj">
       <Project>{9e86f77a-68b9-4d72-82d2-855878ba8cb1}</Project>
-      <Name>MultiMiner.CoinApi</Name>
+      <Name>GatelessGate.CoinApi</Name>
     </ProjectReference>
     <ProjectReference Include="..\MultiMiner.Utility\MultiMiner.Utility.csproj">
       <Project>{99b0f266-eff7-4416-8c36-8356396a11ca}</Project>
       <Name>MultiMiner.Utility</Name>
     </ProjectReference>
-    <ProjectReference Include="..\MultiMiner.Xgminer\MultiMiner.Xgminer.csproj">
+    <ProjectReference Include="..\MultiMiner.Xgminer\GatelessGate.GatelessGate.csproj">
       <Project>{0dbef993-1b34-4d80-ab6a-f662604325dc}</Project>
-      <Name>MultiMiner.Xgminer</Name>
+      <Name>GatelessGate.GatelessGate</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

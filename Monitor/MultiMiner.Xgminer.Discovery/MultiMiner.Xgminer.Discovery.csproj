@@ -49,9 +49,9 @@
       <Project>{99B0F266-EFF7-4416-8C36-8356396A11CA}</Project>
       <Name>MultiMiner.Utility</Name>
     </ProjectReference>
-    <ProjectReference Include="..\MultiMiner.Xgminer.Api\MultiMiner.Xgminer.Api.csproj">
+    <ProjectReference Include="..\MultiMiner.Xgminer.Api\GatelessGate.GatelessGate.Api.csproj">
       <Project>{5B43AD9D-8B67-4AA8-B76D-AA83CAF9D29F}</Project>
-      <Name>MultiMiner.Xgminer.Api</Name>
+      <Name>GatelessGate.GatelessGate.Api</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

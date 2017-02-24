@@ -71,9 +71,9 @@
     <Compile Include="RemotingService.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\MultiMiner.Engine\MultiMiner.Engine.csproj">
+    <ProjectReference Include="..\MultiMiner.Engine\GatelessGate.Engine.csproj">
       <Project>{845687BB-EC47-46D3-AC9D-6FCFB63DE8F5}</Project>
-      <Name>MultiMiner.Engine</Name>
+      <Name>GatelessGate.Engine</Name>
     </ProjectReference>
     <ProjectReference Include="..\MultiMiner.Services\MultiMiner.Services.csproj">
       <Project>{CFFA60EC-9486-4F45-BEF2-05C1A3D68EA6}</Project>
@@ -83,9 +83,9 @@
       <Project>{99b0f266-eff7-4416-8c36-8356396a11ca}</Project>
       <Name>MultiMiner.Utility</Name>
     </ProjectReference>
-    <ProjectReference Include="..\MultiMiner.Xgminer\MultiMiner.Xgminer.csproj">
+    <ProjectReference Include="..\MultiMiner.Xgminer\GatelessGate.GatelessGate.csproj">
       <Project>{0DBEF993-1B34-4D80-AB6A-F662604325DC}</Project>
-      <Name>MultiMiner.Xgminer</Name>
+      <Name>GatelessGate.GatelessGate</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

@@ -2547,7 +2547,7 @@ namespace MultiMiner.Win.Forms
             }
 
             if (showWarning)
-                MessageBox.Show(@"No copy of " + MinerNames.GatelessGate + @" was detected. Please go to https://github.com/zawawawa/gatelessgate for instructions on installing " + MinerNames.BFGMiner + @".",
+                MessageBox.Show(@"No copy of " + MinerNames.GatelessGate + @" was detected. Please go to https://github.com/zawawawa/gatelessgate for instructions on installing " + MinerNames.GatelessGate + @".",
                         @"Miner Not Found", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         #endregion
