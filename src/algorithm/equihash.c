@@ -6,16 +6,17 @@
 
 #include "algorithm.h"
 
+/*
 #define N   200UL
 #define K   9UL
 
 #define COLLISION_BIT_LENGTH            (N / (K + 1))
 #define COLLISION_BYTE_LENGTH           ((COLLISION_BIT_LENGTH + 7) / 8)
 #define INIT_SIZE                       (1 << (COLLISION_BIT_LENGTH + 1))
-#define HASH_LENGTH                     ((K + 1) * COLLISION_BYTE_LENGTH)
+#define HASH_LENGTH                     ((K + 1) * ((COLLISION_BIT_LENGTH + 7) / 8))
 #define INDICES_PER_HASH_OUTPUT         (512 / N)
 #define HASH_OUTPUT                     (INDICES_PER_HASH_OUTPUT * N/8)
-
+*/
 #define rotr64(x, n) (((x) >> (n)) | ((x) << (64 - (n))))
 
 
@@ -112,30 +113,6 @@ void equihash_calc_mid_hash(uint64_t mid_hash[8], uint8_t* header) {
         mid_hash[i] = blake2b_h[i] ^ v[i] ^ v[i + 8];
 }
 
-void blake2b_hash(uint8_t *hash, uint64_t mid_hash[8], uint32_t bday) {
-    uint64_t v[16], tmp[8];
-    uint64_t m1 = (uint64_t)bday << 32;
-    for (int i = 0; i < 8; i++) {
-        v[i] = mid_hash[i];
-        v[i + 8] = blake2b_IV[i];
-    }
-    v[12] ^= 140 + sizeof(bday);
-    v[14] ^= (int64_t)-1;
-    for (int r = 0; r < 12; r++) {
-        ROUND_fast(r)
-    }
-    for (int i = 0; i < 8; i++)
-        tmp[i] = mid_hash[i] ^ v[i] ^ v[i + 8];
-    memcpy(hash, tmp, 50);
-}
-
-void equihash_calc_hash(uint8_t hash[25], uint64_t mid_hash[8], uint32_t bday) {
-    uint8_t tmp[50];
-    blake2b_hash(tmp, mid_hash, bday / 2);
-    memcpy(hash, tmp + (bday & 1 ? 25 : 0), 25);
-}
-
-
 // These two copied from the ref impl, for now.
 void ExpandArray(const unsigned char* in, size_t in_len,
     unsigned char* out, size_t out_len,
@@ -231,17 +208,17 @@ static inline void sort_pair(uint32_t *a, uint32_t len)
 
 bool submit_tested_work(struct thr_info *, struct work *);
 
-uint32_t equihash_verify_sol(struct work *work, sols_t *sols, int sol_i)
+uint32_t equihash_verify_sol(struct work *work, sols_t *sols, int sol_i, int param_n, int param_k)
 {
     uint32_t thr_id = work->thr->id;
     uint32_t	*inputs = sols->values[sol_i];
-    uint32_t	seen_len = (1 << (PREFIX + 1)) / 8;
-    uint8_t	seen[(1 << (PREFIX + 1)) / 8];
+    uint32_t	seen_len = (1 << (PREFIX(param_n, param_k) + 1)) / 8;
+    uint8_t	seen[(1 << (MAX_PREFIX + 1)) / 8];
     uint32_t	i;
     uint8_t	tmp;
     // look for duplicate inputs
     memset(seen, 0, seen_len);
-    for (i = 0; i < (1 << PARAM_K); i++) {
+    for (i = 0; i < (1 << param_k); i++) {
 
         if (inputs[i] / 8 >= seen_len) {
             sols->valid[sol_i] = 0;
@@ -259,18 +236,18 @@ uint32_t equihash_verify_sol(struct work *work, sols_t *sols, int sol_i)
     // I plan to change the GPU code to not set it
     sols->valid[sol_i] = 1;
     // sort the pairs in place
-    for (uint32_t level = 0; level < PARAM_K; level++) {
-        for (i = 0; i < (1 << PARAM_K); i += (2 << level)) {
+    for (uint32_t level = 0; level < param_k; level++) {
+        for (i = 0; i < (1 << param_k); i += (2 << level)) {
             sort_pair(&inputs[i], 1 << level);
         }
     }
 
-    for (i = 0; i < (1 << PARAM_K); i++)
+    for (i = 0; i < (1 << param_k); i++)
         inputs[i] = htobe32(inputs[i]);
 
-    CompressArray((unsigned char*)inputs, 512 * 4, work->equihash_data + 143, 1344, 21, 1);
+    CompressArray((unsigned char*)inputs, (1 << param_k) * 4, work->equihash_data + 143, ZCASH_SOL_LEN(param_n, param_k), 21, 1);
 
-    gen_hash(work->equihash_data, 1344 + 143, work->hash);
+    gen_hash(work->equihash_data, ZCASH_SOL_LEN(param_n, param_k) + 143, work->hash);
 
     if (*(uint64_t*)(work->hash + 24) < *(uint64_t*)(work->target + 24)) {
         submit_tested_work(work->thr, work);

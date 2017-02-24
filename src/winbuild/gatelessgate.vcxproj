@@ -460,6 +460,7 @@ clrxasm "$(ProjectDir)..\kernel\equihash-gcn1-ocl12-32bit.asm" -g Tahiti -o "$(O
     <None Include="..\kernel\diamond.cl" />
     <None Include="..\kernel\echo.cl" />
     <None Include="..\kernel\equihash-gcn1-ocl12-32bit.asm" />
+    <None Include="..\kernel\equihash-zero.cl" />
     <None Include="..\kernel\equihash.cl" />
     <None Include="..\kernel\ethash-genoil.cl" />
     <None Include="..\kernel\ethash.cl" />

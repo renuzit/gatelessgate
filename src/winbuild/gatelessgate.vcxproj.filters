@@ -724,5 +724,8 @@
     <None Include="..\kernel\equihash-gcn1-ocl12-32bit.asm">
       <Filter>Resource Files\kernel</Filter>
     </None>
+    <None Include="..\kernel\equihash-zero.cl">
+      <Filter>Resource Files\kernel</Filter>
+    </None>
   </ItemGroup>
 </Project>

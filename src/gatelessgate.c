@@ -2200,6 +2200,7 @@ static double get_work_blockdiff(const struct work *work)
     return numerator / (double)diff64;
 }
 
+#define ZCASH_SOL_LEN (!strcmp("equihash-zero", pool->algorithm.name) ? 400 : 1344)
 
 static void gen_gbt_work(struct pool *pool, struct work *work)
 {
@@ -2237,7 +2238,7 @@ static void gen_gbt_work(struct pool *pool, struct work *work)
         memcpy(work->data + offsetMerkleRoot + 32, pool->reserved, 32);
 
         //set solutionsize - supposed to always be 1344
-        add_var_int(work->data + offsetNonce + 32, 1344);
+        add_var_int(work->data + offsetNonce + 32, ZCASH_SOL_LEN);
     } else {
         headerLen = 128;
         offsetTime = offsetMerkleRoot + 32;
@@ -2278,7 +2279,7 @@ static void gen_gbt_work(struct pool *pool, struct work *work)
         for (int i = 0; i < 140; i += 4)
             for (int j = 0; j < 4; j++)
                 work->equihash_data[i + j] = work->data[i + 3 - j];
-        add_var_int(work->equihash_data + offsetNonce + 32, 1344);
+        add_var_int(work->equihash_data + offsetNonce + 32, ZCASH_SOL_LEN);
     }
 
     if (lenPadding > 0) {
@@ -6129,7 +6130,7 @@ static void *stratum_sthread(void *userdata)
 
             //get nonce minus extranonce set by server
             nonce = bin2hex(work->equihash_data + 108, 32);
-            solution = bin2hex(work->equihash_data + 140, 1347);
+            solution = bin2hex(work->equihash_data + 140, ZCASH_SOL_LEN + 3);
 
             //applog(LOG_DEBUG, "%s: Nonce set to %s", __func__, nonce+strlen(work->nonce1));
 
@@ -6754,7 +6755,7 @@ static void gen_stratum_work_equihash(struct pool *pool, struct work *work)
     cg_dwlock(&pool->data_lock);
 
     /* equihash already has the merkle root in the header no need to change it */
-    memset(work->equihash_data, 0, 1487);
+    memset(work->equihash_data, 0, 143 + ZCASH_SOL_LEN);
     memcpy(work->equihash_data, pool->header_bin, 128);
 
     //add pool extra nonce
@@ -6762,7 +6763,7 @@ static void gen_stratum_work_equihash(struct pool *pool, struct work *work)
     memcpy(work->equihash_data + 108 + 20 - work->nonce2_len, &work->nonce2, work->nonce2_len);
 
     //add solutionsize
-    add_var_int(work->equihash_data + 140, 1344);
+    add_var_int(work->equihash_data + 140, ZCASH_SOL_LEN);
 
     /* Store the stratum work diff to check it still matches the pool's
     * stratum diff when submitting shares */

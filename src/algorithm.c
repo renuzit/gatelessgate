@@ -1173,11 +1173,12 @@ static cl_int queue_cryptonight_kernel(_clState *clState, dev_blk_ctx *blk, __ma
 
 #define WORKSIZE clState->wsize
 
-static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint device_thread)
+static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint device_thread, int param_n, int param_k)
 {
     cl_int status = 0;
     size_t work_items;
     size_t worksize = clState->wsize;
+    int    nr_inputs = NR_INPUTS(param_n, param_k);
 
     uint64_t mid_hash[8];
     equihash_calc_mid_hash(mid_hash, blk->work->equihash_data);
@@ -1198,7 +1199,7 @@ static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe
     };
     cl_mem row_counters[2] = { clState->buffer2, clState->buffer3 };
     cl_mem buf_potential_sols = clState->buffer11;
-    for (cl_uint round = 0; round < PARAM_K; round++) {
+    for (cl_uint round = 0; round < param_k; round++) {
         size_t global_ws = (_NR_ROWS(round) + ROWS_PER_UINT - 1) / ROWS_PER_UINT;
         size_t local_ws = 256;
         unsigned int num = 0;
@@ -1221,7 +1222,7 @@ static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe
             CL_SET_ARG(buf_ht[round]);
             CL_SET_ARG(row_counters[round % 2]);
             worksize = LOCAL_WORK_SIZE_ROUND0;
-            work_items = NR_INPUTS;
+            work_items = nr_inputs;
         } else {
             CL_SET_VARG(1, &device_thread);
             CL_SET_ARG(buf_ht[(round - 1)]);
@@ -1240,11 +1241,11 @@ static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe
     unsigned int num = 0;
     cl_kernel *kernel = &clState->extra_kernels[1 + 8 + 1];
     CL_SET_VARG(1, &device_thread);
-    CL_SET_ARG(buf_ht[8]);
+    CL_SET_ARG(buf_ht[param_k - 1]);
     CL_SET_ARG(buf_potential_sols);
     CL_SET_ARG(row_counters[0]);
     worksize = LOCAL_WORK_SIZE_POTENTIAL_SOLS;
-    work_items = _NR_ROWS(8) * worksize;
+    work_items = _NR_ROWS(param_k - 1) * worksize;
     status |= clEnqueueNDRangeKernel(clState->commandQueue, clState->extra_kernels[1 + 8 + 1], 1, NULL, &work_items, &worksize, 0, NULL, NULL);
 
     num = 0;
@@ -1267,6 +1268,16 @@ static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe
     status |= clEnqueueNDRangeKernel(clState->commandQueue, clState->kernel, 1, NULL, &work_items, &worksize, 0, NULL, NULL);
 
     return status;
+}
+
+static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint device_thread)
+{
+    return queue_equihash_kernel_generic(clState, blk, device_thread, 200, 9);
+}
+
+static cl_int queue_equihash_kernel_zero(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint device_thread)
+{
+    return queue_equihash_kernel_generic(clState, blk, device_thread, 192, 7);
 }
 
 static algorithm_settings_t algos[] = {
@@ -1367,6 +1378,7 @@ static algorithm_settings_t algos[] = {
     { "cryptonight", ALGO_CRYPTONIGHT, "", (1ULL << 32), (1ULL << 32), (1ULL << 32), 0, 0, 0xFF, 0xFFFFULL, 0x0000ffffUL, 6, 0, 0, cryptonight_regenhash, NULL, queue_cryptonight_kernel, gen_hash, NULL },
 
     { "equihash",     ALGO_EQUIHASH,   "", 1, (1ULL << 28), (1ULL << 28), 0, 0, 0x20000, 0xFFFF000000000000ULL, 0x00000000UL, 0, 128, 0, equihash_regenhash, NULL, queue_equihash_kernel, gen_hash, append_equihash_compiler_options },
+    { "equihash-zero",     ALGO_EQUIHASH,   "", 1, (1ULL << 28), (1ULL << 28), 0, 0, 0x20000, 0xFFFF000000000000ULL, 0x00000000UL, 0, 128, 0, equihash_regenhash, NULL, queue_equihash_kernel_zero, gen_hash, append_equihash_compiler_options },
 
 
     { "pascal", ALGO_PASCAL, "", 1, 1, 1, 0, 0, 0xFF, 0xFFFFULL, 0x0000ffffUL, 0, 0, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, pascal_regenhash, NULL, queue_pascal_kernel, NULL, NULL },

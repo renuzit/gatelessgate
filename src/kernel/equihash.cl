@@ -18,6 +18,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
+#ifndef PARAM_N
+#define PARAM_N				   200
+#endif
+#ifndef PARAM_K
+#define PARAM_K			       9
+#endif
+
 #include "equihash-param.h"
 
 #pragma OPENCL EXTENSION cl_khr_global_int32_base_atomics : enable
@@ -129,6 +136,7 @@ uint get_row(uint round, uint xi0)
 
 void get_row_counters_index(uint *row_counter_index, uint *row_counter_offset, uint row)
 {
+#ifdef OPTIM_FAST_INTEGER_DIVISION
     if (ROWS_PER_UINT == 3) {
         uint r = (0x55555555 * row + (row >> 1) - (row >> 3)) >> 30;
         *row_counter_index = (row - r) * 0xAAAAAAAB;
@@ -137,7 +145,9 @@ void get_row_counters_index(uint *row_counter_index, uint *row_counter_offset, u
         uint r = (0x55555555 * row + (row >> 1) - (row >> 3)) >> 29;
         *row_counter_index = (row - r) * 0xAAAAAAAB * 2;
         *row_counter_offset = BITS_PER_ROW * r;
-    } else {
+    } else
+#endif
+    {
         *row_counter_index = row / ROWS_PER_UINT;
         *row_counter_offset = BITS_PER_ROW * (row % ROWS_PER_UINT);
     }
@@ -249,8 +259,6 @@ void kernel_init_ht(uint device_thread, uint round, __global uint *hash_table, _
     __local volatile uint *gds_dummy_src = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 1) % 2));
     __local volatile uint *gds_dummy_dst = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 0) % 2));
 #endif
-    if (!get_global_id(0))
-        sols->nr = sols->likely_invalids = potential_sols->nr = sync_flags[0] = sync_flags[1] = 0;
     if (get_global_id(0) < (_NR_ROWS(round) + ROWS_PER_UINT - 1) / ROWS_PER_UINT) {
 #ifdef AMD_GCN_ASM
         gds_dummy_dst[get_global_id(0)] = 0;
@@ -258,6 +266,8 @@ void kernel_init_ht(uint device_thread, uint round, __global uint *hash_table, _
         row_counters_dst[get_global_id(0)] = 0;
 #endif
     }
+    if (!get_global_id(0))
+        sols->nr = sols->likely_invalids = potential_sols->nr = sync_flags[0] = sync_flags[1] = 0;
 }
 
 
@@ -293,10 +303,6 @@ vb = rotate((vb ^ vc), (ulong)64 - 63);
 ** http://developer.amd.com/tools-and-sdks/opencl-zone/amd-accelerated-parallel-processing-app-sdk/opencl-optimization-guide/
 */
 
-#if ZCASH_HASH_LEN != 50
-#error "unsupported ZCASH_HASH_LEN"
-#endif
-
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_ROUND0, 1, 1)))
 void kernel_round0(uint device_thread, __constant ulong *blake_state, __global char *ht,
     __global uint *row_counters, __global uint *sync_flags)
@@ -306,7 +312,7 @@ void kernel_round0(uint device_thread, __constant ulong *blake_state, __global c
     __local volatile uint *gds_dummy = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * device_thread * 2;
 #endif
 
-#if defined(AMD) && !defined(AMD_LEGACY)
+#if defined(AMD) && !defined(AMD_LEGACY) && !defined(__GCNMINC__)
     volatile ulong      v[16];
 #else
     ulong               v[16];
@@ -377,6 +383,8 @@ void kernel_round0(uint device_thread, __constant ulong *blake_state, __global c
 #pragma unroll 2
     for (uint index = 0; index < 2; ++index) {
 #endif
+
+#if PARAM_N == 200 && PARAM_K == 9
         if (!index) {
             xi0 = h[0] & 0xffffffff; xi1 = h[0] >> 32;
             xi2 = h[1] & 0xffffffff; xi3 = h[1] >> 32;
@@ -388,6 +396,27 @@ void kernel_round0(uint device_thread, __constant ulong *blake_state, __global c
             xi4 = ((h[5] >> 8) | (h[6] << (64 - 8))) & 0xffffffff; xi5 = ((h[5] >> 8) | (h[6] << (64 - 8))) >> 32;
             xi6 = (h[6] >> 8) & 0xffffffff;
         }
+#elif PARAM_N == 192 && PARAM_K == 7
+        if (!index) {
+            xi0 = h[0] & 0xffffffff; 
+            xi1 = h[0] >> 32;
+            xi2 = h[1] & 0xffffffff; 
+            xi3 = 0;
+            xi4 = 0; 
+            xi5 = 0;
+            xi6 = 0;
+        } else {
+            xi0 = h[1] >> 32;
+            xi1 = h[2] & 0xffffffff; 
+            xi2 = h[2] >> 32;
+            xi3 = 0;
+            xi4 = 0; 
+            xi5 = 0;
+            xi6 = 0;
+        }
+#else
+#error "unsupported ZCASH_HASH_LEN"
+#endif
 
         uint row = get_row(0, xi0);
 #ifdef AMD_GCN_ASM
@@ -650,11 +679,6 @@ void equihash_round(
     if (assigned_row_index >= _NR_ROWS(round - 1))
         return;
 
-    for (i = get_local_id(0); i < _NR_BINS(round - 1); i += get_local_size(0))
-        bin_first_slots[i] = _NR_SLOTS(round - 1);
-    for (i = get_local_id(0); i < _NR_SLOTS(round - 1); i += get_local_size(0))
-        bin_next_slots[i] = _NR_SLOTS(round - 1);
-
 #ifdef AMD_GCN_ASM
     if (get_local_id(0) == 0)
         *nr_collisions = nr_slots = get_nr_slots_local(round - 1, gds_dummy_src, assigned_row_index);
@@ -662,7 +686,13 @@ void equihash_round(
     if (get_local_id(0) == 0)
         nr_collisions[0] = nr_slots = get_nr_slots(round - 1, rowCountersSrc, assigned_row_index);
 #endif
+    for (i = get_local_id(0); i < _NR_BINS(round - 1); i += get_local_size(0))
+        bin_first_slots[i] = _NR_SLOTS(round - 1);
+    for (i = get_local_id(0); i < _NR_SLOTS(round - 1); i += get_local_size(0))
+        bin_next_slots[i] = _NR_SLOTS(round - 1);
+
     barrier(CLK_LOCAL_MEM_FENCE);
+
     if (get_local_id(0))
         nr_slots = nr_collisions[0];
     barrier(CLK_LOCAL_MEM_FENCE);
@@ -676,7 +706,7 @@ void equihash_round(
     for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
         uint slot_index = i;
         uint slot_cache_index = i;
-#ifdef NVIDIA
+#ifdef OPTIM_8BYTE_READS
         uint2 slot_data0, slot_data1, slot_data2;
         if (UINTS_IN_XI(round - 1) >= 1) slot_data0 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
         if (UINTS_IN_XI(round - 1) >= 3) slot_data1 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 1);
@@ -689,7 +719,7 @@ void equihash_round(
         if (UINTS_IN_XI(round - 1) >= 5) slot_cache[4 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data2.s0;
         if (UINTS_IN_XI(round - 1) >= 6) slot_cache[5 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data2.s1;
         uint xi0 = slot_data0.s0;
-#elif defined(AMD_LEGACY)
+#elif defined(OPTIM_16BYTE_READS)
         uint xi0;
         if (UINTS_IN_XI(round - 1) >= 5) {
             uint8 slot_data0;
@@ -728,15 +758,18 @@ void equihash_round(
             | ((xi0 & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
         bin_next_slots[i] = slot_b_index = atomic_xchg(&bin_first_slots[bin_to_use], i);
 
-#ifdef OPTIM_ON_THE_FLY_COLLISION_SEARCH 
-        while (slot_b_index < _NR_SLOTS(round - 1)) {
-            uint coll_index = atomic_inc(nr_collisions);
-            if (coll_index >= _LDS_COLL_SIZE(round - 1))
-                break;
-            collision_array_a[coll_index] = slot_a_index;
-            collision_array_b[coll_index] = slot_b_index;
-            slot_b_index = bin_next_slots[slot_b_index];
+#define COLLISION_SEARCH\
+        while (slot_b_index < _NR_SLOTS(round - 1)) {\
+            uint coll_index = atomic_inc(nr_collisions);\
+            if (coll_index >= _LDS_COLL_SIZE(round - 1))\
+                break;\
+            collision_array_a[coll_index] = slot_a_index;\
+            collision_array_b[coll_index] = slot_b_index;\
+            slot_b_index = bin_next_slots[slot_b_index];\
         }
+
+#ifdef OPTIM_ON_THE_FLY_COLLISION_SEARCH 
+        COLLISION_SEARCH
     }
 #else
     }
@@ -745,14 +778,7 @@ void equihash_round(
 
     for (uint slot_a_index = get_local_id(0); slot_a_index < _NR_SLOTS(round - 1); slot_a_index += get_local_size(0)) {
         uint slot_b_index = bin_next_slots[slot_a_index];
-        while (slot_b_index < _NR_SLOTS(round - 1)) {
-            uint coll_index = atomic_inc(nr_collisions);
-            if (coll_index >= _LDS_COLL_SIZE(round - 1))
-                break;
-            collision_array_a[coll_index] = slot_a_index;
-            collision_array_b[coll_index] = slot_b_index;
-            slot_b_index = bin_next_slots[slot_b_index];
-        }
+        COLLISION_SEARCH
     }
 #endif
 
@@ -779,7 +805,7 @@ void equihash_round(
         }
 
         nr_collisions_copy -= min(nr_collisions_copy, (uint)get_local_size(0) / THREADS_PER_WRITE(round));
-        //barrier(CLK_LOCAL_MEM_FENCE);
+        barrier(CLK_LOCAL_MEM_FENCE);
     }
 }
 
@@ -815,7 +841,6 @@ KERNEL_ROUND(kernel_round7, 7)
 KERNEL_ROUND(kernel_round8, 8)
 
 
-
 void mark_potential_sol(__global potential_sols_t *potential_sols, uint ref0, uint ref1)
 {
     uint sol_i = atomic_inc(&potential_sols->nr);
@@ -840,35 +865,35 @@ void kernel_potential_sols(
     __local uint gds_dummy_base[1];
     __local volatile uint *gds_dummy_src = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * (device_thread * 2);
 #endif
-    __local uint refs[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS(8))];
-    __local uint data[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS(8))];
+    __local uint refs[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS((PARAM_K - 1)))];
+    __local uint data[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS((PARAM_K - 1)))];
 
     uint		nr_slots;
     uint		i, j;
     __global char	*p;
     uint		ref_i, ref_j;
-    __local uint    bin_first_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_BINS(8))];
-    __local SLOT_INDEX_TYPE    bin_next_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS(8))];
+    __local uint    bin_first_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_BINS((PARAM_K - 1)))];
+    __local SLOT_INDEX_TYPE    bin_next_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS((PARAM_K - 1)))];
 
     if (!get_global_id(0))
         potential_sols->nr = 0;
     barrier(CLK_GLOBAL_MEM_FENCE);
 
     uint assigned_row_index = (get_global_id(0) / get_local_size(0));
-    if (assigned_row_index >= _NR_ROWS(8))
+    if (assigned_row_index >= _NR_ROWS((PARAM_K - 1)))
         return;
 
     __local uint nr_slots_shared;
-    for (i = get_local_id(0); i < _NR_BINS(8); i += get_local_size(0))
-        bin_first_slots[i] = _NR_SLOTS(8);
-    for (i = get_local_id(0); i < _NR_SLOTS(8); i += get_local_size(0))
-        bin_next_slots[i] = _NR_SLOTS(8);
+    for (i = get_local_id(0); i < _NR_BINS((PARAM_K - 1)); i += get_local_size(0))
+        bin_first_slots[i] = _NR_SLOTS((PARAM_K - 1));
+    for (i = get_local_id(0); i < _NR_SLOTS((PARAM_K - 1)); i += get_local_size(0))
+        bin_next_slots[i] = _NR_SLOTS((PARAM_K - 1));
 #ifdef AMD_GCN_ASM
     if (get_local_id(0) == 0)
-        nr_slots_shared = nr_slots = get_nr_slots_local(8, gds_dummy_src, assigned_row_index);
+        nr_slots_shared = nr_slots = get_nr_slots_local((PARAM_K - 1), gds_dummy_src, assigned_row_index);
 #else
     if (get_local_id(0) == 0)
-        nr_slots_shared = nr_slots = get_nr_slots(8, rowCountersSrc, assigned_row_index);
+        nr_slots_shared = nr_slots = get_nr_slots((PARAM_K - 1), rowCountersSrc, assigned_row_index);
 #endif
     barrier(CLK_LOCAL_MEM_FENCE);
     if (get_local_id(0))
@@ -878,29 +903,34 @@ void kernel_potential_sols(
 
     // in the final hash table, we are looking for a match on both the bits
     // part of the previous PREFIX colliding bits, and the last PREFIX bits.
-    for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
-        ulong slot_first_8bytes = *(__global ulong *) get_slot_ptr(ht_src, PARAM_K - 1, assigned_row_index, i);
-        uint ref_i = refs[i] = slot_first_8bytes >> 32;
-        uint xi_first_4bytes = data[i] = slot_first_8bytes & 0xffffffff;
-        uint bin_to_use =
-            ((xi_first_4bytes & BIN_MASK(PARAM_K - 1)) >> BIN_MASK_OFFSET(PARAM_K - 1))
-            | ((xi_first_4bytes & BIN_MASK2(PARAM_K - 1)) >> BIN_MASK2_OFFSET(PARAM_K - 1));
-        bin_next_slots[i] = atomic_xchg(&bin_first_slots[bin_to_use], i);
+#define POTENTIAL_SOLUTION_SEARCH(index)\
+    i = (index);\
+    if (i < nr_slots) {\
+        ulong slot_first_8bytes = *(__global ulong *) get_slot_ptr(ht_src, PARAM_K - 1, assigned_row_index, i);\
+        uint ref_i  = refs[i] = slot_first_8bytes >> 32;\
+        uint data_i = data[i] = slot_first_8bytes & 0xffffffff;\
+        uint bin_to_use =\
+                ((data_i & BIN_MASK(PARAM_K - 1)) >> BIN_MASK_OFFSET(PARAM_K - 1))\
+            | ((data_i & BIN_MASK2(PARAM_K - 1)) >> BIN_MASK2_OFFSET(PARAM_K - 1));\
+        j = bin_next_slots[i] = atomic_xchg(&bin_first_slots[bin_to_use], i);\
+        \
+        while (j < nr_slots) {\
+            if (data_i == data[j])\
+                mark_potential_sol(potential_sols, refs[i], refs[j]);\
+            j = bin_next_slots[j];\
+        }\
     }
-
+#ifndef __GCNMINC__
+    for (uint ii = get_local_id(0); ii < nr_slots; ii += get_local_size(0)) {
+        POTENTIAL_SOLUTION_SEARCH(ii)
+    }
+#else
+    POTENTIAL_SOLUTION_SEARCH(get_local_id(0))
     barrier(CLK_LOCAL_MEM_FENCE);
-
-    for (i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
-        uint data_i = data[i];
-        j = bin_next_slots[i];
-        while (j < _NR_SLOTS(8)) {
-            if (data_i == data[j]) {
-                mark_potential_sol(potential_sols, refs[i], refs[j]);
-                return;
-            }
-            j = bin_next_slots[j];
-        }
-    }
+    POTENTIAL_SOLUTION_SEARCH(get_local_id(0) + get_local_size(0))
+    barrier(CLK_LOCAL_MEM_FENCE);
+    POTENTIAL_SOLUTION_SEARCH(get_local_id(0) + get_local_size(0) * 2) 
+#endif
 }
 
 
@@ -934,12 +964,12 @@ void kernel_sols(__global char *ht0,
 
         for (int round = 7; round >= 0; --round) {
             if (round % 2) {
-                for (uint i = get_local_id(0); i < (1 << (8 - round)); i += get_local_size(0)) {
+                for (uint i = get_local_id(0); i < (1 << ((PARAM_K - 1) - round)); i += get_local_size(0)) {
                     inputs_b[i * 2 + 1] = *get_ref_ptr(htabs[round], round, DECODE_ROW(round, inputs_a[i]), DECODE_SLOT1(round, inputs_a[i]));
                     inputs_b[i * 2] = *get_ref_ptr(htabs[round], round, DECODE_ROW(round, inputs_a[i]), DECODE_SLOT0(round, inputs_a[i]));
                 }
             } else {
-                for (uint i = get_local_id(0); i < (1 << (8 - round)); i += get_local_size(0)) {
+                for (uint i = get_local_id(0); i < (1 << ((PARAM_K - 1) - round)); i += get_local_size(0)) {
                     inputs_a[i * 2 + 1] = *get_ref_ptr(htabs[round], round, DECODE_ROW(round, inputs_b[i]), DECODE_SLOT1(round, inputs_b[i]));
                     inputs_a[i * 2] = *get_ref_ptr(htabs[round], round, DECODE_ROW(round, inputs_b[i]), DECODE_SLOT0(round, inputs_b[i]));
                 }
@@ -948,23 +978,41 @@ void kernel_sols(__global char *ht0,
         }
         //barrier(CLK_LOCAL_MEM_FENCE);
 
-        int	dup_to_watch = inputs_a[256 * 2 - 1];
-        for (uint j = 3 + get_local_id(0); j < 256 * 2 - 2; j += get_local_size(0))
+        int	dup_to_watch = inputs_a[(1 << PARAM_K) - 1];
+#if PARAM_K == 9
+        uint j = 3 + get_local_id(0);
+        if (j < 256 * 2 - 2 && inputs_a[j] == dup_to_watch) atomic_inc(&dup_counter);
+        j += get_local_size(0);
+        if (j < 256 * 2 - 2 && inputs_a[j] == dup_to_watch) atomic_inc(&dup_counter);
+#else
+        for (uint j = 3 + get_local_id(0); j < (1 << PARAM_K) - 2; j += get_local_size(0))
             if (inputs_a[j] == dup_to_watch)
                 atomic_inc(&dup_counter);
+#endif
         barrier(CLK_LOCAL_MEM_FENCE);
 
         // solution appears valid, copy it to sols
+#if !defined(__GCNMINC__) && PARAM_K == 9
         __local uint sol_i;
         if (get_local_id(0) == 0 && !dup_counter)
             sol_i = atomic_inc(&sols->nr);
         barrier(CLK_LOCAL_MEM_FENCE);
         if (sol_i < MAX_SOLS && !dup_counter) {
-            for (uint i = get_local_id(0); i < (1 << PARAM_K); i += get_local_size(0))
-                sols->values[sol_i][i] = inputs_a[i];
+            sols->values[sol_i][get_local_id(0)] = inputs_a[get_local_id(0)];
+            sols->values[sol_i][get_local_id(0) + 256] = inputs_a[get_local_id(0) + 256];
             if (get_local_id(0) == 0)
                 sols->valid[sol_i] = 1;
         }
         barrier(CLK_LOCAL_MEM_FENCE);
+#else
+        if (!get_local_id(0) && !dup_counter) {
+            uint sol_i = atomic_inc(&sols->nr);
+            if (sol_i < MAX_SOLS) {
+                for (uint i = 0; i < (1 << PARAM_K); ++i)
+                    sols->values[sol_i][i] = inputs_a[i];
+                sols->valid[sol_i] = 1;
+            }
+        }
+#endif
     }
 }

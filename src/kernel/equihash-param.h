@@ -27,7 +27,7 @@
 #if defined(cl_amd_fp64) && !defined(AMD)
 #define AMD
 #endif
-#if (defined(__Tahiti__) || defined(__Pitcairn__) || defined(__Capeverde__) || defined(__Oland__)) && !defined(AMD_LEGACY)
+#if (defined(__Tahiti__) || defined(__Pitcairn__) || defined(__Capeverde__) || defined(__Oland__) || defined(__Hainan__)) && !defined(AMD_LEGACY)
 #define AMD_LEGACY
 #endif
 #ifdef cl_nv_pragma_unroll
@@ -40,50 +40,62 @@
 // Parameters for Hash Tables
 //
 
-// There are PARAM_K - 1 hash tables, and each hash table has NR_ROWS rows.
-// Each row contains NR_SLOTS slots.
+#define _NR_ROWS_LOG(round)      12
+#define _NR_SLOTS(round)         684
+#define _LDS_COLL_SIZE(round)    794
+#define _NR_ROWS(round)          4096
+#define MAX_NR_ROWS              4096
 
-//#define NR_ROWS_LOG              12
-//#define NR_ROWS                  4096
-//#define NR_SLOTS                 684
-//#define LDS_COLL_SIZE            793
-
-#define NR_ROWS_LOG_13(round)    0//((round) <= 1)
-#define MAX_NR_ROWS              4096//8192
-
-#define _NR_ROWS_LOG(round)      (NR_ROWS_LOG_13(round) ? 13  : 12)
-#define _NR_SLOTS(round)         (NR_ROWS_LOG_13(round) ? 360 : 684)
-#define _LDS_COLL_SIZE(round)    (NR_ROWS_LOG_13(round) ? 400 : 794)
-#define _NR_ROWS(round)          (NR_ROWS_LOG_13(round) ? 8192 : 4096)
-
-#define LOCAL_WORK_SIZE_ROUND0   WORKSIZE
-#define LOCAL_WORK_SIZE          WORKSIZE
+#define LOCAL_WORK_SIZE_ROUND0         WORKSIZE
+#define LOCAL_WORK_SIZE                WORKSIZE
 #define LOCAL_WORK_SIZE_POTENTIAL_SOLS WORKSIZE  
-#define LOCAL_WORK_SIZE_SOLS     WORKSIZE
+#define LOCAL_WORK_SIZE_SOLS           WORKSIZE
 
-#if defined(AMD)
-#define THREADS_PER_WRITE(round) (((round) <= 5) ? 2 : 1)
-#else
-#define THREADS_PER_WRITE(round) 1
-#endif
-
-#if defined(AMD) && !defined(AMD_LEGACY)
-#define OPTIM_24BYTE_WRITES
-#endif
-#define OPTIM_16BYTE_WRITES
-#if 1//!defined(AMD_LEGACY)
-#define OPTIM_8BYTE_WRITES
-#endif
+#define MAX_SLOT_LEN           32
+#define _SLOT_LEN(round)       ((UINTS_IN_XI(round) >= 4) ? 32 : (UINTS_IN_XI(round) >= 2) ? 16 : 8)
 
 //#define OPTIM_UINT_ROW_COUNTERS
-//#define OPTIM_FAST_INTEGER_DIVISION
+#define OPTIM_FAST_INTEGER_DIVISION
 #define OPTIM_COMPACT_ROW_COUNTERS
 #define OPTIM_IGNORE_ROW_COUNTER_OVERFLOWS
-#if defined(AMD) && !defined(AMD_LEGACY)
-#define OPTIM_ON_THE_FLY_COLLISION_SEARCH
-#endif
 
 #define ADJUSTED_LDS_ARRAY_SIZE(n) (n)
+
+
+
+#if defined(__GCNMINC__)
+
+#define OPTIM_8BYTE_READS
+#define OPTIM_16BYTE_WRITES
+#define OPTIM_8BYTE_WRITES
+#define THREADS_PER_WRITE(round) 1 // (((round) <= 5) ? 2 : 1)
+
+#elif defined(AMD_LEGACY)
+
+#define OPTIM_16BYTE_READS
+#define OPTIM_16BYTE_WRITES
+#define OPTIM_8BYTE_WRITES
+#define THREADS_PER_WRITE(round) (((round) <= 5) ? 2 : 1)
+
+#elif defined(AMD)
+
+#define OPTIM_24BYTE_WRITES
+#define OPTIM_16BYTE_WRITES
+#define OPTIM_8BYTE_WRITES
+#define THREADS_PER_WRITE(round) (((round) <= 5) ? 2 : 1)
+
+#elif defined(NVIDIA)
+
+#define OPTIM_8BYTE_READS
+#define OPTIM_16BYTE_WRITES
+#define THREADS_PER_WRITE(round) 1
+
+#else
+
+#define OPTIM_16BYTE_WRITES
+#define THREADS_PER_WRITE(round) 1
+
+#endif
 
 
 
@@ -99,41 +111,30 @@
 
 
 
-#define PARAM_N				   200
-#define PARAM_K			       9
-#define PREFIX                 (PARAM_N / (PARAM_K + 1))
-#define NR_INPUTS              (1 << PREFIX)
-// Length of 1 element (slot) in byte
-#define MAX_SLOT_LEN           32
-#define _SLOT_LEN(round)       ((UINTS_IN_XI(round) >= 4) ? 32 : (UINTS_IN_XI(round) >= 2) ? 16 : 8)
-// Total size of hash table
-#define HASH_TABLE_SIZE(round)				(_NR_ROWS(round) * _NR_SLOTS(round) * _SLOT_LEN(round))
-// Length of Zcash block header, nonce (part of header)
-#define ZCASH_BLOCK_HEADER_LEN		140
-// Offset of nTime in header
-#define ZCASH_BLOCK_OFFSET_NTIME        (4 + 3 * 32)
-// Length of nonce
-#define ZCASH_NONCE_LEN			32
-// Length of encoded representation of solution size
-#define ZCASH_SOLSIZE_LEN		3
-// Solution size (1344 = 0x540) represented as a compact integer, in hex
-#define ZCASH_SOLSIZE_HEX               "fd4005"
+#define MAX_PARAM_N              200
+#define MAX_PARAM_K              9
+#define PREFIX(n, k)             ((n) / ((k) + 1))
+#define MAX_PREFIX               PREFIX(200, 9)
+#define NR_INPUTS(n, k)          (1 << PREFIX((n), (k)))
+#define HASH_TABLE_SIZE(round)	 (_NR_ROWS(round) * _NR_SLOTS(round) * _SLOT_LEN(round))
+#define ZCASH_BLOCK_HEADER_LEN	 140
+#define ZCASH_BLOCK_OFFSET_NTIME (4 + 3 * 32)
+#define ZCASH_NONCE_LEN			 32
+#define ZCASH_SOLSIZE_LEN	     3
 // Length of encoded solution (512 * 21 bits / 8 = 1344 bytes)
-#define ZCASH_SOL_LEN                   ((1 << PARAM_K) * (PREFIX + 1) / 8)
-// Last N_ZERO_BYTES of nonce must be zero due to my BLAKE2B optimization
-#define N_ZERO_BYTES			12
+#define ZCASH_SOL_LEN(n, k)      ((1 << (k)) * (PREFIX((n), (k)) + 1) / 8)
 // Number of bytes Zcash needs out of Blake
-#define ZCASH_HASH_LEN                  50
+#define ZCASH_HASH_LEN(n, k)     (((k) + 1) * ((PREFIX((n), (k)) + 7) / 8)) // 50
 // Number of wavefronts per SIMD for the Blake kernel.
 // Blake is ALU-bound (beside the atomic counter being incremented) so we need
 // at least 2 wavefronts per SIMD to hide the 2-clock latency of integer
 // instructions. 10 is the max supported by the hw.
-#define BLAKE_WPS               	10
+#define BLAKE_WPS                10
 // Maximum number of solutions reported by kernel to host
-#define MAX_SOLS			11
-#define MAX_POTENTIAL_SOLS  4096
+#define MAX_SOLS			     11
+#define MAX_POTENTIAL_SOLS       4096
 // Length of SHA256 target
-#define SHA256_TARGET_LEN               (256 / 8)
+#define SHA256_TARGET_LEN        (256 / 8)
 
 #ifdef OPTIM_UINT_ROW_COUNTERS
 #define BITS_PER_ROW  32
@@ -154,13 +155,13 @@
 
 
 // An (uncompressed) solution stores (1 << PARAM_K) 32-bit values
-#define SOL_SIZE			((1 << PARAM_K) * 4)
+#define SOL_SIZE(k)			((1 << (k)) * 4)
 typedef struct	sols_s
 {
     uint	nr;
     uint	likely_invalids;
     uchar	valid[MAX_SOLS];
-    uint	values[MAX_SOLS][(1 << PARAM_K)];
+    uint	values[MAX_SOLS][(1 << MAX_PARAM_K)];
 }		sols_t;
 
 typedef struct	potential_sols_s
