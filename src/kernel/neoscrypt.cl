@@ -48,7 +48,7 @@
 
 
 /* Use amd_bitalign() because amd_bytealign() might be broken in old drivers */
-#ifdef cl_amd_media_ops
+#if defined(cl_amd_media_ops) && !defined(__GCNMINC__)
 #pragma OPENCL EXTENSION cl_amd_media_ops : enable
 #elif defined(cl_nv_pragma_unroll)
 uint amd_bitalign(uint src0, uint src1, uint src2) 

@@ -607,7 +607,7 @@ uint parallel_xor_and_store(
             if (round <= 1) slot.slot.xi[5] = ((xi5 >> 8));
         }
         slot.slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(round - 1, row, slot_a, slot_b);
-        new_row = get_row(round, xi0);
+        new_row = get_row(round, xi0);  
 
         // invalid solutions (which start happenning in round 5) have duplicate
         // inputs and xor to zero, so discard them
@@ -622,8 +622,113 @@ uint parallel_xor_and_store(
 
     barrier(CLK_LOCAL_MEM_FENCE);
     if (THREADS_PER_WRITE(round) == 2 && new_slot_indexes[write_index] < _NR_SLOTS(round)) {
-        __global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_indexes[write_index]);
-        *(((__global uint4 *)p) + write_thread_index) = slot.ui4[write_thread_index];
+        __global uint4 *p = (__global uint4 *)get_slot_ptr(ht_dst, round, new_row, new_slot_indexes[write_index]) + write_thread_index;
+#ifdef __GCNMINC__
+        __asm("flat_store_dwordx4 %0, %1"
+              :
+              : "r" (p), "r" (write_thread_index ? slot.ui4[1] : slot.ui4[0]));
+#else
+        *p = slot.ui4[write_thread_index];
+#endif
+    } else if (THREADS_PER_WRITE(round) == 4 && new_slot_indexes[write_index] < _NR_SLOTS(round)) {
+        __global uint2 *p = (__global uint2 *)get_slot_ptr(ht_dst, round, new_row, new_slot_indexes[write_index]) + write_thread_index;
+        *p = slot.ui2[write_thread_index];
+    }
+    //barrier(CLK_LOCAL_MEM_FENCE);
+    return ret;
+}
+
+#ifdef __GCNMINC__
+
+uint parallel_xor_and_store_gcnminc(
+    uint device_thread,
+    uint round, 
+    __global char *ht_src, 
+    __global char *ht_dst,
+    uint row,
+    uint slot_a,
+    uint slot_b,
+    __local uint *ai,
+    __local uint *bi,
+    __global uint *row_counters,
+    __local SLOT_INDEX_TYPE *new_slot_indexes,
+    __local uint *gds_dummy_base)
+{
+#ifdef AMD_GCN_ASM
+    gds_dummy_base = 0;
+    __local volatile uint *gds_dummy_src = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 1) % 2));
+    __local volatile uint *gds_dummy_dst = gds_dummy_base + (ROW_COUNTERS_SIZE / sizeof(uint)) * (device_thread * 2 + ((round + 0) % 2));
+#endif
+
+    uint ret = 0;
+    uint xi0, xi1, xi2, xi3, xi4, xi5;
+    uint write_index = get_local_id(0) / THREADS_PER_WRITE(round);
+    uint write_thread_index = get_local_id(0) % THREADS_PER_WRITE(round);
+
+    slot_t slot;
+    uint new_row;
+
+    if (!write_thread_index)
+        new_slot_indexes[write_index] = _NR_SLOTS(round);
+    //barrier(CLK_LOCAL_MEM_FENCE);
+
+    if (slot_a < _NR_SLOTS(round - 1)) {
+        xi0 = *ai;
+        xi1 = *(ai += _NR_SLOTS(round - 1));
+        if (round <= 7) xi2 = *(ai += _NR_SLOTS(round - 1));
+        if (round <= 6) xi3 = *(ai += _NR_SLOTS(round - 1));
+        if (round <= 4) xi4 = *(ai += _NR_SLOTS(round - 1));
+        if (round <= 2) xi5 = *(ai += _NR_SLOTS(round - 1));
+
+        xi0 ^= *bi;
+        xi1 ^= *(bi += _NR_SLOTS(round - 1));
+        if (round <= 7) xi2 ^= *(bi += _NR_SLOTS(round - 1));
+        if (round <= 6) xi3 ^= *(bi += _NR_SLOTS(round - 1));
+        if (round <= 4) xi4 ^= *(bi += _NR_SLOTS(round - 1));
+        if (round <= 2) xi5 ^= *(bi += _NR_SLOTS(round - 1));
+
+        if (!(round & 0x1)) {
+            // skip padding bytes
+            xi0 = (xi0 >> 24) | (xi1 << (32 - 24));
+
+            slot.slot.xi[0] = xi1;
+            slot.slot.xi[1] = xi2;
+            slot.slot.xi[2] = xi3;
+            slot.slot.xi[3] = xi4;
+            slot.slot.xi[4] = xi5;
+        } else {
+            slot.slot.xi[0] = ((xi1 << 24) | (xi0 >> 8));
+            if (round <= 7) slot.slot.xi[1] = ((xi2 << 24) | (xi1 >> 8));
+            if (round <= 6) slot.slot.xi[2] = ((xi3 << 24) | (xi2 >> 8));
+            if (round <= 5) slot.slot.xi[3] = ((xi4 << 24) | (xi3 >> 8));
+            if (round <= 3) slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
+            if (round <= 1) slot.slot.xi[5] = ((xi5 >> 8));
+        }
+        slot.slot.xi[UINTS_IN_XI(round)] = ENCODE_INPUTS(round - 1, row, slot_a, slot_b);
+        new_row = get_row(round, xi0);
+
+        // invalid solutions (which start happenning in round 5) have duplicate
+        // inputs and xor to zero, so discard them
+        if ((xi0 || xi1) && !write_thread_index) {
+#ifdef AMD_GCN_ASM
+ 
+            new_slot_indexes[write_index] = inc_local_row_counter(round, gds_dummy_dst, new_row);
+#else
+            new_slot_indexes[write_index] = inc_row_counter(round, row_counters, new_row);
+#endif
+        }
+    }
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+    if (THREADS_PER_WRITE(round) == 2 && new_slot_indexes[write_index] < _NR_SLOTS(round)) {
+        __global uint4 *p = (__global uint4 *)get_slot_ptr(ht_dst, round, new_row, new_slot_indexes[write_index]) + write_thread_index;
+#ifdef __GCNMINC__
+        __asm("flat_store_dwordx4 %0, %1"
+              :
+              : "r" (p), "r" (write_thread_index ? slot.ui4[1] : slot.ui4[0]));
+#else
+        *(p + write_thread_index) = slot.ui4[write_thread_index];
+#endif
     } else if (THREADS_PER_WRITE(round) == 4 && new_slot_indexes[write_index] < _NR_SLOTS(round)) {
         __global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_indexes[write_index]);
         *(((__global uint2 *)p) + write_thread_index) = slot.ui2[write_thread_index];
@@ -631,6 +736,8 @@ uint parallel_xor_and_store(
     //barrier(CLK_LOCAL_MEM_FENCE);
     return ret;
 }
+
+#endif
 
 /*
 ** Execute one Equihash round. Read from ht_src, XOR colliding pairs of Xi,
@@ -669,7 +776,7 @@ void equihash_round(
 #define BIN_MASK2_OFFSET(round) ((_NR_ROWS_LOG(round) == 12) ? ((((round) + 1) % 2) ? 0 : 8) : \
                                                                ((((round) + 1) % 2) ? 1 : 9))
 
-#define _NR_BINS_LOG(round) (20 - _NR_ROWS_LOG(round))
+#define _NR_BINS_LOG(round) (PREFIX(PARAM_N, PARAM_K) - _NR_ROWS_LOG(round))
 #define _NR_BINS(round) (1 << _NR_BINS_LOG(round))
 
 
@@ -679,23 +786,35 @@ void equihash_round(
     if (assigned_row_index >= _NR_ROWS(round - 1))
         return;
 
-#ifdef AMD_GCN_ASM
+#ifdef __GCNMINC__
+    uint thread_index = 0;
+    if (get_local_id(0) % 64 == 0)
+        nr_slots = get_nr_slots(round - 1, rowCountersSrc, assigned_row_index);
+    //barrier(CLK_LOCAL_MEM_FENCE);
+    __asm("ds_bpermute_b32 %0, %1, %2\r\n"
+          //"s_waitcnt lgkmcnt(0)"
+          : "=v" (nr_slots) : "v" (thread_index), "0" (nr_slots));
+#elif defined(AMD_GCN_ASM)
     if (get_local_id(0) == 0)
         *nr_collisions = nr_slots = get_nr_slots_local(round - 1, gds_dummy_src, assigned_row_index);
+    barrier(CLK_LOCAL_MEM_FENCE);
+    if (get_local_id(0))
+        nr_slots = nr_collisions[0];
+    barrier(CLK_LOCAL_MEM_FENCE);
 #else
     if (get_local_id(0) == 0)
         nr_collisions[0] = nr_slots = get_nr_slots(round - 1, rowCountersSrc, assigned_row_index);
+    barrier(CLK_LOCAL_MEM_FENCE);
+    if (get_local_id(0))
+        nr_slots = nr_collisions[0];
+    barrier(CLK_LOCAL_MEM_FENCE);
 #endif
+
     for (i = get_local_id(0); i < _NR_BINS(round - 1); i += get_local_size(0))
         bin_first_slots[i] = _NR_SLOTS(round - 1);
     for (i = get_local_id(0); i < _NR_SLOTS(round - 1); i += get_local_size(0))
         bin_next_slots[i] = _NR_SLOTS(round - 1);
 
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    if (get_local_id(0))
-        nr_slots = nr_collisions[0];
-    barrier(CLK_LOCAL_MEM_FENCE);
     if (!get_local_id(0))
         *nr_collisions = 0;
 
@@ -797,7 +916,7 @@ void equihash_round(
             slot_cache_a = (__local uint *)&slot_cache[slot_index_a];
             slot_cache_b = (__local uint *)&slot_cache[slot_index_b];
         }
-        //barrier(CLK_LOCAL_MEM_FENCE);
+        barrier(CLK_LOCAL_MEM_FENCE);
         if (THREADS_PER_WRITE(round) > 1) {
             parallel_xor_and_store(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst, new_slot_indexes, gds_dummy_base);
         } else {
@@ -875,62 +994,57 @@ void kernel_potential_sols(
     __local uint    bin_first_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_BINS((PARAM_K - 1)))];
     __local SLOT_INDEX_TYPE    bin_next_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS((PARAM_K - 1)))];
 
-    if (!get_global_id(0))
-        potential_sols->nr = 0;
-    barrier(CLK_GLOBAL_MEM_FENCE);
-
-    uint assigned_row_index = (get_global_id(0) / get_local_size(0));
+    uint assigned_row_index = get_group_id(0);
     if (assigned_row_index >= _NR_ROWS((PARAM_K - 1)))
         return;
-
-    __local uint nr_slots_shared;
+    
     for (i = get_local_id(0); i < _NR_BINS((PARAM_K - 1)); i += get_local_size(0))
         bin_first_slots[i] = _NR_SLOTS((PARAM_K - 1));
     for (i = get_local_id(0); i < _NR_SLOTS((PARAM_K - 1)); i += get_local_size(0))
         bin_next_slots[i] = _NR_SLOTS((PARAM_K - 1));
-#ifdef AMD_GCN_ASM
+
+    __local uint nr_slots_shared;
+#ifdef __GCNMINC__
+    uint thread_index = 0;
+    if (get_local_id(0) % 64 == 0)
+        nr_slots = get_nr_slots(PARAM_K - 1, rowCountersSrc, assigned_row_index);
+    //barrier(CLK_LOCAL_MEM_FENCE);
+    __asm("ds_bpermute_b32 %0, %1, %2\r\n"
+          "s_waitcnt lgkmcnt(0)"
+          : "=v" (nr_slots) : "v" (thread_index), "0" (nr_slots));
+#elif defined(AMD_GCN_ASM)
     if (get_local_id(0) == 0)
         nr_slots_shared = nr_slots = get_nr_slots_local((PARAM_K - 1), gds_dummy_src, assigned_row_index);
-#else
-    if (get_local_id(0) == 0)
-        nr_slots_shared = nr_slots = get_nr_slots((PARAM_K - 1), rowCountersSrc, assigned_row_index);
-#endif
     barrier(CLK_LOCAL_MEM_FENCE);
     if (get_local_id(0))
         nr_slots = nr_slots_shared;
+#else
+    if (get_local_id(0) == 0)
+        nr_slots_shared = nr_slots = get_nr_slots((PARAM_K - 1), rowCountersSrc, assigned_row_index);
+    barrier(CLK_LOCAL_MEM_FENCE);
+    if (get_local_id(0))
+        nr_slots = nr_slots_shared;
+#endif
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
     // in the final hash table, we are looking for a match on both the bits
     // part of the previous PREFIX colliding bits, and the last PREFIX bits.
-#define POTENTIAL_SOLUTION_SEARCH(index)\
-    i = (index);\
-    if (i < nr_slots) {\
-        ulong slot_first_8bytes = *(__global ulong *) get_slot_ptr(ht_src, PARAM_K - 1, assigned_row_index, i);\
-        uint ref_i  = refs[i] = slot_first_8bytes >> 32;\
-        uint data_i = data[i] = slot_first_8bytes & 0xffffffff;\
-        uint bin_to_use =\
-                ((data_i & BIN_MASK(PARAM_K - 1)) >> BIN_MASK_OFFSET(PARAM_K - 1))\
-            | ((data_i & BIN_MASK2(PARAM_K - 1)) >> BIN_MASK2_OFFSET(PARAM_K - 1));\
-        j = bin_next_slots[i] = atomic_xchg(&bin_first_slots[bin_to_use], i);\
-        \
-        while (j < nr_slots) {\
-            if (data_i == data[j])\
-                mark_potential_sol(potential_sols, refs[i], refs[j]);\
-            j = bin_next_slots[j];\
-        }\
+    for (uint i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
+        __global uint *p = (__global uint *)get_slot_ptr(ht_src, PARAM_K - 1, assigned_row_index, i);
+        uint data_i = data[i] = *p++;
+        uint ref_i  = refs[i] = *p;
+        uint bin_to_use =
+                ((data_i & BIN_MASK(PARAM_K - 1)) >> BIN_MASK_OFFSET(PARAM_K - 1))
+            | ((data_i & BIN_MASK2(PARAM_K - 1)) >> BIN_MASK2_OFFSET(PARAM_K - 1));
+        j = bin_next_slots[i] = atomic_xchg(&bin_first_slots[bin_to_use], i);
+        
+        while (j < nr_slots) {
+            if (data_i == data[j])
+                mark_potential_sol(potential_sols, refs[i], refs[j]);
+            j = bin_next_slots[j];
+        }
     }
-#ifndef __GCNMINC__
-    for (uint ii = get_local_id(0); ii < nr_slots; ii += get_local_size(0)) {
-        POTENTIAL_SOLUTION_SEARCH(ii)
-    }
-#else
-    POTENTIAL_SOLUTION_SEARCH(get_local_id(0))
-    barrier(CLK_LOCAL_MEM_FENCE);
-    POTENTIAL_SOLUTION_SEARCH(get_local_id(0) + get_local_size(0))
-    barrier(CLK_LOCAL_MEM_FENCE);
-    POTENTIAL_SOLUTION_SEARCH(get_local_id(0) + get_local_size(0) * 2) 
-#endif
 }
 
 
@@ -953,12 +1067,12 @@ void kernel_sols(__global char *ht0,
     __local uint	inputs_a[ADJUSTED_LDS_ARRAY_SIZE(1 << PARAM_K)], inputs_b[ADJUSTED_LDS_ARRAY_SIZE(1 << (PARAM_K - 1))];
     __global char	*htabs[] = { ht0, ht1, ht2, ht3, ht4, ht5, ht6, ht7, ht8 };
 
-    if ((get_global_id(0) / get_local_size(0)) < potential_sols->nr && (get_global_id(0) / get_local_size(0)) < MAX_POTENTIAL_SOLS) {
+    if (get_group_id(0) < potential_sols->nr && get_group_id(0) < MAX_POTENTIAL_SOLS) {
         __local uint dup_counter;
         if (get_local_id(0) == 0) {
             dup_counter = 0;
-            inputs_a[0] = potential_sols->values[(get_global_id(0) / get_local_size(0))][0];
-            inputs_a[1] = potential_sols->values[(get_global_id(0) / get_local_size(0))][1];
+            inputs_a[0] = potential_sols->values[get_group_id(0)][0];
+            inputs_a[1] = potential_sols->values[get_group_id(0)][1];
         }
         barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -979,40 +1093,26 @@ void kernel_sols(__global char *ht0,
         //barrier(CLK_LOCAL_MEM_FENCE);
 
         int	dup_to_watch = inputs_a[(1 << PARAM_K) - 1];
-#if PARAM_K == 9
         uint j = 3 + get_local_id(0);
-        if (j < 256 * 2 - 2 && inputs_a[j] == dup_to_watch) atomic_inc(&dup_counter);
+        if (inputs_a[j] == dup_to_watch)
+            atomic_inc(&dup_counter);
         j += get_local_size(0);
-        if (j < 256 * 2 - 2 && inputs_a[j] == dup_to_watch) atomic_inc(&dup_counter);
-#else
-        for (uint j = 3 + get_local_id(0); j < (1 << PARAM_K) - 2; j += get_local_size(0))
-            if (inputs_a[j] == dup_to_watch)
-                atomic_inc(&dup_counter);
-#endif
+        if (j < (1 << PARAM_K) - 2 && inputs_a[j] == dup_to_watch)
+            atomic_inc(&dup_counter);
         barrier(CLK_LOCAL_MEM_FENCE);
-
+        
         // solution appears valid, copy it to sols
-#if !defined(__GCNMINC__) && PARAM_K == 9
-        __local uint sol_i;
-        if (get_local_id(0) == 0 && !dup_counter)
-            sol_i = atomic_inc(&sols->nr);
-        barrier(CLK_LOCAL_MEM_FENCE);
-        if (sol_i < MAX_SOLS && !dup_counter) {
-            sols->values[sol_i][get_local_id(0)] = inputs_a[get_local_id(0)];
-            sols->values[sol_i][get_local_id(0) + 256] = inputs_a[get_local_id(0) + 256];
-            if (get_local_id(0) == 0)
-                sols->valid[sol_i] = 1;
-        }
-        barrier(CLK_LOCAL_MEM_FENCE);
-#else
-        if (!get_local_id(0) && !dup_counter) {
-            uint sol_i = atomic_inc(&sols->nr);
+        if (!dup_counter) {
+            __local uint sol_i;
+            if (!get_local_id(0))
+                 sol_i = atomic_inc(&sols->nr);
+            barrier(CLK_LOCAL_MEM_FENCE);
             if (sol_i < MAX_SOLS) {
-                for (uint i = 0; i < (1 << PARAM_K); ++i)
-                    sols->values[sol_i][i] = inputs_a[i];
-                sols->valid[sol_i] = 1;
+                if (!get_local_id(0))
+                    sols->valid[sol_i] = 1;
+                sols->values[sol_i][get_local_id(0)] = inputs_a[get_local_id(0)];
+                sols->values[sol_i][get_local_id(0) + get_local_size(0)] = inputs_a[get_local_id(0) + get_local_size(0)];
             }
         }
-#endif
     }
 }

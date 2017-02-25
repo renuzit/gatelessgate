@@ -68,7 +68,7 @@
 #define OPTIM_8BYTE_READS
 #define OPTIM_16BYTE_WRITES
 #define OPTIM_8BYTE_WRITES
-#define THREADS_PER_WRITE(round) 1 // (((round) <= 5) ? 2 : 1)
+#define THREADS_PER_WRITE(round) (((round) <= 5) ? 2 : 1)
 
 #elif defined(AMD_LEGACY)
 
@@ -83,16 +83,19 @@
 #define OPTIM_16BYTE_WRITES
 #define OPTIM_8BYTE_WRITES
 #define THREADS_PER_WRITE(round) (((round) <= 5) ? 2 : 1)
+#define OPTIM_ON_THE_FLY_COLLISION_SEARCH
 
 #elif defined(NVIDIA)
 
 #define OPTIM_8BYTE_READS
 #define OPTIM_16BYTE_WRITES
+#define OPTIM_8BYTE_WRITES
 #define THREADS_PER_WRITE(round) 1
 
 #else
 
 #define OPTIM_16BYTE_WRITES
+#define OPTIM_8BYTE_WRITES
 #define THREADS_PER_WRITE(round) 1
 
 #endif

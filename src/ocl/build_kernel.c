@@ -54,7 +54,7 @@ static char *file_contents(const char *filename, int *length)
 // This should NOT be in here! -- Wolf9466
 void set_base_compiler_options(build_kernel_data *data)
 {
-  char buf[255];
+  char buf[4096];
 #ifdef _MSC_VER
   sprintf(data->compiler_options, "-I \"%s\" -I \"%s\\kernel\" -I \".\" -I \".\\kernel\" -D WORKSIZE=%d",
 	  data->sgminer_path, data->sgminer_path, (int)data->work_size);
