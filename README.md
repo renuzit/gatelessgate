@@ -1,14 +1,14 @@
 # Gateless Gate
 
-- [Download precompiled binaries for 64-bit Windows (0.1.3-pre1)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.3-pre1/gatelessgate-0.1.3-pre1-win64.zip)
-- [Download the source code for Linux (0.1.3-pre1)](https://github.com/zawawawa/gatelessgate/archive/v0.1.3-pre1.tar.gz)
+- [Download precompiled binaries for 64-bit Windows (0.1.3-pre2)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.3-pre2/gatelessgate-0.1.3-pre21-win64.zip)
+- [Download the source code for Linux (0.1.3-pre2)](https://github.com/zawawawa/gatelessgate/archive/v0.1.3-pre2.tar.gz)
 - [Download precompiled binaries for 64-bit Windows (0.1.2)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.2/gatelessgate-0.1.2-win64.zip) 
 - [Download the source code for Linux (0.1.2)](https://github.com/zawawawa/gatelessgate/archive/v0.1.2.tar.gz)
 
 Gateless Gate is a cross-platform OpenCL ZEC/ETH/XMR/PASC/FTC miner for video cards with the AMD GCN architecture and the NVIDIA Maxwell and Pascal architectures.
 It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://github.com/mbevand/silentarmy) with a significant speed
 boost combined with the well-tested user-interface and back-end of [sgminer-gm](https://github.com/genesismining/sgminer-gm).
-(This miner runs at around 223 sol/s on RX 480 and 163 sol/s on GTX 1060 3GB.)
+(This miner runs at around 223 sol/s on RX 480 and 180 sol/s on GTX 1060 3GB.)
 Although the current foci of development are Windows operating systems, 
 you should be able to run on Linux without problems.
 
