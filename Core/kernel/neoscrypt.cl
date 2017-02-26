@@ -895,7 +895,6 @@ __kernel void search(__global const uint4 *restrict input, __global uint *restri
         XZ78 = input[3].s2;
         XZ79 = input[3].s3;
         /* The primary iteration */
-#pragma unroll
         for (i = 0, bufptr = 0; i < 32; i++) {
             uint m[16];
 
@@ -1061,11 +1060,8 @@ __kernel void search(__global const uint4 *restrict input, __global uint *restri
         XZ120 = XZ56; XZ121 = XZ57; XZ122 = XZ58; XZ123 = XZ59; XZ124 = XZ60; XZ125 = XZ61; XZ126 = XZ62; XZ127 = XZ63;
 
         /* X = SMix(X) and Z = SMix(Z) */
-#pragma unroll
         for (i = 0; i < 2; i++) {
-#pragma unroll
             for (uint xy = 0; xy < 2; xy++) {
-#pragma unroll
                 for (j = 0; j < 128; j++) {
                     if (!xy) {
                         /* blkcpy(G, X) */
@@ -1290,7 +1286,19 @@ __kernel void search(__global const uint4 *restrict input, __global uint *restri
             }
 
 
-            if (i) break;
+            if (i) {
+#define NEOSCRYPT_FOUND (0xFF)
+#ifdef cl_khr_global_int32_base_atomics
+#define SETFOUND(nonce) output[atomic_add(&output[NEOSCRYPT_FOUND], 1)] = nonce
+#else
+#define SETFOUND(nonce) output[output[NEOSCRYPT_FOUND]++] = nonce
+#endif
+                if (mode && XZ71 <= target) {
+                    SETFOUND(glbid);
+                    return;
+                }
+                break;
+            }
 
             /* Swap the buffers and repeat */
             XZ0 ^= XZ64; XZ64 ^= XZ0; XZ0 ^= XZ64; XZ1 ^= XZ65; XZ65 ^= XZ1; XZ1 ^= XZ65; XZ2 ^= XZ66; XZ66 ^= XZ2; XZ2 ^= XZ66; XZ3 ^= XZ67; XZ67 ^= XZ3; XZ3 ^= XZ67; XZ4 ^= XZ68; XZ68 ^= XZ4; XZ4 ^= XZ68; XZ5 ^= XZ69; XZ69 ^= XZ5; XZ5 ^= XZ69; XZ6 ^= XZ70; XZ70 ^= XZ6; XZ6 ^= XZ70; XZ7 ^= XZ71; XZ71 ^= XZ7; XZ7 ^= XZ71;
@@ -1316,15 +1324,4 @@ __kernel void search(__global const uint4 *restrict input, __global uint *restri
         XZ48 ^= XZ112; XZ49 ^= XZ113; XZ50 ^= XZ114; XZ51 ^= XZ115; XZ52 ^= XZ116; XZ53 ^= XZ117; XZ54 ^= XZ118; XZ55 ^= XZ119;
         XZ56 ^= XZ120; XZ57 ^= XZ121; XZ58 ^= XZ122; XZ59 ^= XZ123; XZ60 ^= XZ124; XZ61 ^= XZ125; XZ62 ^= XZ126; XZ63 ^= XZ127;
     }
-
-#define NEOSCRYPT_FOUND (0xFF)
-#ifdef cl_khr_global_int32_base_atomics
-#define SETFOUND(nonce) output[atomic_add(&output[NEOSCRYPT_FOUND], 1)] = nonce
-#else
-#define SETFOUND(nonce) output[output[NEOSCRYPT_FOUND]++] = nonce
-#endif
-
-    if (XZ7 <= target) SETFOUND(glbid);
-
-    return;
 }
