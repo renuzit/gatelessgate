@@ -1286,19 +1286,7 @@ __kernel void search(__global const uint4 *restrict input, __global uint *restri
             }
 
 
-            if (i) {
-#define NEOSCRYPT_FOUND (0xFF)
-#ifdef cl_khr_global_int32_base_atomics
-#define SETFOUND(nonce) output[atomic_add(&output[NEOSCRYPT_FOUND], 1)] = nonce
-#else
-#define SETFOUND(nonce) output[output[NEOSCRYPT_FOUND]++] = nonce
-#endif
-                if (mode && XZ71 <= target) {
-                    SETFOUND(glbid);
-                    return;
-                }
-                break;
-            }
+            if (i) break;
 
             /* Swap the buffers and repeat */
             XZ0 ^= XZ64; XZ64 ^= XZ0; XZ0 ^= XZ64; XZ1 ^= XZ65; XZ65 ^= XZ1; XZ1 ^= XZ65; XZ2 ^= XZ66; XZ66 ^= XZ2; XZ2 ^= XZ66; XZ3 ^= XZ67; XZ67 ^= XZ3; XZ3 ^= XZ67; XZ4 ^= XZ68; XZ68 ^= XZ4; XZ4 ^= XZ68; XZ5 ^= XZ69; XZ69 ^= XZ5; XZ5 ^= XZ69; XZ6 ^= XZ70; XZ70 ^= XZ6; XZ6 ^= XZ70; XZ7 ^= XZ71; XZ71 ^= XZ7; XZ7 ^= XZ71;
@@ -1324,4 +1312,15 @@ __kernel void search(__global const uint4 *restrict input, __global uint *restri
         XZ48 ^= XZ112; XZ49 ^= XZ113; XZ50 ^= XZ114; XZ51 ^= XZ115; XZ52 ^= XZ116; XZ53 ^= XZ117; XZ54 ^= XZ118; XZ55 ^= XZ119;
         XZ56 ^= XZ120; XZ57 ^= XZ121; XZ58 ^= XZ122; XZ59 ^= XZ123; XZ60 ^= XZ124; XZ61 ^= XZ125; XZ62 ^= XZ126; XZ63 ^= XZ127;
     }
+
+#define NEOSCRYPT_FOUND (0xFF)
+#ifdef cl_khr_global_int32_base_atomics
+#define SETFOUND(nonce) output[atomic_add(&output[NEOSCRYPT_FOUND], 1)] = nonce
+#else
+#define SETFOUND(nonce) output[output[NEOSCRYPT_FOUND]++] = nonce
+#endif
+
+    if (XZ7 <= target) SETFOUND(glbid);
+
+    return;
 }
