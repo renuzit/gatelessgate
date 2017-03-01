@@ -97,7 +97,7 @@ namespace MultiMiner.Engine.Installers
 
             const string filePrefix = "gatelessgate";
 
-            string pattern = String.Format(@".*<a href="".+/MultiMiner/gatelessgate/(.+/{0}-\d+\.\d+\.\d+\.zip)", filePrefix);
+            string pattern = String.Format(@".*<a href=""/zawawawa/gatelessgate/(.+/{0}-\d+\.\d+\.\d+-win64\.zip)", filePrefix);
             Match match = Regex.Match(availableDownloadsHtml, pattern);
             if (match.Success)
             {
