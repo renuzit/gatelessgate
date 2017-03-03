@@ -15,8 +15,11 @@ you should be able to run on Linux without problems.
 On 64-bit Windows operating systems, all you have to do for mining is to download the precompiled binary and edit and run 
 one of the .BAT files. This miner has been tested against AMD Crimson Software 16.9.2 and NVIDIA Display Driver 376.33.
 
-On Linux, you should be able to build the miner with the Makefile in the repository. Note that fglrx drivers are not supported
-and that you need RADEON PRO drivers. Please refer to the documentation of the original sgminer-gm below for details. 
+On Linux, you should be able to build the miner with the Makefile in the repository. Both AMDGPU-PRO drivers and fglrx drivers are supported now. Please refer to the documentation of the original sgminer-gm below for details. This miner has been tested with the following distributions:
+
+* Ubuntu 16.04.02 LTS with Linux Kernel 4.10.1 and AMDGPU-PRO 16.60.
+* Ubuntu 14.04.01 LTS with fglrx-updates.
+
 
 Please note that this software is still in the alpha stage, and some of its features are highly experimental. If you have questions or
 feedback, please post them to:
