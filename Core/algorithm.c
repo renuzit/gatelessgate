@@ -1199,7 +1199,8 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
     };
     cl_mem row_counters[2] = { clState->buffer2, clState->buffer3 };
     cl_mem buf_potential_sols = clState->buffer11;
-    for (cl_uint round = 0; round < param_k; round++) {
+    cl_uint round;
+    for (round = 0; round < param_k; round++) {
         unsigned int num = 0;
         cl_kernel *kernel = &clState->extra_kernels[0];
         CL_SET_VARG(1, &device_thread);
@@ -1211,7 +1212,7 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
         CL_SET_ARG(buf_potential_sols);
         CL_SET_ARG(clState->padbuffer8);
         worksize = 256;
-        work_items = (_NR_ROWS(round) + ROWS_PER_UINT - 1) / ROWS_PER_UINT;
+        work_items = (MAX_NR_ROWS + ROWS_PER_UINT - 1) / ROWS_PER_UINT;
         if (work_items % worksize)
             work_items += worksize - work_items % worksize;
         status |= clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL, &work_items, &worksize, 0, NULL, NULL);
@@ -1241,7 +1242,23 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
     }
 
     unsigned int num = 0;
-    cl_kernel *kernel = &clState->extra_kernels[1 + 8 + 1];
+    cl_kernel *kernel = &clState->extra_kernels[0];
+    CL_SET_VARG(1, &device_thread);
+    CL_SET_VARG(1, &round);
+    CL_SET_ARG(buf_ht[0]);
+    CL_SET_ARG(row_counters[(round + 1) % 2]);
+    CL_SET_ARG(row_counters[round % 2]);
+    CL_SET_ARG(clState->outputBuffer);
+    CL_SET_ARG(buf_potential_sols);
+    CL_SET_ARG(clState->padbuffer8);
+    worksize = 256;
+    work_items = (MAX_NR_ROWS + ROWS_PER_UINT - 1) / ROWS_PER_UINT;
+    if (work_items % worksize)
+        work_items += worksize - work_items % worksize;
+    status |= clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL, &work_items, &worksize, 0, NULL, NULL);
+
+    num = 0;
+    kernel = &clState->extra_kernels[1 + 8 + 1];
     CL_SET_VARG(1, &device_thread);
     CL_SET_ARG(buf_ht[param_k - 1]);
     CL_SET_ARG(buf_potential_sols);

@@ -65,10 +65,11 @@
 
 #if defined(__GCNMINC__)
 
-#define OPTIM_8BYTE_READS
+#define OPTIM_16BYTE_READS
 #define OPTIM_16BYTE_WRITES
 #define OPTIM_8BYTE_WRITES
-#define THREADS_PER_WRITE(round) (((round) <= 5) ? 2 : 1)
+#define THREADS_PER_WRITE(round) 1 // (((round) <= 5) ? 2 : 1)
+#define OPTIM_ON_THE_FLY_COLLISION_SEARCH
 
 #elif defined(AMD_LEGACY)
 
@@ -124,9 +125,7 @@
 #define ZCASH_BLOCK_OFFSET_NTIME (4 + 3 * 32)
 #define ZCASH_NONCE_LEN			 32
 #define ZCASH_SOLSIZE_LEN	     3
-// Length of encoded solution (512 * 21 bits / 8 = 1344 bytes)
-#define ZCASH_SOL_LEN(n, k)      ((1 << (k)) * (PREFIX((n), (k)) + 1) / 8)
-// Number of bytes Zcash needs out of Blake
+#define ZCASH_SOL_LEN(n, k)      ((1 << (k)) * (PREFIX((n), (k)) + 1) / 8)  // 1344
 #define ZCASH_HASH_LEN(n, k)     (((k) + 1) * ((PREFIX((n), (k)) + 7) / 8)) // 50
 // Number of wavefronts per SIMD for the Blake kernel.
 // Blake is ALU-bound (beside the atomic counter being incremented) so we need
@@ -136,8 +135,9 @@
 // Maximum number of solutions reported by kernel to host
 #define MAX_SOLS			     11
 #define MAX_POTENTIAL_SOLS       4096
-// Length of SHA256 target
 #define SHA256_TARGET_LEN        (256 / 8)
+
+
 
 #ifdef OPTIM_UINT_ROW_COUNTERS
 #define BITS_PER_ROW  32
