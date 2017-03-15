@@ -284,12 +284,32 @@ __constant ulong blake_iv[] =
     0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
 };
 
-#define mix(va, vb, vc, vd, x, y) \
+#define mix_x_0(va, vb, vc, vd, x) \
     va = (va + vb + (x)); \
 vd = rotate((vd ^ va), (ulong)64 - 32); \
 vc = (vc + vd); \
 vb = rotate((vb ^ vc), (ulong)64 - 24); \
+va = (va + vb); \
+vd = rotate((vd ^ va), (ulong)64 - 16); \
+vc = (vc + vd); \
+vb = rotate((vb ^ vc), (ulong)64 - 63);
+
+#define mix_0_y(va, vb, vc, vd, y) \
+    va = (va + vb); \
+vd = rotate((vd ^ va), (ulong)64 - 32); \
+vc = (vc + vd); \
+vb = rotate((vb ^ vc), (ulong)64 - 24); \
 va = (va + vb + (y)); \
+vd = rotate((vd ^ va), (ulong)64 - 16); \
+vc = (vc + vd); \
+vb = rotate((vb ^ vc), (ulong)64 - 63);
+
+#define mix_0_0(va, vb, vc, vd) \
+    va = (va + vb); \
+vd = rotate((vd ^ va), (ulong)64 - 32); \
+vc = (vc + vd); \
+vb = rotate((vb ^ vc), (ulong)64 - 24); \
+va = (va + vb); \
 vd = rotate((vd ^ va), (ulong)64 - 16); \
 vc = (vc + vd); \
 vb = rotate((vb ^ vc), (ulong)64 - 63);
@@ -348,22 +368,113 @@ void kernel_round0(uint device_thread, __constant ulong *blake_state, __global c
     // last block
     v[14] ^= (ulong)-1;
 
-#if defined(AMD)
-#pragma unroll 1
-    for (uint blake_round = 1; blake_round <= 12; ++blake_round) {
-#else
-#pragma unroll 12
-    for (uint blake_round = 1; blake_round <= 12; ++blake_round) {
-#endif
-        mix(v[0], v[4], v[8], v[12], 0, (blake_round == 1 || blake_round == 11) ? word1 : 0);
-        mix(v[1], v[5], v[9], v[13], (blake_round == 7) ? word1 : 0, (blake_round == 4) ? word1 : 0);
-        mix(v[2], v[6], v[10], v[14], 0, (blake_round == 8) ? word1 : 0);
-        mix(v[3], v[7], v[11], v[15], (blake_round == 10) ? word1 : 0, 0);
-        mix(v[0], v[5], v[10], v[15], (blake_round == 2 || blake_round == 12) ? word1 : 0, (blake_round == 5) ? word1 : 0);
-        mix(v[1], v[6], v[11], v[12], 0, 0);
-        mix(v[2], v[7], v[8], v[13], (blake_round == 9) ? word1 : 0, (blake_round == 3) ? word1 : 0);
-        mix(v[3], v[4], v[9], v[14], (blake_round == 6) ? word1 : 0, 0);
-    }
+    mix_0_y(v[0], v[4], v[8], v[12], word1);
+    mix_0_0(v[1], v[5], v[9], v[13]);
+    mix_0_0(v[2], v[6], v[10], v[14]);
+    mix_0_0(v[3], v[7], v[11], v[15]);
+    mix_0_0(v[0], v[5], v[10], v[15]);
+    mix_0_0(v[1], v[6], v[11], v[12]);
+    mix_0_0(v[2], v[7], v[8], v[13]);
+    mix_0_0(v[3], v[4], v[9], v[14]);
+
+    mix_0_0(v[0], v[4], v[8], v[12]);
+    mix_0_0(v[1], v[5], v[9], v[13]);
+    mix_0_0(v[2], v[6], v[10], v[14]);
+    mix_0_0(v[3], v[7], v[11], v[15]);
+    mix_x_0(v[0], v[5], v[10], v[15], word1);
+    mix_0_0(v[1], v[6], v[11], v[12]);
+    mix_0_0(v[2], v[7], v[8], v[13]);
+    mix_0_0(v[3], v[4], v[9], v[14]);
+    
+    mix_0_0(v[0], v[4], v[8], v[12]);
+    mix_0_0(v[1], v[5], v[9], v[13]);
+    mix_0_0(v[2], v[6], v[10], v[14]);
+    mix_0_0(v[3], v[7], v[11], v[15]);
+    mix_0_0(v[0], v[5], v[10], v[15]);
+    mix_0_0(v[1], v[6], v[11], v[12]);
+    mix_0_y(v[2], v[7], v[8], v[13], word1);
+    mix_0_0(v[3], v[4], v[9], v[14]);
+
+    mix_0_0(v[0], v[4], v[8], v[12]);
+    mix_0_y(v[1], v[5], v[9], v[13], word1);
+    mix_0_0(v[2], v[6], v[10], v[14]);
+    mix_0_0(v[3], v[7], v[11], v[15]);
+    mix_0_0(v[0], v[5], v[10], v[15]);
+    mix_0_0(v[1], v[6], v[11], v[12]);
+    mix_0_0(v[2], v[7], v[8], v[13]);
+    mix_0_0(v[3], v[4], v[9], v[14]);
+
+    mix_0_0(v[0], v[4], v[8], v[12]);
+    mix_0_0(v[1], v[5], v[9], v[13]);
+    mix_0_0(v[2], v[6], v[10], v[14]);
+    mix_0_0(v[3], v[7], v[11], v[15]);
+    mix_0_y(v[0], v[5], v[10], v[15], word1);
+    mix_0_0(v[1], v[6], v[11], v[12]);
+    mix_0_0(v[2], v[7], v[8], v[13]);
+    mix_0_0(v[3], v[4], v[9], v[14]);
+
+    mix_0_0(v[0], v[4], v[8], v[12]);
+    mix_0_0(v[1], v[5], v[9], v[13]);
+    mix_0_0(v[2], v[6], v[10], v[14]);
+    mix_0_0(v[3], v[7], v[11], v[15]);
+    mix_0_0(v[0], v[5], v[10], v[15]);
+    mix_0_0(v[1], v[6], v[11], v[12]);
+    mix_0_0(v[2], v[7], v[8], v[13]);
+    mix_x_0(v[3], v[4], v[9], v[14], word1);
+
+    mix_0_0(v[0], v[4], v[8], v[12]);
+    mix_x_0(v[1], v[5], v[9], v[13], word1);
+    mix_0_0(v[2], v[6], v[10], v[14]);
+    mix_0_0(v[3], v[7], v[11], v[15]);
+    mix_0_0(v[0], v[5], v[10], v[15]);
+    mix_0_0(v[1], v[6], v[11], v[12]);
+    mix_0_0(v[2], v[7], v[8], v[13]);
+    mix_0_0(v[3], v[4], v[9], v[14]);
+
+    mix_0_0(v[0], v[4], v[8], v[12]);
+    mix_0_0(v[1], v[5], v[9], v[13]);
+    mix_0_y(v[2], v[6], v[10], v[14], word1);
+    mix_0_0(v[3], v[7], v[11], v[15]);
+    mix_0_0(v[0], v[5], v[10], v[15]);
+    mix_0_0(v[1], v[6], v[11], v[12]);
+    mix_0_0(v[2], v[7], v[8], v[13]);
+    mix_0_0(v[3], v[4], v[9], v[14]);
+
+    mix_0_0(v[0], v[4], v[8], v[12]);
+    mix_0_0(v[1], v[5], v[9], v[13]);
+    mix_0_0(v[2], v[6], v[10], v[14]);
+    mix_0_0(v[3], v[7], v[11], v[15]);
+    mix_0_0(v[0], v[5], v[10], v[15]);
+    mix_0_0(v[1], v[6], v[11], v[12]);
+    mix_x_0(v[2], v[7], v[8], v[13], word1);
+    mix_0_0(v[3], v[4], v[9], v[14]);
+
+    mix_0_0(v[0], v[4], v[8], v[12]);
+    mix_0_0(v[1], v[5], v[9], v[13]);
+    mix_0_0(v[2], v[6], v[10], v[14]);
+    mix_x_0(v[3], v[7], v[11], v[15], word1);
+    mix_0_0(v[0], v[5], v[10], v[15]);
+    mix_0_0(v[1], v[6], v[11], v[12]);
+    mix_0_0(v[2], v[7], v[8], v[13]);
+    mix_0_0(v[3], v[4], v[9], v[14]);
+
+    mix_0_y(v[0], v[4], v[8], v[12], word1);
+    mix_0_0(v[1], v[5], v[9], v[13]);
+    mix_0_0(v[2], v[6], v[10], v[14]);
+    mix_0_0(v[3], v[7], v[11], v[15]);
+    mix_0_0(v[0], v[5], v[10], v[15]);
+    mix_0_0(v[1], v[6], v[11], v[12]);
+    mix_0_0(v[2], v[7], v[8], v[13]);
+    mix_0_0(v[3], v[4], v[9], v[14]);
+
+    mix_0_0(v[0], v[4], v[8], v[12]);
+    mix_0_0(v[1], v[5], v[9], v[13]);
+    mix_0_0(v[2], v[6], v[10], v[14]);
+    mix_0_0(v[3], v[7], v[11], v[15]);
+    mix_x_0(v[0], v[5], v[10], v[15], word1);
+    mix_0_0(v[1], v[6], v[11], v[12]);
+    mix_0_0(v[2], v[7], v[8], v[13]);
+    mix_0_0(v[3], v[4], v[9], v[14]);
 
     // compress v into the blake state; this produces the 50-byte hash
     // (two Xi values)

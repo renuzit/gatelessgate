@@ -41,8 +41,8 @@
 //
 
 #define _NR_ROWS_LOG(round)      12
-#define _NR_SLOTS(round)         684
-#define _LDS_COLL_SIZE(round)    794
+#define _NR_SLOTS(round)         ((round) <= 6 ? 652 : 684)
+#define _LDS_COLL_SIZE(round)    ((round) <= 6 ? 784 : 800)
 #define _NR_ROWS(round)          4096
 #define MAX_NR_ROWS              4096
 
@@ -77,6 +77,7 @@
 #define OPTIM_16BYTE_WRITES
 #define OPTIM_8BYTE_WRITES
 #define THREADS_PER_WRITE(round) (((round) <= 5) ? 2 : 1)
+#define OPTIM_ON_THE_FLY_COLLISION_SEARCH
 
 #elif defined(AMD)
 

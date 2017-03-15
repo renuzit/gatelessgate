@@ -218,14 +218,6 @@ uint inc_gds_row_counter(uint round, __global uint *row_counters, uint row)
     }
 
     nr_slots = (nr_slots >> row_counter_offset) & ROW_MASK;
-/*
-#ifndef OPTIM_IGNORE_ROW_COUNTER_OVERFLOWS
-    if (nr_slots >= _NR_SLOTS(round)) {
-        // avoid overflows
-        atomic_sub(row_counters + row_counter_index, 1 << row_counter_offset);
-    }
-#endif
-*/
     return nr_slots;
 }
 
@@ -273,47 +265,6 @@ __constant ulong blake_iv[] =
     0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
 };
 
-#define mix(va, vb, vc, vd, vx, vy) \
-    __asm("v_add_u32_e32  %[a].x, vcc, %[a].x, %[b].x\n"\
-          "v_addc_u32_e32 %[a].y, vcc, %[a].y, %[b].y, vcc\n"\
-          "v_add_u32_e32  %[a].x, vcc, %[a].x, %[x].x\n"\
-          "v_addc_u32_e32 %[a].y, vcc, %[a].y, %[x].y, vcc\n"\
-          "v_xor_b32_e32  %[temp_d].y, %[d].x, %[a].x\n"\
-          "v_xor_b32_e32  %[temp_d].x, %[d].y, %[a].y\n"\
-          "v_add_u32_e32  %[c].x, vcc, %[c].x, %[temp_d].x\n"\
-          "v_addc_u32_e32 %[c].y, vcc, %[c].y, %[temp_d].y, vcc\n"\
-          "v_xor_b32_e32  %[b].x, %[b].x, %[c].x\n"\
-          "v_xor_b32_e32  %[b].y, %[b].y, %[c].y\n"\
-          "v_alignbit_b32 %[temp_b].x, %[b].y, %[b].x, 24\n"\
-          "v_alignbit_b32 %[temp_b].y, %[b].x, %[b].y, 24\n"\
-          "v_add_u32_e32  %[a].x, vcc, %[a].x, %[temp_b].x\n"\
-          "v_addc_u32_e32 %[a].y, vcc, %[a].y, %[temp_b].y, vcc\n"\
-          "v_add_u32_e32  %[a].x, vcc, %[a].x, %[y].x\n"\
-          "v_addc_u32_e32 %[a].y, vcc, %[a].y, %[y].y, vcc\n"\
-          "v_xor_b32_e32  %[temp_d].x, %[temp_d].x, %[a].x\n"\
-          "v_xor_b32_e32  %[temp_d].y, %[temp_d].y, %[a].y\n"\
-          "v_alignbit_b32 %[d].x, %[temp_d].y, %[temp_d].x, 16\n"\
-          "v_alignbit_b32 %[d].y, %[temp_d].x, %[temp_d].y, 16\n"\
-          "v_add_u32_e32  %[c].x, vcc, %[c].x, %[d].x\n"\
-          "v_addc_u32_e32 %[c].y, vcc, %[c].y, %[d].y, vcc\n"\
-          "v_xor_b32_e32  %[temp_b].x, %[temp_b].x, %[c].x\n"\
-          "v_xor_b32_e32  %[temp_b].y, %[temp_b].y, %[c].y\n"\
-          "v_alignbit_b32 %[b].y, %[temp_b].y, %[temp_b].x, 31\n"\
-          "v_alignbit_b32 %[b].x, %[temp_b].x, %[temp_b].y, 31\n"\
-          : [a] "=&v" (va),\
-            [b] "=&v" (vb),\
-            [c] "=&v" (vc),\
-            [d] "=&v" (vd),\
-            [temp_b] "=&v" (temp_vb),\
-            [temp_d] "=&v" (temp_vd)\
-          : [a] "0"   (va),\
-            [b] "1"   (vb),\
-            [c] "2"   (vc),\
-            [d] "3"   (vd),\
-            [x] "v"   (vx),\
-            [y] "v"   (vy)\
-          : "vcc");
-
 #define mix_0_y(va, vb, vc, vd, vy) \
     __asm("v_add_u32_e32  %[a].x, vcc, %[a].x, %[b].x\n"\
           "v_addc_u32_e32 %[a].y, vcc, %[a].y, %[b].y, vcc\n"\
@@ -323,22 +274,22 @@ __constant ulong blake_iv[] =
           "v_addc_u32_e32 %[c].y, vcc, %[c].y, %[temp_d].y, vcc\n"\
           "v_xor_b32_e32  %[b].x, %[b].x, %[c].x\n"\
           "v_xor_b32_e32  %[b].y, %[b].y, %[c].y\n"\
-          "v_alignbit_b32 %[temp_b].x, %[b].y, %[b].x, 24\n"\
-          "v_alignbit_b32 %[temp_b].y, %[b].x, %[b].y, 24\n"\
+          "v_alignbit_b32_e32 %[temp_b].x, %[b].y, %[b].x, 24\n"\
+          "v_alignbit_b32_e32 %[temp_b].y, %[b].x, %[b].y, 24\n"\
           "v_add_u32_e32  %[a].x, vcc, %[a].x, %[temp_b].x\n"\
           "v_addc_u32_e32 %[a].y, vcc, %[a].y, %[temp_b].y, vcc\n"\
           "v_add_u32_e32  %[a].x, vcc, %[a].x, %[y].x\n"\
           "v_addc_u32_e32 %[a].y, vcc, %[a].y, %[y].y, vcc\n"\
           "v_xor_b32_e32  %[temp_d].x, %[temp_d].x, %[a].x\n"\
           "v_xor_b32_e32  %[temp_d].y, %[temp_d].y, %[a].y\n"\
-          "v_alignbit_b32 %[d].x, %[temp_d].y, %[temp_d].x, 16\n"\
-          "v_alignbit_b32 %[d].y, %[temp_d].x, %[temp_d].y, 16\n"\
+          "v_alignbit_b32_e32 %[d].x, %[temp_d].y, %[temp_d].x, 16\n"\
+          "v_alignbit_b32_e32 %[d].y, %[temp_d].x, %[temp_d].y, 16\n"\
           "v_add_u32_e32  %[c].x, vcc, %[c].x, %[d].x\n"\
           "v_addc_u32_e32 %[c].y, vcc, %[c].y, %[d].y, vcc\n"\
           "v_xor_b32_e32  %[temp_b].x, %[temp_b].x, %[c].x\n"\
           "v_xor_b32_e32  %[temp_b].y, %[temp_b].y, %[c].y\n"\
-          "v_alignbit_b32 %[b].y, %[temp_b].y, %[temp_b].x, 31\n"\
-          "v_alignbit_b32 %[b].x, %[temp_b].x, %[temp_b].y, 31\n"\
+          "v_alignbit_b32_e32 %[b].y, %[temp_b].y, %[temp_b].x, 31\n"\
+          "v_alignbit_b32_e32 %[b].x, %[temp_b].x, %[temp_b].y, 31\n"\
           : [a] "=&v" (va),\
             [b] "=&v" (vb),\
             [c] "=&v" (vc),\
@@ -363,20 +314,20 @@ __constant ulong blake_iv[] =
           "v_addc_u32_e32 %[c].y, vcc, %[c].y, %[temp_d].y, vcc\n"\
           "v_xor_b32_e32  %[b].x, %[b].x, %[c].x\n"\
           "v_xor_b32_e32  %[b].y, %[b].y, %[c].y\n"\
-          "v_alignbit_b32 %[temp_b].x, %[b].y, %[b].x, 24\n"\
-          "v_alignbit_b32 %[temp_b].y, %[b].x, %[b].y, 24\n"\
+          "v_alignbit_b32_e32 %[temp_b].x, %[b].y, %[b].x, 24\n"\
+          "v_alignbit_b32_e32 %[temp_b].y, %[b].x, %[b].y, 24\n"\
           "v_add_u32_e32  %[a].x, vcc, %[a].x, %[temp_b].x\n"\
           "v_addc_u32_e32 %[a].y, vcc, %[a].y, %[temp_b].y, vcc\n"\
           "v_xor_b32_e32  %[temp_d].x, %[temp_d].x, %[a].x\n"\
           "v_xor_b32_e32  %[temp_d].y, %[temp_d].y, %[a].y\n"\
-          "v_alignbit_b32 %[d].x, %[temp_d].y, %[temp_d].x, 16\n"\
-          "v_alignbit_b32 %[d].y, %[temp_d].x, %[temp_d].y, 16\n"\
+          "v_alignbit_b32_e32 %[d].x, %[temp_d].y, %[temp_d].x, 16\n"\
+          "v_alignbit_b32_e32 %[d].y, %[temp_d].x, %[temp_d].y, 16\n"\
           "v_add_u32_e32  %[c].x, vcc, %[c].x, %[d].x\n"\
           "v_addc_u32_e32 %[c].y, vcc, %[c].y, %[d].y, vcc\n"\
           "v_xor_b32_e32  %[temp_b].x, %[temp_b].x, %[c].x\n"\
           "v_xor_b32_e32  %[temp_b].y, %[temp_b].y, %[c].y\n"\
-          "v_alignbit_b32 %[b].y, %[temp_b].y, %[temp_b].x, 31\n"\
-          "v_alignbit_b32 %[b].x, %[temp_b].x, %[temp_b].y, 31\n"\
+          "v_alignbit_b32_e32 %[b].y, %[temp_b].y, %[temp_b].x, 31\n"\
+          "v_alignbit_b32_e32 %[b].x, %[temp_b].x, %[temp_b].y, 31\n"\
           : [a] "=&v" (va),\
             [b] "=&v" (vb),\
             [c] "=&v" (vc),\
@@ -399,20 +350,20 @@ __constant ulong blake_iv[] =
           "v_addc_u32_e32 %[c].y, vcc, %[c].y, %[temp_d].y, vcc\n"\
           "v_xor_b32_e32  %[b].x, %[b].x, %[c].x\n"\
           "v_xor_b32_e32  %[b].y, %[b].y, %[c].y\n"\
-          "v_alignbit_b32 %[temp_b].x, %[b].y, %[b].x, 24\n"\
-          "v_alignbit_b32 %[temp_b].y, %[b].x, %[b].y, 24\n"\
+          "v_alignbit_b32_e32 %[temp_b].x, %[b].y, %[b].x, 24\n"\
+          "v_alignbit_b32_e32 %[temp_b].y, %[b].x, %[b].y, 24\n"\
           "v_add_u32_e32  %[a].x, vcc, %[a].x, %[temp_b].x\n"\
           "v_addc_u32_e32 %[a].y, vcc, %[a].y, %[temp_b].y, vcc\n"\
           "v_xor_b32_e32  %[temp_d].x, %[temp_d].x, %[a].x\n"\
           "v_xor_b32_e32  %[temp_d].y, %[temp_d].y, %[a].y\n"\
-          "v_alignbit_b32 %[d].x, %[temp_d].y, %[temp_d].x, 16\n"\
-          "v_alignbit_b32 %[d].y, %[temp_d].x, %[temp_d].y, 16\n"\
+          "v_alignbit_b32_e32 %[d].x, %[temp_d].y, %[temp_d].x, 16\n"\
+          "v_alignbit_b32_e32 %[d].y, %[temp_d].x, %[temp_d].y, 16\n"\
           "v_add_u32_e32  %[c].x, vcc, %[c].x, %[d].x\n"\
           "v_addc_u32_e32 %[c].y, vcc, %[c].y, %[d].y, vcc\n"\
           "v_xor_b32_e32  %[temp_b].x, %[temp_b].x, %[c].x\n"\
           "v_xor_b32_e32  %[temp_b].y, %[temp_b].y, %[c].y\n"\
-          "v_alignbit_b32 %[b].y, %[temp_b].y, %[temp_b].x, 31\n"\
-          "v_alignbit_b32 %[b].x, %[temp_b].x, %[temp_b].y, 31\n"\
+          "v_alignbit_b32_e32 %[b].y, %[temp_b].y, %[temp_b].x, 31\n"\
+          "v_alignbit_b32_e32 %[b].x, %[temp_b].x, %[temp_b].y, 31\n"\
           : [a] "=&v" (va),\
             [b] "=&v" (vb),\
             [c] "=&v" (vc),\
@@ -583,118 +534,146 @@ void kernel_round0(uint device_thread, __constant ulong *blake_state, __global c
     h[5] = blake_state[5] ^ v[5] ^ v[13];
     h[6] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
 
-    // store the two Xi values in the hash table
-#pragma unroll 2
-    for (uint index = 0; index < 2; ++index) {
+    // store the two Xi values in the hash table;
 
-#if PARAM_N == 200 && PARAM_K == 9
-        if (!index) {
-            xi0 = h[0] & 0xffffffff; xi1 = h[0] >> 32;
-            xi2 = h[1] & 0xffffffff; xi3 = h[1] >> 32;
-            xi4 = h[2] & 0xffffffff; xi5 = h[2] >> 32;
-            xi6 = h[3] & 0xffffffff;
-        } else {
-            xi0 = ((h[3] >> 8) | (h[4] << (64 - 8))) & 0xffffffff; xi1 = ((h[3] >> 8) | (h[4] << (64 - 8))) >> 32;
-            xi2 = ((h[4] >> 8) | (h[5] << (64 - 8))) & 0xffffffff; xi3 = ((h[4] >> 8) | (h[5] << (64 - 8))) >> 32;
-            xi4 = ((h[5] >> 8) | (h[6] << (64 - 8))) & 0xffffffff; xi5 = ((h[5] >> 8) | (h[6] << (64 - 8))) >> 32;
-            xi6 = (h[6] >> 8) & 0xffffffff;
-        }
-#elif PARAM_N == 192 && PARAM_K == 7
-        if (!index) {
-            xi0 = h[0] & 0xffffffff; 
-            xi1 = h[0] >> 32;
-            xi2 = h[1] & 0xffffffff; 
-            xi3 = 0;
-            xi4 = 0; 
-            xi5 = 0;
-            xi6 = 0;
-        } else {
-            xi0 = h[1] >> 32;
-            xi1 = h[2] & 0xffffffff; 
-            xi2 = h[2] >> 32;
-            xi3 = 0;
-            xi4 = 0; 
-            xi5 = 0;
-            xi6 = 0;
-        }
-#else
-#error "unsupported ZCASH_HASH_LEN"
-#endif
-
-        uint new_row = get_row(0, xi0);
-        __global uint4 *p = (__global uint4 *)get_slot_ptr(ht, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
-        uint nr_slots = inc_gds_row_counter(0, row_counters, new_row);
-        if (nr_slots < _NR_SLOTS(0))
-            p = (__global uint4 *)get_slot_ptr(ht, 0, new_row, nr_slots);
+    uint new_row = get_row(0, h[0]);
+    __global uint4 *p = (__global uint4 *)get_slot_ptr(ht, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
+    uint nr_slots = inc_gds_row_counter(0, row_counters, new_row);
+    if (nr_slots < _NR_SLOTS(0))
+        p = (__global uint4 *)get_slot_ptr(ht, 0, new_row, nr_slots);
         
-        uint4 write_buffer0, write_buffer1;
-        __global uint4 *pp = p + 1;
-        __global uint4 *q;
-        __global uint4 *qq;
-        __asm("v_alignbit_b32 %[xi0], %[xi1], %[xi0], 8\n"
-              "v_alignbit_b32 %[xi1], %[xi2], %[xi1], 8\n"
-              "v_alignbit_b32 %[xi2], %[xi3], %[xi2], 8\n"
-              "v_alignbit_b32 %[xi3], %[xi4], %[xi3], 8\n"
-              "v_alignbit_b32 %[xi4], %[xi5], %[xi4], 8\n"
-              "v_alignbit_b32 %[xi5], %[xi6], %[xi5], 8\n"
+    uint4 write_buffer0, write_buffer1;
+    __global uint4 *pp = p + 1;
+    __global uint4 *q;
+    __global uint4 *qq;
+    __asm("v_alignbit_b32_e32 %[xi0], %[h0].y, %[h0].x, 8\n"
+          "v_alignbit_b32_e32 %[xi1], %[h1].x, %[h0].y, 8\n"
+          "v_alignbit_b32_e32 %[xi2], %[h1].y, %[h1].x, 8\n"
+          "v_alignbit_b32_e32 %[xi3], %[h2].x, %[h1].y, 8\n"
+          "v_alignbit_b32_e32 %[xi4], %[h2].y, %[h2].x, 8\n"
+          "v_alignbit_b32_e32 %[xi5], %[h3].x, %[h2].y, 8\n"
               
-              "ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
-              "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
-              "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
-	          "s_waitcnt lgkmcnt(0)\n"
+            "ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
+            "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
+            "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
+	        "s_waitcnt lgkmcnt(0)\n"
 	          
-              "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
-              "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
-              "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
-	          "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
-              "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
-	          "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
-	          "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
+            "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
+            "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
+            "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
+	        "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
+            "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
+	        "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
+	        "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
               
-	          "s_waitcnt lgkmcnt(2)\n"
-	          "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
-	          "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
-	          "s_waitcnt lgkmcnt(1)\n"
-	          "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
-	          "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
-	          "s_waitcnt lgkmcnt(0)\n"
+	        "s_waitcnt lgkmcnt(2)\n"
+	        "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
+	        "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
+	        "s_waitcnt lgkmcnt(1)\n"
+	        "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
+	        "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
+	        "s_waitcnt lgkmcnt(0)\n"
 
-	          "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
-	          "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
-	          "flat_store_dwordx4 %[q], %[write_buffer0]\n"
+	        "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
+	        "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
+	        "flat_store_dwordx4 %[q], %[write_buffer0]\n"
 	          
-              "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
-	          "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
-              "flat_store_dwordx4 %[qq], %[write_buffer1]\n"
+            "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
+	        "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
+            "flat_store_dwordx4 %[qq], %[write_buffer1]\n"
               
-              : [write_buffer0] "=&v" (write_buffer0),
-                [write_buffer1] "=&v" (write_buffer1),
-                [p] "=&v" (p), 
-                [pp] "=&v" (pp),
-                [q] "=&v" (q), 
-                [qq] "=&v" (qq),
-                [xi0] "=&v" (xi0),
-                [xi1] "=&v" (xi1),
-                [xi2] "=&v" (xi2),
-                [xi3] "=&v" (xi3),
-                [xi4] "=&v" (xi4),
-                [xi5] "=&v" (xi5),
-                [xi6] "=&v" (xi6)
+            : [write_buffer0] "=&v" (write_buffer0),
+            [write_buffer1] "=&v" (write_buffer1),
+            [p] "=&v" (p), 
+            [pp] "=&v" (pp),
+            [q] "=&v" (q), 
+            [qq] "=&v" (qq),
+            [xi0] "=&v" (xi0),
+            [xi1] "=&v" (xi1),
+            [xi2] "=&v" (xi2),
+            [xi3] "=&v" (xi3),
+            [xi4] "=&v" (xi4),
+            [xi5] "=&v" (xi5),
+            [xi6] "=&v" (xi6)
                 
-              : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
-                [p] "2" (p), 
-                [pp] "3" (pp), 
-                [xi0] "6" (xi0),
-                [xi1] "7" (xi1),
-                [xi2] "8" (xi2),
-                [xi3] "9" (xi3),
-                [xi4] "10" (xi4),
-                [xi5] "11" (xi5),
-                [xi6] "12" (xi6),
-                [ref] "v" (input * 2 + index)
+            : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
+              [p] "2" (p), 
+              [pp] "3" (pp), 
+              [h0] "v" (h[0]),
+              [h1] "v" (h[1]),
+              [h2] "v" (h[2]),
+              [h3] "v" (h[3]),
+              [ref] "v" (input * 2 + 0)
                 
-              : "memory");
-    }
+            : "memory");
+
+    new_row = get_row(0, (uint)h[3] >> 8);
+    p = (__global uint4 *)get_slot_ptr(ht, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
+    nr_slots = inc_gds_row_counter(0, row_counters, new_row);
+    if (nr_slots < _NR_SLOTS(0))
+        p = (__global uint4 *)get_slot_ptr(ht, 0, new_row, nr_slots);
+        
+    pp = p + 1;
+    __asm("v_alignbit_b32 %[xi0], %[h3].y, %[h3].x, 16\n"
+            "v_alignbit_b32 %[xi1], %[h4].x, %[h3].y, 16\n"
+            "v_alignbit_b32 %[xi2], %[h4].y, %[h4].x, 16\n"
+            "v_alignbit_b32 %[xi3], %[h5].x, %[h4].y, 16\n"
+            "v_alignbit_b32 %[xi4], %[h5].y, %[h5].x, 16\n"
+            "v_alignbit_b32 %[xi5], %[h6].x, %[h5].y, 16\n"
+              
+            "ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
+            "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
+            "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
+	        "s_waitcnt lgkmcnt(0)\n"
+	          
+            "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
+            "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
+            "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
+	        "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
+            "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
+	        "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
+	        "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
+              
+	        "s_waitcnt lgkmcnt(2)\n"
+	        "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
+	        "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
+	        "s_waitcnt lgkmcnt(1)\n"
+	        "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
+	        "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
+	        "s_waitcnt lgkmcnt(0)\n"
+
+	        "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
+	        "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
+	        "flat_store_dwordx4 %[q], %[write_buffer0]\n"
+	          
+            "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
+	        "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
+            "flat_store_dwordx4 %[qq], %[write_buffer1]\n"
+              
+            : [write_buffer0] "=&v" (write_buffer0),
+            [write_buffer1] "=&v" (write_buffer1),
+            [p] "=&v" (p), 
+            [pp] "=&v" (pp),
+            [q] "=&v" (q), 
+            [qq] "=&v" (qq),
+            [xi0] "=&v" (xi0),
+            [xi1] "=&v" (xi1),
+            [xi2] "=&v" (xi2),
+            [xi3] "=&v" (xi3),
+            [xi4] "=&v" (xi4),
+            [xi5] "=&v" (xi5),
+            [xi6] "=&v" (xi6)
+                
+            : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
+            [p] "2" (p), 
+            [pp] "3" (pp),
+            [h3] "v" (h[3]),
+            [h4] "v" (h[4]),
+            [h5] "v" (h[5]),
+            [h6] "v" (h[6]),
+            [ref] "v" (input * 2 + 1)
+                
+            : "memory");
 }
 
 /*
@@ -904,10 +883,10 @@ void parallel_xor_and_store_round5(uint device_thread, uint round, __global char
     __global uint4 *pp = p + 1;
     __global uint4 *q;
     __global uint4 *qq;
-    __asm("v_alignbit_b32 %[xi0], %[xi1], %[xi0], 8\n"
-          "v_alignbit_b32 %[xi1], %[xi2], %[xi1], 8\n"
-          "v_alignbit_b32 %[xi2], %[xi3], %[xi2], 8\n"
-          "v_alignbit_b32 %[xi3], %[xi4], %[xi3], 8\n"
+    __asm("v_alignbit_b32_e32 %[xi0], %[xi1], %[xi0], 8\n"
+          "v_alignbit_b32_e32 %[xi1], %[xi2], %[xi1], 8\n"
+          "v_alignbit_b32_e32 %[xi2], %[xi3], %[xi2], 8\n"
+          "v_alignbit_b32_e32 %[xi3], %[xi4], %[xi3], 8\n"
           
           "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
 	      "ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
@@ -987,17 +966,17 @@ void parallel_xor_and_store_odd_round(uint device_thread, uint round, __global c
         }
     }
 
-    __asm("v_alignbit_b32 %0, %2, %1, 8" : "=&v" (xi0) : "0" (xi0), "v" (xi1));
-    __asm("v_alignbit_b32 %0, %2, %1, 8" : "=&v" (xi1) : "0" (xi1), "v" (xi2));
-    __asm("v_alignbit_b32 %0, %2, %1, 8" : "=&v" (xi2) : "0" (xi2), "v" (xi3));
-    __asm("v_alignbit_b32 %0, %2, %1, 8" : "=&v" (xi3) : "0" (xi3), "v" (xi4));
+    __asm("v_alignbit_b32_e32 %0, %2, %1, 8" : "=&v" (xi0) : "0" (xi0), "v" (xi1));
+    __asm("v_alignbit_b32_e32 %0, %2, %1, 8" : "=&v" (xi1) : "0" (xi1), "v" (xi2));
+    __asm("v_alignbit_b32_e32 %0, %2, %1, 8" : "=&v" (xi2) : "0" (xi2), "v" (xi3));
+    __asm("v_alignbit_b32_e32 %0, %2, %1, 8" : "=&v" (xi3) : "0" (xi3), "v" (xi4));
     if (round >= 4) {
         xi4 = ENCODE_INPUTS(round - 1, row, slot_a, slot_b);
     } else if (round >= 2) {
-        __asm("v_alignbit_b32 %0, %2, %1, 8" : "=&v" (xi4) : "0" (xi4), "v" (xi5));
+        __asm("v_alignbit_b32_e32 %0, %2, %1, 8" : "=&v" (xi4) : "0" (xi4), "v" (xi5));
         xi5 = ENCODE_INPUTS(round - 1, row, slot_a, slot_b);
     } else {
-        __asm("v_alignbit_b32 %0, %2, %1, 8" : "=&v" (xi4) : "0" (xi4), "v" (xi5));
+        __asm("v_alignbit_b32_e32 %0, %2, %1, 8" : "=&v" (xi4) : "0" (xi4), "v" (xi5));
         xi5 >>= 8;
         xi6 = ENCODE_INPUTS(round - 1, row, slot_a, slot_b);
     }
