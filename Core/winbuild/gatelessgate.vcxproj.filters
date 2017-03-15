@@ -33,6 +33,9 @@
     <Filter Include="Resource Files\kernel">
       <UniqueIdentifier>{fbbc4098-8d2b-46a5-9411-dfb0ed90f79a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Resource Files\binary-kernel">
+      <UniqueIdentifier>{fc754870-39e0-491f-8da8-170b42349060}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\adl.c">
@@ -726,6 +729,9 @@
     </None>
     <None Include="..\kernel\equihash-zero.cl">
       <Filter>Resource Files\kernel</Filter>
+    </None>
+    <None Include="..\binary-kernel\equihash.cl">
+      <Filter>Resource Files\binary-kernel</Filter>
     </None>
   </ItemGroup>
 </Project>

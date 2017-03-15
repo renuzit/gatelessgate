@@ -436,6 +436,7 @@ clrxasm "$(ProjectDir)..\kernel\equihash-gcn1-ocl12-32bit.asm" -g Tahiti -o "$(O
     <ClInclude Include="dist\include\winbuild.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\binary-kernel\equihash.cl" />
     <None Include="..\kernel\aes_helper.cl" />
     <None Include="..\kernel\alexkarnew.cl" />
     <None Include="..\kernel\alexkarold.cl" />
