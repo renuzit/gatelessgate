@@ -41,7 +41,7 @@
 //
 
 #define _NR_ROWS_LOG(round)      12
-#define _NR_SLOTS(round)         ((round) <= 6 ? 652 : 684)
+#define _NR_SLOTS(round)         684
 #define _LDS_COLL_SIZE(round)    ((round) <= 6 ? 784 : 800)
 #define _NR_ROWS(round)          4096
 #define MAX_NR_ROWS              4096
@@ -128,10 +128,6 @@
 #define ZCASH_SOLSIZE_LEN	     3
 #define ZCASH_SOL_LEN(n, k)      ((1 << (k)) * (PREFIX((n), (k)) + 1) / 8)  // 1344
 #define ZCASH_HASH_LEN(n, k)     (((k) + 1) * ((PREFIX((n), (k)) + 7) / 8)) // 50
-// Number of wavefronts per SIMD for the Blake kernel.
-// Blake is ALU-bound (beside the atomic counter being incremented) so we need
-// at least 2 wavefronts per SIMD to hide the 2-clock latency of integer
-// instructions. 10 is the max supported by the hw.
 #define BLAKE_WPS                10
 // Maximum number of solutions reported by kernel to host
 #define MAX_SOLS			     11
