@@ -1524,12 +1524,27 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
                     applog(LOG_DEBUG, "equihash: %d (probably invalid) solutions were dropped!", sols->nr - MAX_SOLS);
                     sols->nr = MAX_SOLS;
                 }
+                // zawawa
+                work->blk.nonce--;
+                if (work->getwork_mode == GETWORK_MODE_STRATUM)
+                    *(uint16_t*)(work->equihash_data + 108 + strlen(work->nonce1) / 2) -= 1;
+                else {
+                    *(uint64_t*)(work->equihash_data + 108) -= 1;
+                }
+                //
                 if (!strcmp(gpu->algorithm.name, "equihash-zero")) {
                     for (int sol_i = 0; sol_i < sols->nr; sol_i++)
                         ret += equihash_verify_sol(work, sols, sol_i, 192, 7);
                 } else {
                     for (int sol_i = 0; sol_i < sols->nr; sol_i++)
                         ret += equihash_verify_sol(work, sols, sol_i, 200, 9);
+                }
+                // zawawa
+                work->blk.nonce++;
+                if (work->getwork_mode == GETWORK_MODE_STRATUM)
+                    *(uint16_t*)(work->equihash_data + 108 + strlen(work->nonce1) / 2) += 1;
+                else {
+                    *(uint64_t*)(work->equihash_data + 108) += 1;
                 }
             } else {
                 applog(LOG_ERR, "Error %d: Reading result buffer for ALGO_EQUIHASH failed. (clEnqueueReadBuffer)", status);

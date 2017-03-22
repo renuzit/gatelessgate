@@ -1198,6 +1198,8 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
         clState->buffer10,
     };
     cl_mem row_counters[2] = { clState->buffer2, clState->buffer3 };
+    cl_mem buf_ht_next_round0 = clState->buffer12;
+    cl_mem row_counters_next_round0 = clState->buffer13;
     cl_mem buf_potential_sols = clState->buffer11;
     cl_uint round;
     for (round = 0; round < param_k; round++) {
@@ -1205,14 +1207,15 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
         cl_kernel *kernel = &clState->extra_kernels[0];
         CL_SET_VARG(1, &device_thread);
         CL_SET_VARG(1, &round);
-        CL_SET_ARG(buf_ht[round]);
+        CL_SET_ARG(buf_ht[(round + 7) % 8]);
         CL_SET_ARG(row_counters[(round + 1) % 2]);
         CL_SET_ARG(row_counters[round % 2]);
         CL_SET_ARG(clState->outputBuffer);
         CL_SET_ARG(buf_potential_sols);
         CL_SET_ARG(clState->padbuffer8);
+        CL_SET_ARG(clState->MidstateBuf);
         worksize = 256;
-        work_items = (MAX_NR_ROWS + ROWS_PER_UINT - 1) / ROWS_PER_UINT;
+        work_items = MAX(nr_inputs, (MAX_NR_ROWS + ROWS_PER_UINT - 1) / ROWS_PER_UINT);
         if (work_items % worksize)
             work_items += worksize - work_items % worksize;
         status |= clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL, &work_items, &worksize, 0, NULL, NULL);
@@ -1232,6 +1235,7 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
             CL_SET_ARG(buf_ht[round]);
             CL_SET_ARG(row_counters[(round - 1) % 2]);
             CL_SET_ARG(row_counters[round % 2]);
+            CL_SET_ARG(clState->MidstateBuf);
             worksize = LOCAL_WORK_SIZE;
             work_items = _NR_ROWS(round - 1) * worksize;
         }

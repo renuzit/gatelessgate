@@ -100,35 +100,35 @@ typedef __global slot_t *global_pointer_to_slot_t;
 ** Return 0 if successfully stored, or 1 if the row overflowed.
 */
 
-__global char *get_slot_ptr(__global char *ht, uint round, uint row, uint slot)
+__global char *get_slot_ptr(__global char *hash_table, uint round, uint row, uint slot)
 {
 #if 0
     if (round <= 5) {
-        return ht + (slot >> 4) * _NR_ROWS(round) * 16            * _SLOT_LEN(round)
+        return hash_table + (slot >> 4) * _NR_ROWS(round) * 16            * _SLOT_LEN(round)
                   +               row             * 16            * _SLOT_LEN(round)
                   +                                 (slot & 0xf)  * _SLOT_LEN(round);
     } else if (round <= 7) {
-        return ht + (slot >> 5) * _NR_ROWS(round) * 32            * _SLOT_LEN(round)
+        return hash_table + (slot >> 5) * _NR_ROWS(round) * 32            * _SLOT_LEN(round)
                   +               row             * 32            * _SLOT_LEN(round)
                   +                                 (slot & 0x1f) * _SLOT_LEN(round);
     } else {
-        return ht + (slot >> 6) * _NR_ROWS(round) * 64            * _SLOT_LEN(round)
+        return hash_table + (slot >> 6) * _NR_ROWS(round) * 64            * _SLOT_LEN(round)
                   +               row             * 64            * _SLOT_LEN(round)
                   +                                 (slot & 0x3f) * _SLOT_LEN(round);
     }
 #else
-        return ht + (row * _NR_SLOTS(round) + slot) * _SLOT_LEN(round);
+        return hash_table + (row * _NR_SLOTS(round) + slot) * _SLOT_LEN(round);
 #endif
 }
 
-__global uint *get_xi_ptr(__global char *ht, uint round, uint row, uint slot)
+__global uint *get_xi_ptr(__global char *hash_table, uint round, uint row, uint slot)
 {
-    return (__global uint *)get_slot_ptr(ht, round, row, slot);
+    return (__global uint *)get_slot_ptr(hash_table, round, row, slot);
 }
 
-__global uint *get_ref_ptr(__global char *ht, uint round, uint row, uint slot)
+__global uint *get_ref_ptr(__global char *hash_table, uint round, uint row, uint slot)
 {
-    return get_xi_ptr(ht, round, row, slot) + UINTS_IN_XI(round);
+    return get_xi_ptr(hash_table, round, row, slot) + UINTS_IN_XI(round);
 }
 
 uint get_row(uint round, uint xi0)
@@ -174,7 +174,7 @@ void get_row_counters_index(uint *row_counter_index, uint *row_counter_offset, u
 #define GDS_ROW_COUNTERS_SIZE 8192 // ((uint)ROW_COUNTERS_SIZE) 
 #define M0_GDS                (GDS_ROW_COUNTERS_SIZE * 2)
 
-#define USE_GDS_ROW_COUNTERS(device_thread, round, row_counter_index) 1 
+#define USE_GDS_ROW_COUNTERS(device_thread, round, row_counter_index) 0 
 
 uint get_nr_slots(uint device_thread, uint round, __global uint *row_counters, uint row_index)
 {
@@ -226,8 +226,16 @@ uint inc_gds_row_counter(uint device_thread, uint round, __global uint *row_coun
 ** Reset counters in a hash table.
 */
 
+__constant ulong blake_iv[] =
+{
+    0x6a09e667f3bcc908, 0xbb67ae8584caa73b,
+    0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
+    0x510e527fade682d1, 0x9b05688c2b3e6c1f,
+    0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
+};
+
 __kernel
-void kernel_init_ht(uint device_thread, uint round, __global uint *hash_table, __global uint *row_counters_src, __global uint *row_counters_dst, __global sols_t *sols, __global potential_sols_t *potential_sols, __global uint *sync_flags)
+void kernel_init_ht(uint device_thread, uint round, __global uint *hash_table, __global uint *row_counters_src, __global uint *row_counters_dst, __global sols_t *sols, __global potential_sols_t *potential_sols, __global ulong *blake_state_pool, __constant ulong *blake_state)
 {
     uint gds_index = (get_global_id(0) << 2);
         
@@ -245,8 +253,164 @@ void kernel_init_ht(uint device_thread, uint round, __global uint *hash_table, _
     }
     if (round <= 8 && !USE_GDS_ROW_COUNTERS(device_thread, round, get_global_id(0)) && get_global_id(0) < (_NR_ROWS(round) + ROWS_PER_UINT - 1) / ROWS_PER_UINT)
         row_counters_dst[get_global_id(0)] = 0;
-    if (round == 0 && !get_global_id(0))
+    if (round == 8 && !get_global_id(0))
         sols->nr = sols->likely_invalids = potential_sols->nr = 0;
+
+    if (round == 1 && get_global_id(0) < NR_INPUTS(PARAM_N, PARAM_K)) {
+        uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
+        slot_t slot;
+        ulong               h[7], v[16];
+
+        uint input = get_global_id(0);
+    
+        h[0] = blake_state_pool[input + 0 * NR_INPUTS(PARAM_N, PARAM_K)];
+        h[1] = blake_state_pool[input + 1 * NR_INPUTS(PARAM_N, PARAM_K)];
+        h[2] = blake_state_pool[input + 2 * NR_INPUTS(PARAM_N, PARAM_K)];
+        h[3] = blake_state_pool[input + 3 * NR_INPUTS(PARAM_N, PARAM_K)];
+        h[4] = blake_state_pool[input + 4 * NR_INPUTS(PARAM_N, PARAM_K)];
+        h[5] = blake_state_pool[input + 5 * NR_INPUTS(PARAM_N, PARAM_K)];
+        h[6] = blake_state_pool[input + 6 * NR_INPUTS(PARAM_N, PARAM_K)];
+
+        // store the two Xi values in the hash table;
+
+        uint new_row = get_row(0, h[0]);
+        __global uint4 *p = (__global uint4 *)get_slot_ptr(hash_table, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
+        uint nr_slots = inc_gds_row_counter(device_thread, 0, row_counters_src, new_row);
+        if (nr_slots < _NR_SLOTS(0))
+            p = (__global uint4 *)get_slot_ptr(hash_table, 0, new_row, nr_slots);
+        
+        uint4 write_buffer0, write_buffer1;
+        __global uint4 *pp = p + 1;
+        __global uint4 *q;
+        __global uint4 *qq;
+        __asm("ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
+              "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
+              "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
+	        
+              "v_alignbit_b32_e32 %[xi4], %[h2].y, %[h2].x, 8\n"
+              "v_alignbit_b32_e32 %[xi5], %[h3].x, %[h2].y, 8\n"
+          
+              "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
+              "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
+	      
+	          "v_alignbit_b32_e32 %[xi0], %[h0].y, %[h0].x, 8\n"
+              "v_alignbit_b32_e32 %[xi1], %[h1].x, %[h0].y, 8\n"
+              "v_alignbit_b32_e32 %[xi2], %[h1].y, %[h1].x, 8\n"
+              "v_alignbit_b32_e32 %[xi3], %[h2].x, %[h1].y, 8\n"
+              "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
+	          "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
+	          "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
+	        
+	            "s_waitcnt lgkmcnt(0)\n"
+	          
+                "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
+                "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
+                "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
+	            "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
+                "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
+
+	            "flat_store_dwordx4 %[q], %[write_buffer0]\n"
+                "flat_store_dwordx4 %[qq], %[write_buffer1]\n"
+
+	            "s_waitcnt expcnt(0)\n"
+	        
+                : [write_buffer0] "=&v" (write_buffer0),
+                [write_buffer1] "=&v" (write_buffer1),
+                [pp] "=&v" (pp),
+                [q] "=&v" (q), 
+                [qq] "=&v" (qq),
+                [xi0] "=&v" (xi0),
+                [xi1] "=&v" (xi1),
+                [xi2] "=&v" (xi2),
+                [xi3] "=&v" (xi3),
+                [xi4] "=&v" (xi4),
+                [xi5] "=&v" (xi5),
+                [xi6] "=&v" (xi6)
+                
+                : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
+                  [p] "v" (p), 
+                  [pp] "2" (pp), 
+                  [h0] "v" (h[0]),
+                  [h1] "v" (h[1]),
+                  [h2] "v" (h[2]),
+                  [h3] "v" (h[3]),
+                  [ref] "v" (input * 2 + 0)
+                
+                : "memory", "vcc");
+
+        new_row = get_row(0, (uint)h[3] >> 8);
+        p = (__global uint4 *)get_slot_ptr(hash_table, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
+        nr_slots = inc_gds_row_counter(device_thread, 0, row_counters_src, new_row);
+        if (nr_slots < _NR_SLOTS(0))
+            p = (__global uint4 *)get_slot_ptr(hash_table, 0, new_row, nr_slots);
+
+        pp = p + 1;
+        __asm(  "ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
+                "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
+	            "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
+
+                "v_alignbit_b32 %[xi4], %[h5].y, %[h5].x, 16\n"
+                "v_alignbit_b32 %[xi5], %[h6].x, %[h5].y, 16\n"
+
+                "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
+                "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
+
+                "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
+	            "v_alignbit_b32 %[xi0], %[h3].y, %[h3].x, 16\n"
+                "v_alignbit_b32 %[xi1], %[h4].x, %[h3].y, 16\n"
+                "v_alignbit_b32 %[xi2], %[h4].y, %[h4].x, 16\n"
+                "v_alignbit_b32 %[xi3], %[h5].x, %[h4].y, 16\n"
+	            "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
+	            "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
+              
+	            "s_waitcnt lgkmcnt(0)\n"
+	          
+                "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
+                "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
+                "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
+	            "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
+                "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
+
+	            "flat_store_dwordx4 %[q], %[write_buffer0]\n"
+                "flat_store_dwordx4 %[qq], %[write_buffer1]\n"
+            
+	            "s_waitcnt expcnt(0)\n"
+	          
+                : [write_buffer0] "=&v" (write_buffer0),
+                [write_buffer1] "=&v" (write_buffer1),
+                [p] "=&v" (p), 
+                [pp] "=&v" (pp),
+                [q] "=&v" (q), 
+                [qq] "=&v" (qq),
+                [xi0] "=&v" (xi0),
+                [xi1] "=&v" (xi1),
+                [xi2] "=&v" (xi2),
+                [xi3] "=&v" (xi3),
+                [xi4] "=&v" (xi4),
+                [xi5] "=&v" (xi5),
+                [xi6] "=&v" (xi6)
+                
+                : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
+                [p] "2" (p), 
+                [pp] "3" (pp),
+                [h3] "v" (h[3]),
+                [h4] "v" (h[4]),
+                [h5] "v" (h[5]),
+                [h6] "v" (h[6]),
+                [ref] "v" (input * 2 + 1)
+                
+                : "memory", "vcc");
+    }
 }
 
 
@@ -254,14 +418,6 @@ void kernel_init_ht(uint device_thread, uint round, __global uint *hash_table, _
 /////////////
 // ROUND 0 //
 /////////////
-
-__constant ulong blake_iv[] =
-{
-    0x6a09e667f3bcc908, 0xbb67ae8584caa73b,
-    0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
-    0x510e527fade682d1, 0x9b05688c2b3e6c1f,
-    0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
-};
 
 #define mix_0_y(va, vb, vc, vd, vy) \
     __asm("v_add_u32_e32  %[a].x, vcc, %[a].x, %[b].x\n"\
@@ -377,298 +533,9 @@ __constant ulong blake_iv[] =
 */
 
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_ROUND0, 1, 1)))
-void kernel_round0(uint device_thread, __constant ulong *blake_state, __global char *ht,
-    __global uint *row_counters, __global uint *sync_flags)
+void kernel_round0(uint device_thread, __constant ulong *blake_state, __global char *hash_table,
+    __global uint *row_counters, __global ulong *blake_state_pool)
 {
-    ulong               v[16], temp_va, temp_vb, temp_vd;
-    uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
-    slot_t slot;
-    ulong               h[7];
-
-    uint input = get_global_id(0);
-
-    // shift "i" to occupy the high 32 bits of the second ulong word in the
-    // message block
-    ulong word1 = (ulong)input << 32;
-    // init vector v
-    v[0] = blake_state[0];
-    v[1] = blake_state[1];
-    v[2] = blake_state[2];
-    v[3] = blake_state[3];
-    v[4] = blake_state[4];
-    v[5] = blake_state[5];
-    v[6] = blake_state[6];
-    v[7] = blake_state[7];
-    v[8] = blake_iv[0];
-    v[9] = blake_iv[1];
-    v[10] = blake_iv[2];
-    v[11] = blake_iv[3];
-    v[12] = blake_iv[4];
-    v[13] = blake_iv[5];
-    v[14] = blake_iv[6];
-    v[15] = blake_iv[7];
-    // mix in length of data
-    v[12] ^= ZCASH_BLOCK_HEADER_LEN + 4 /* length of "i" */;
-    // last block
-    v[14] ^= (ulong)-1;
-
-    mix_0_y(v[0], v[4], v[8], v[12], word1);
-    mix_0_0(v[1], v[5], v[9], v[13]);
-    mix_0_0(v[2], v[6], v[10], v[14]);
-    mix_0_0(v[3], v[7], v[11], v[15]);
-    mix_0_0(v[0], v[5], v[10], v[15]);
-    mix_0_0(v[1], v[6], v[11], v[12]);
-    mix_0_0(v[2], v[7], v[8], v[13]);
-    mix_0_0(v[3], v[4], v[9], v[14]);
-
-    mix_0_0(v[0], v[4], v[8], v[12]);
-    mix_0_0(v[1], v[5], v[9], v[13]);
-    mix_0_0(v[2], v[6], v[10], v[14]);
-    mix_0_0(v[3], v[7], v[11], v[15]);
-    mix_x_0(v[0], v[5], v[10], v[15], word1);
-    mix_0_0(v[1], v[6], v[11], v[12]);
-    mix_0_0(v[2], v[7], v[8], v[13]);
-    mix_0_0(v[3], v[4], v[9], v[14]);
-    
-    mix_0_0(v[0], v[4], v[8], v[12]);
-    mix_0_0(v[1], v[5], v[9], v[13]);
-    mix_0_0(v[2], v[6], v[10], v[14]);
-    mix_0_0(v[3], v[7], v[11], v[15]);
-    mix_0_0(v[0], v[5], v[10], v[15]);
-    mix_0_0(v[1], v[6], v[11], v[12]);
-    mix_0_y(v[2], v[7], v[8], v[13], word1);
-    mix_0_0(v[3], v[4], v[9], v[14]);
-
-    mix_0_0(v[0], v[4], v[8], v[12]);
-    mix_0_y(v[1], v[5], v[9], v[13], word1);
-    mix_0_0(v[2], v[6], v[10], v[14]);
-    mix_0_0(v[3], v[7], v[11], v[15]);
-    mix_0_0(v[0], v[5], v[10], v[15]);
-    mix_0_0(v[1], v[6], v[11], v[12]);
-    mix_0_0(v[2], v[7], v[8], v[13]);
-    mix_0_0(v[3], v[4], v[9], v[14]);
-
-    mix_0_0(v[0], v[4], v[8], v[12]);
-    mix_0_0(v[1], v[5], v[9], v[13]);
-    mix_0_0(v[2], v[6], v[10], v[14]);
-    mix_0_0(v[3], v[7], v[11], v[15]);
-    mix_0_y(v[0], v[5], v[10], v[15], word1);
-    mix_0_0(v[1], v[6], v[11], v[12]);
-    mix_0_0(v[2], v[7], v[8], v[13]);
-    mix_0_0(v[3], v[4], v[9], v[14]);
-
-    mix_0_0(v[0], v[4], v[8], v[12]);
-    mix_0_0(v[1], v[5], v[9], v[13]);
-    mix_0_0(v[2], v[6], v[10], v[14]);
-    mix_0_0(v[3], v[7], v[11], v[15]);
-    mix_0_0(v[0], v[5], v[10], v[15]);
-    mix_0_0(v[1], v[6], v[11], v[12]);
-    mix_0_0(v[2], v[7], v[8], v[13]);
-    mix_x_0(v[3], v[4], v[9], v[14], word1);
-
-    mix_0_0(v[0], v[4], v[8], v[12]);
-    mix_x_0(v[1], v[5], v[9], v[13], word1);
-    mix_0_0(v[2], v[6], v[10], v[14]);
-    mix_0_0(v[3], v[7], v[11], v[15]);
-    mix_0_0(v[0], v[5], v[10], v[15]);
-    mix_0_0(v[1], v[6], v[11], v[12]);
-    mix_0_0(v[2], v[7], v[8], v[13]);
-    mix_0_0(v[3], v[4], v[9], v[14]);
-
-    mix_0_0(v[0], v[4], v[8], v[12]);
-    mix_0_0(v[1], v[5], v[9], v[13]);
-    mix_0_y(v[2], v[6], v[10], v[14], word1);
-    mix_0_0(v[3], v[7], v[11], v[15]);
-    mix_0_0(v[0], v[5], v[10], v[15]);
-    mix_0_0(v[1], v[6], v[11], v[12]);
-    mix_0_0(v[2], v[7], v[8], v[13]);
-    mix_0_0(v[3], v[4], v[9], v[14]);
-
-    mix_0_0(v[0], v[4], v[8], v[12]);
-    mix_0_0(v[1], v[5], v[9], v[13]);
-    mix_0_0(v[2], v[6], v[10], v[14]);
-    mix_0_0(v[3], v[7], v[11], v[15]);
-    mix_0_0(v[0], v[5], v[10], v[15]);
-    mix_0_0(v[1], v[6], v[11], v[12]);
-    mix_x_0(v[2], v[7], v[8], v[13], word1);
-    mix_0_0(v[3], v[4], v[9], v[14]);
-
-    mix_0_0(v[0], v[4], v[8], v[12]);
-    mix_0_0(v[1], v[5], v[9], v[13]);
-    mix_0_0(v[2], v[6], v[10], v[14]);
-    mix_x_0(v[3], v[7], v[11], v[15], word1);
-    mix_0_0(v[0], v[5], v[10], v[15]);
-    mix_0_0(v[1], v[6], v[11], v[12]);
-    mix_0_0(v[2], v[7], v[8], v[13]);
-    mix_0_0(v[3], v[4], v[9], v[14]);
-
-    mix_0_y(v[0], v[4], v[8], v[12], word1);
-    mix_0_0(v[1], v[5], v[9], v[13]);
-    mix_0_0(v[2], v[6], v[10], v[14]);
-    mix_0_0(v[3], v[7], v[11], v[15]);
-    mix_0_0(v[0], v[5], v[10], v[15]);
-    mix_0_0(v[1], v[6], v[11], v[12]);
-    mix_0_0(v[2], v[7], v[8], v[13]);
-    mix_0_0(v[3], v[4], v[9], v[14]);
-
-    mix_0_0(v[0], v[4], v[8], v[12]);
-    mix_0_0(v[1], v[5], v[9], v[13]);
-    mix_0_0(v[2], v[6], v[10], v[14]);
-    mix_0_0(v[3], v[7], v[11], v[15]);
-    mix_x_0(v[0], v[5], v[10], v[15], word1);
-    mix_0_0(v[1], v[6], v[11], v[12]);
-    mix_0_0(v[2], v[7], v[8], v[13]);
-    mix_0_0(v[3], v[4], v[9], v[14]);
-    
-    // compress v into the blake state; this produces the 50-byte hash
-    // (two Xi values)
-    h[0] = blake_state[0] ^ v[0] ^ v[8];
-    h[1] = blake_state[1] ^ v[1] ^ v[9];
-    h[2] = blake_state[2] ^ v[2] ^ v[10];
-    h[3] = blake_state[3] ^ v[3] ^ v[11];
-    h[4] = blake_state[4] ^ v[4] ^ v[12];
-    h[5] = blake_state[5] ^ v[5] ^ v[13];
-    h[6] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
-
-    // store the two Xi values in the hash table;
-
-    uint new_row = get_row(0, h[0]);
-    __global uint4 *p = (__global uint4 *)get_slot_ptr(ht, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
-    uint nr_slots = inc_gds_row_counter(device_thread, 0, row_counters, new_row);
-    if (nr_slots < _NR_SLOTS(0))
-        p = (__global uint4 *)get_slot_ptr(ht, 0, new_row, nr_slots);
-        
-    uint4 write_buffer0, write_buffer1;
-    __global uint4 *pp = p + 1;
-    __global uint4 *q;
-    __global uint4 *qq;
-    __asm("ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
-          "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
-          "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
-	        
-          "v_alignbit_b32_e32 %[xi4], %[h2].y, %[h2].x, 8\n"
-          "v_alignbit_b32_e32 %[xi5], %[h3].x, %[h2].y, 8\n"
-          
-          "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
-          "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
-	      
-	      "v_alignbit_b32_e32 %[xi0], %[h0].y, %[h0].x, 8\n"
-          "v_alignbit_b32_e32 %[xi1], %[h1].x, %[h0].y, 8\n"
-          "v_alignbit_b32_e32 %[xi2], %[h1].y, %[h1].x, 8\n"
-          "v_alignbit_b32_e32 %[xi3], %[h2].x, %[h1].y, 8\n"
-          "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
-	      "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
-	      "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
-	        
-	        "s_waitcnt lgkmcnt(0)\n"
-	          
-            "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
-            "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
-            "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
-	        "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
-	        "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
-	        "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
-	        "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
-	        "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
-	        "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
-            "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
-
-	        "flat_store_dwordx4 %[q], %[write_buffer0]\n"
-            "flat_store_dwordx4 %[qq], %[write_buffer1]\n"
-
-	        "s_waitcnt expcnt(0)\n"
-	        
-            : [write_buffer0] "=&v" (write_buffer0),
-            [write_buffer1] "=&v" (write_buffer1),
-            [pp] "=&v" (pp),
-            [q] "=&v" (q), 
-            [qq] "=&v" (qq),
-            [xi0] "=&v" (xi0),
-            [xi1] "=&v" (xi1),
-            [xi2] "=&v" (xi2),
-            [xi3] "=&v" (xi3),
-            [xi4] "=&v" (xi4),
-            [xi5] "=&v" (xi5),
-            [xi6] "=&v" (xi6)
-                
-            : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
-              [p] "v" (p), 
-              [pp] "2" (pp), 
-              [h0] "v" (h[0]),
-              [h1] "v" (h[1]),
-              [h2] "v" (h[2]),
-              [h3] "v" (h[3]),
-              [ref] "v" (input * 2 + 0)
-                
-            : "memory", "vcc");
-
-    new_row = get_row(0, (uint)h[3] >> 8);
-    p = (__global uint4 *)get_slot_ptr(ht, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
-    nr_slots = inc_gds_row_counter(device_thread, 0, row_counters, new_row);
-    if (nr_slots < _NR_SLOTS(0))
-        p = (__global uint4 *)get_slot_ptr(ht, 0, new_row, nr_slots);
-
-    pp = p + 1;
-    __asm(  "ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
-            "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
-	        "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
-
-            "v_alignbit_b32 %[xi4], %[h5].y, %[h5].x, 16\n"
-            "v_alignbit_b32 %[xi5], %[h6].x, %[h5].y, 16\n"
-
-            "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
-            "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
-
-            "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
-	        "v_alignbit_b32 %[xi0], %[h3].y, %[h3].x, 16\n"
-            "v_alignbit_b32 %[xi1], %[h4].x, %[h3].y, 16\n"
-            "v_alignbit_b32 %[xi2], %[h4].y, %[h4].x, 16\n"
-            "v_alignbit_b32 %[xi3], %[h5].x, %[h4].y, 16\n"
-	        "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
-	        "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
-              
-	        "s_waitcnt lgkmcnt(0)\n"
-	          
-            "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
-            "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
-            "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
-	        "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
-	        "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
-	        "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
-	        "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
-	        "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
-	        "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
-            "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
-
-	        "flat_store_dwordx4 %[q], %[write_buffer0]\n"
-            "flat_store_dwordx4 %[qq], %[write_buffer1]\n"
-            
-	        "s_waitcnt expcnt(0)\n"
-	          
-            : [write_buffer0] "=&v" (write_buffer0),
-            [write_buffer1] "=&v" (write_buffer1),
-            [p] "=&v" (p), 
-            [pp] "=&v" (pp),
-            [q] "=&v" (q), 
-            [qq] "=&v" (qq),
-            [xi0] "=&v" (xi0),
-            [xi1] "=&v" (xi1),
-            [xi2] "=&v" (xi2),
-            [xi3] "=&v" (xi3),
-            [xi4] "=&v" (xi4),
-            [xi5] "=&v" (xi5),
-            [xi6] "=&v" (xi6)
-                
-            : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
-            [p] "2" (p), 
-            [pp] "3" (pp),
-            [h3] "v" (h[3]),
-            [h4] "v" (h[4]),
-            [h5] "v" (h[5]),
-            [h6] "v" (h[6]),
-            [ref] "v" (input * 2 + 1)
-                
-            : "memory", "vcc");
 }
 
 /*
@@ -682,13 +549,13 @@ void kernel_round0(uint device_thread, __constant ulong *blake_state, __global c
 ** Return 0 if successfully stored, or 1 if the row overflowed.
 */
 
-void parallel_xor_and_store_round2(uint device_thread, uint round, __global char *ht_src, __global char *ht_dst, uint row,
+void parallel_xor_and_store_round2(uint device_thread, uint round, __global char *hash_table_src, __global char *hash_table_dst, uint row,
     uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
     __global uint *row_counters)
 {
     uint new_row;
     uint new_slot_index;
-    __global uint4 *p = (__global uint4 *)get_slot_ptr(ht_dst, round, _NR_ROWS(round) - 1, _NR_SLOTS(round) - 1);
+    __global uint4 *p = (__global uint4 *)get_slot_ptr(hash_table_dst, round, _NR_ROWS(round) - 1, _NR_SLOTS(round) - 1);
     uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
 
     if (slot_a < _NR_SLOTS(round - 1)) {
@@ -710,7 +577,7 @@ void parallel_xor_and_store_round2(uint device_thread, uint round, __global char
         if (xi0 || xi1) {
             new_row = get_row(round, (xi0 >> 24) | (xi1 << (32 - 24)));
             new_slot_index = inc_gds_row_counter(device_thread, round, row_counters, new_row);
-            p = (__global uint4 *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
+            p = (__global uint4 *)get_slot_ptr(hash_table_dst, round, new_row, new_slot_index);
         }
     }
 
@@ -767,12 +634,12 @@ void parallel_xor_and_store_round2(uint device_thread, uint round, __global char
           : "memory", "vcc");
 }
 
-void parallel_xor_and_store_round4(uint device_thread, uint round, __global char *ht_src, __global char *ht_dst, uint row,
+void parallel_xor_and_store_round4(uint device_thread, uint round, __global char *hash_table_src, __global char *hash_table_dst, uint row,
     uint slot_a, uint slot_b, __local uint *ai, __local uint *bi, __global uint *row_counters)
 {
     uint new_row;
     uint new_slot_index;
-    __global uint4 *p = (__global uint4 *)get_slot_ptr(ht_dst, round, _NR_ROWS(round) - 1, _NR_SLOTS(round) - 1);
+    __global uint4 *p = (__global uint4 *)get_slot_ptr(hash_table_dst, round, _NR_ROWS(round) - 1, _NR_SLOTS(round) - 1);
     uint xi0, xi1, xi2, xi3, xi4, xi5;
 
     if (slot_a < _NR_SLOTS(round - 1)) {
@@ -792,7 +659,7 @@ void parallel_xor_and_store_round4(uint device_thread, uint round, __global char
         if (xi0 || xi1) {
             new_row = get_row(round, (xi0 >> 24) | (xi1 << (32 - 24)));
             new_slot_index = inc_gds_row_counter(device_thread, round, row_counters, new_row);
-            p = (__global uint4 *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
+            p = (__global uint4 *)get_slot_ptr(hash_table_dst, round, new_row, new_slot_index);
         }
     }
 
@@ -847,13 +714,13 @@ void parallel_xor_and_store_round4(uint device_thread, uint round, __global char
           : "memory", "vcc");
 }
 
-void parallel_xor_and_store_round5(uint device_thread, uint round, __global char *ht_src, __global char *ht_dst, uint row,
+void parallel_xor_and_store_round5(uint device_thread, uint round, __global char *hash_table_src, __global char *hash_table_dst, uint row,
     uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
     __global uint *row_counters)
 {
     uint new_row;
     uint new_slot_index;
-    __global uint4 *p = (__global uint4 *)get_slot_ptr(ht_dst, round, _NR_ROWS(round) - 1, _NR_SLOTS(round) - 1);
+    __global uint4 *p = (__global uint4 *)get_slot_ptr(hash_table_dst, round, _NR_ROWS(round) - 1, _NR_SLOTS(round) - 1);
     uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
 
     if (slot_a < _NR_SLOTS(round - 1)) {
@@ -871,7 +738,7 @@ void parallel_xor_and_store_round5(uint device_thread, uint round, __global char
         if (xi0 || xi1) {
             new_row = get_row(round, xi0);
             new_slot_index = inc_gds_row_counter(device_thread, round, row_counters, new_row);
-            p = (__global uint4 *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
+            p = (__global uint4 *)get_slot_ptr(hash_table_dst, round, new_row, new_slot_index);
         }
     }
 
@@ -940,13 +807,13 @@ void parallel_xor_and_store_round5(uint device_thread, uint round, __global char
           : "memory", "vcc");
 }
 
-void parallel_xor_and_store_round1(uint device_thread, uint round, __global char *ht_src, __global char *ht_dst, uint row,
+void parallel_xor_and_store_round1(uint device_thread, uint round, __global char *hash_table_src, __global char *hash_table_dst, uint row,
     uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
     __global uint *row_counters)
 {
     uint new_row;
     uint new_slot_index;
-    __global uint4 *p = (__global uint4 *)get_slot_ptr(ht_dst, round, _NR_ROWS(round) - 1, _NR_SLOTS(round) - 1);
+    __global uint4 *p = (__global uint4 *)get_slot_ptr(hash_table_dst, round, _NR_ROWS(round) - 1, _NR_SLOTS(round) - 1);
     uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
 
     if (slot_a < _NR_SLOTS(round - 1)) {
@@ -968,7 +835,7 @@ void parallel_xor_and_store_round1(uint device_thread, uint round, __global char
         if (xi0 || xi1) {
             new_row = get_row(round, xi0);
             new_slot_index = inc_gds_row_counter(device_thread, round, row_counters, new_row);
-            p = (__global uint4 *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
+            p = (__global uint4 *)get_slot_ptr(hash_table_dst, round, new_row, new_slot_index);
         }
     }
 
@@ -1040,13 +907,13 @@ void parallel_xor_and_store_round1(uint device_thread, uint round, __global char
           : "memory", "vcc");
 }
 
-void parallel_xor_and_store_round3(uint device_thread, uint round, __global char *ht_src, __global char *ht_dst, uint row,
+void parallel_xor_and_store_round3(uint device_thread, uint round, __global char *hash_table_src, __global char *hash_table_dst, uint row,
     uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
     __global uint *row_counters)
 {
     uint new_row;
     uint new_slot_index;
-    __global uint4 *p = (__global uint4 *)get_slot_ptr(ht_dst, round, _NR_ROWS(round) - 1, _NR_SLOTS(round) - 1);
+    __global uint4 *p = (__global uint4 *)get_slot_ptr(hash_table_dst, round, _NR_ROWS(round) - 1, _NR_SLOTS(round) - 1);
     uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
 
     if (slot_a < _NR_SLOTS(round - 1)) {
@@ -1066,7 +933,7 @@ void parallel_xor_and_store_round3(uint device_thread, uint round, __global char
         if (xi0 || xi1) {
             new_row = get_row(round, xi0);
             new_slot_index = inc_gds_row_counter(device_thread, round, row_counters, new_row);
-            p = (__global uint4 *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
+            p = (__global uint4 *)get_slot_ptr(hash_table_dst, round, new_row, new_slot_index);
         }
     }
 
@@ -1137,7 +1004,7 @@ void parallel_xor_and_store_round3(uint device_thread, uint round, __global char
           : "memory", "vcc");
 }
 
-void xor_and_store(uint device_thread, uint round, __global char *ht_src, __global char *ht_dst, uint row,
+void xor_and_store(uint device_thread, uint round, __global char *hash_table_src, __global char *hash_table_dst, uint row,
     uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
     __global uint *row_counters)
 {
@@ -1174,7 +1041,7 @@ void xor_and_store(uint device_thread, uint round, __global char *ht_src, __glob
     }
 
     if (new_slot_index < _NR_SLOTS(round)) {
-        __global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
+        __global slot_t *p = (__global slot_t *)get_slot_ptr(hash_table_dst, round, new_row, new_slot_index);
         if (round >= 8)
             __asm("flat_store_dwordx2 %0, %1\n"
                   "s_waitcnt expcnt(0)\n"
@@ -1191,24 +1058,25 @@ void xor_and_store(uint device_thread, uint round, __global char *ht_src, __glob
 }
 
 /*
-** Execute one Equihash round. Read from ht_src, XOR colliding pairs of Xi,
-** store them in ht_dst. Each work group processes only one row at a time.
+** Execute one Equihash round. Read from hash_table_src, XOR colliding pairs of Xi,
+** store them in hash_table_dst. Each work group processes only one row at a time.
 */
 
 void equihash_round(
     const uint device_thread,
     const uint round,
-    __global char *ht_src,
-    __global char *ht_dst,
-    __global uint *debug,
+    __global char *hash_table_src,
+    __global char *hash_table_dst,
     __local uint  *slot_cache,
     __local SLOT_INDEX_TYPE *collision_array_a,
     __local SLOT_INDEX_TYPE *collision_array_b,
     __local uint *nr_collisions,
-    __global uint *rowCountersSrc,
-    __global uint *rowCountersDst,
+    __global uint *row_counters_src,
+    __global uint *row_counters_dst,
     __local uint *bin_first_slots,
-    __local SLOT_INDEX_TYPE *bin_next_slots)
+    __local SLOT_INDEX_TYPE *bin_next_slots,
+    __constant ulong *blake_state,
+    __global ulong *blake_state_pool)
 {
     uint     i, j;
 
@@ -1228,7 +1096,7 @@ void equihash_round(
     if (assigned_row_index >= _NR_ROWS(round - 1))
         return;
 
-    const uint nr_slots = get_nr_slots(device_thread, round - 1, rowCountersSrc, assigned_row_index);
+    const uint nr_slots = get_nr_slots(device_thread, round - 1, row_counters_src, assigned_row_index);
 
     bin_first_slots[get_local_id(0)] = _NR_SLOTS(round - 1);
     for (i = get_local_id(0); i < _NR_SLOTS(round - 1); i += get_local_size(0))
@@ -1241,14 +1109,18 @@ void equihash_round(
 
     // Perform a radix sort as slots get loaded into LDS.
     // Make sure all the work items in the work group enter the loop.
-    uint i_max =  nr_slots + get_local_size(0) - (nr_slots / get_local_size(0)) - 1;
-    for (i = get_local_id(0); i <= i_max; i += get_local_size(0)) {
-        uint slot_a_index = i;
-        uint slot_b_index;
-        uint slot_cache_index = i;
-        uint xi0;
-        uint bin_to_use;
-        if (i < nr_slots) {
+    uint first_round_for_background_threads = 1;
+    uint nr_rounds_for_background_threads = 2;
+    uint nr_background_threads = get_local_size(0) / nr_rounds_for_background_threads;
+    uint nr_foreground_threads = (first_round_for_background_threads <= round || round < first_round_for_background_threads + nr_rounds_for_background_threads) 
+                                     ? (get_local_size(0) - nr_background_threads) : get_local_size(0);
+    if (get_local_id(0) < nr_foreground_threads) {
+        for (i = get_local_id(0); i < nr_slots; i += nr_foreground_threads) {
+            uint slot_a_index = i;
+            uint slot_b_index;
+            uint slot_cache_index = i;
+            uint xi0;
+            uint bin_to_use;
             if (UINTS_IN_XI(round - 1) == 6) {
                 uint4 slot_data0;
                 uint2 slot_data1;
@@ -1258,40 +1130,40 @@ void equihash_round(
                 uint    temp0;
                 
                 __asm("v_add_u32 %[p1].x, vcc, %[p].x, 16\n"
-                      "v_addc_u32 %[p1].y, vcc, %[p].y, 0, vcc\n"
-                      "flat_load_dwordx4 %[slot_data0], %[p]\n"
-                      "flat_load_dwordx2 %[slot_data1], %[p1]\n"
+                        "v_addc_u32 %[p1].y, vcc, %[p].y, 0, vcc\n"
+                        "flat_load_dwordx4 %[slot_data0], %[p]\n"
+                        "flat_load_dwordx2 %[slot_data1], %[p1]\n"
                       
-                      "v_add_u32 %[q1], vcc, %[q], %[q_step]\n"
-                      "v_add_u32 %[q2], vcc, %[q1], %[q_step]\n"
-                      "v_add_u32 %[q3], vcc, %[q2], %[q_step]\n"
-                      "v_add_u32 %[q4], vcc, %[q3], %[q_step]\n"
-                      "v_add_u32 %[q5], vcc, %[q4], %[q_step]\n"
+                        "v_add_u32 %[q1], vcc, %[q], %[q_step]\n"
+                        "v_add_u32 %[q2], vcc, %[q1], %[q_step]\n"
+                        "v_add_u32 %[q3], vcc, %[q2], %[q_step]\n"
+                        "v_add_u32 %[q4], vcc, %[q3], %[q_step]\n"
+                        "v_add_u32 %[q5], vcc, %[q4], %[q_step]\n"
                       
-                      "s_waitcnt vmcnt(0)\n"
+                        "s_waitcnt vmcnt(0)\n"
                       
-                      "ds_write_b32 %[q], %[slot_data0].x\n"
-                      "ds_write_b32 %[q1], %[slot_data0].y\n"
-                      "ds_write_b32 %[q2], %[slot_data0].z\n"
-                      "ds_write_b32 %[q3], %[slot_data0].w\n"
-                      "ds_write_b32 %[q4], %[slot_data1].x\n"
-                      "ds_write_b32 %[q5], %[slot_data1].y\n"
+                        "ds_write_b32 %[q], %[slot_data0].x\n"
+                        "ds_write_b32 %[q1], %[slot_data0].y\n"
+                        "ds_write_b32 %[q2], %[slot_data0].z\n"
+                        "ds_write_b32 %[q3], %[slot_data0].w\n"
+                        "ds_write_b32 %[q4], %[slot_data1].x\n"
+                        "ds_write_b32 %[q5], %[slot_data1].y\n"
                       
-                      "v_and_b32    %[bin_to_use], %[slot_data0].x, %[bin_mask]\n"
-                      "v_and_b32    %[temp0], %[slot_data0].x, %[bin_mask2]\n"
-                      "v_lshrrev_b32 %[bin_to_use], %[bin_mask_offset], %[bin_to_use]\n"
-                      "v_lshrrev_b32 %[temp0], %[bin_mask2_offset], %[temp0]\n"
-                      "v_or_b32     %[bin_to_use], %[bin_to_use], %[temp0]\n"
+                        "v_and_b32    %[bin_to_use], %[slot_data0].x, %[bin_mask]\n"
+                        "v_and_b32    %[temp0], %[slot_data0].x, %[bin_mask2]\n"
+                        "v_lshrrev_b32 %[bin_to_use], %[bin_mask_offset], %[bin_to_use]\n"
+                        "v_lshrrev_b32 %[temp0], %[bin_mask2_offset], %[temp0]\n"
+                        "v_or_b32     %[bin_to_use], %[bin_to_use], %[temp0]\n"
                       
-                      "s_waitcnt expcnt(0)\n"
+                        "s_waitcnt expcnt(0)\n"
                       
-                      : [slot_data0] "=&v" (slot_data0),
+                        : [slot_data0] "=&v" (slot_data0),
                         [slot_data1] "=&v" (slot_data1),
                         [p] "=&v" (p), [p1] "=&v" (p1),
                         [q1] "=&v" (q1), [q2] "=&v" (q2), [q3] "=&v" (q3), [q4] "=&v" (q4), [q5] "=&v" (q5),
                         [temp0] "=&v" (temp0),
                         [bin_to_use] "=&v" (bin_to_use)
-                      : [p] "2" ((__global uint4 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0),
+                        : [p] "2" ((__global uint4 *)get_slot_ptr(hash_table_src, round - 1, assigned_row_index, slot_cache_index) + 0),
                         [q] "v" ((__local uint *)&slot_cache[0 * _NR_SLOTS(round - 1) + slot_cache_index]),
                         [q_step] "v" ((uint)(_NR_SLOTS(round - 1) * sizeof(uint))),
                         [bin_mask] "s" (BIN_MASK(round - 1)),
@@ -1309,48 +1181,48 @@ void equihash_round(
                 __local uint *q, *q1, *q2, *q3, *q4;
                 
                 __asm("v_add_u32 %[p1].x, vcc, %[p].x, 16\n"
-                      "v_addc_u32 %[p1].y, vcc, %[p].y, 0, vcc\n"
+                        "v_addc_u32 %[p1].y, vcc, %[p].y, 0, vcc\n"
                       
-                      "flat_load_dwordx4 %[slot_data0], %[p]\n"
-                      "flat_load_dword %[slot_data1], %[p1]\n"
+                        "flat_load_dwordx4 %[slot_data0], %[p]\n"
+                        "flat_load_dword %[slot_data1], %[p1]\n"
                       
-                      "v_add_u32 %[q1], vcc, %[q], %[q_step]\n"
-                      "v_add_u32 %[q2], vcc, %[q1], %[q_step]\n"
-                      "v_add_u32 %[q3], vcc, %[q2], %[q_step]\n"
-                      "v_add_u32 %[q4], vcc, %[q3], %[q_step]\n"
+                        "v_add_u32 %[q1], vcc, %[q], %[q_step]\n"
+                        "v_add_u32 %[q2], vcc, %[q1], %[q_step]\n"
+                        "v_add_u32 %[q3], vcc, %[q2], %[q_step]\n"
+                        "v_add_u32 %[q4], vcc, %[q3], %[q_step]\n"
                       
-                      "s_waitcnt vmcnt(0)\n"
+                        "s_waitcnt vmcnt(0)\n"
                       
-                      "ds_write_b32 %[q], %[slot_data0].x\n"
-                      "ds_write_b32 %[q1], %[slot_data0].y\n"
-                      "ds_write_b32 %[q2], %[slot_data0].z\n"
-                      "ds_write_b32 %[q3], %[slot_data0].w\n"
-                      "ds_write_b32 %[q4], %[slot_data1]\n"
-                      "v_mov_b32 %[xi0], %[slot_data0].x\n"
+                        "ds_write_b32 %[q], %[slot_data0].x\n"
+                        "ds_write_b32 %[q1], %[slot_data0].y\n"
+                        "ds_write_b32 %[q2], %[slot_data0].z\n"
+                        "ds_write_b32 %[q3], %[slot_data0].w\n"
+                        "ds_write_b32 %[q4], %[slot_data1]\n"
+                        "v_mov_b32 %[xi0], %[slot_data0].x\n"
                       
-                      "s_waitcnt expcnt(0)\n"
+                        "s_waitcnt expcnt(0)\n"
                       
-                      : [slot_data0] "=&v" (slot_data0),
+                        : [slot_data0] "=&v" (slot_data0),
                         [slot_data1] "=&v" (slot_data1),
                         [p] "=&v" (p), [p1] "=&v" (p1),
                         [q1] "=&v" (q1), [q2] "=&v" (q2), [q3] "=&v" (q3), [q4] "=&v" (q4),
                         [xi0] "=&v" (xi0)
-                      : [p] "2" ((__global uint4 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0),
+                        : [p] "2" ((__global uint4 *)get_slot_ptr(hash_table_src, round - 1, assigned_row_index, slot_cache_index) + 0),
                         [q] "v" ((__local uint *)&slot_cache[0 * _NR_SLOTS(round - 1) + slot_cache_index]),
                         [q_step] "v" ((uint)(_NR_SLOTS(round - 1) * sizeof(uint))));
      
                 bin_to_use =
-                      ((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
+                        ((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
                     | ((xi0 & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
                 bin_next_slots[i] = slot_b_index = atomic_xchg(&bin_first_slots[bin_to_use], i);
             } else {
                 uint2 slot_data0, slot_data1;
-                if (UINTS_IN_XI(round - 1) >= 1) slot_data0 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
-                if (UINTS_IN_XI(round - 1) >= 3) slot_data1 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 1);
+                if (UINTS_IN_XI(round - 1) >= 1) slot_data0 = *((__global uint2 *)get_slot_ptr(hash_table_src, round - 1, assigned_row_index, slot_cache_index) + 0);
+                if (UINTS_IN_XI(round - 1) >= 3) slot_data1 = *((__global uint2 *)get_slot_ptr(hash_table_src, round - 1, assigned_row_index, slot_cache_index) + 1);
 
                 xi0 = slot_data0.s0;
                 bin_to_use =
-                      ((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
+                        ((xi0 & BIN_MASK(round - 1)) >> BIN_MASK_OFFSET(round - 1))
                     | ((xi0 & BIN_MASK2(round - 1)) >> BIN_MASK2_OFFSET(round - 1));
                 bin_next_slots[i] = slot_b_index = atomic_xchg(&bin_first_slots[bin_to_use], i);
 
@@ -1361,11 +1233,7 @@ void equihash_round(
                 if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data1.s1;
 
             }
-        }
 
-        //barrier(CLK_LOCAL_MEM_FENCE);
-
-        if (i < nr_slots) {
             while (slot_b_index < _NR_SLOTS(round - 1)) {
                 uint coll_index = atomic_inc(nr_collisions);
                 if (coll_index >= _LDS_COLL_SIZE(round - 1))
@@ -1375,10 +1243,161 @@ void equihash_round(
                 slot_b_index = bin_next_slots[slot_b_index];
             }
         }
-        
-        //barrier(CLK_LOCAL_MEM_FENCE);
+    } else if (get_local_id(0) >= nr_foreground_threads) {
+        ulong               v[16], temp_vb, temp_vd;
+        uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
+        slot_t slot;
+        ulong               h[7];
+
+        uint input = get_group_id(0) * nr_background_threads + get_local_id(0) - nr_foreground_threads;
+        input += (NR_INPUTS(PARAM_N, PARAM_K) / nr_rounds_for_background_threads) * (round - first_round_for_background_threads);
+        // shift "i" to occupy the high 32 bits of the second ulong word in the
+        // message block
+
+        ulong word1 = (ulong)input << 32;
+        if (input < NR_INPUTS(PARAM_N, PARAM_K)) {
+            // init vector v
+            v[0] = blake_state[0];
+            v[1] = blake_state[1];
+            v[2] = blake_state[2];
+            v[3] = blake_state[3];
+            v[4] = blake_state[4];
+            v[5] = blake_state[5];
+            v[6] = blake_state[6];
+            v[7] = blake_state[7];
+            v[8] = blake_iv[0];
+            v[9] = blake_iv[1];
+            v[10] = blake_iv[2];
+            v[11] = blake_iv[3];
+            v[12] = blake_iv[4];
+            v[13] = blake_iv[5];
+            v[14] = blake_iv[6];
+            v[15] = blake_iv[7];
+            // mix in length of data
+            v[12] ^= ZCASH_BLOCK_HEADER_LEN + 4 /* length of "i" */;
+            // last block
+            v[14] ^= (ulong)-1;
+
+            mix_0_y(v[0], v[4], v[8], v[12], word1);
+            mix_0_0(v[1], v[5], v[9], v[13]);
+            mix_0_0(v[2], v[6], v[10], v[14]);
+            mix_0_0(v[3], v[7], v[11], v[15]);
+            mix_0_0(v[0], v[5], v[10], v[15]);
+            mix_0_0(v[1], v[6], v[11], v[12]);
+            mix_0_0(v[2], v[7], v[8], v[13]);
+            mix_0_0(v[3], v[4], v[9], v[14]);
+
+            mix_0_0(v[0], v[4], v[8], v[12]);
+            mix_0_0(v[1], v[5], v[9], v[13]);
+            mix_0_0(v[2], v[6], v[10], v[14]);
+            mix_0_0(v[3], v[7], v[11], v[15]);
+            mix_x_0(v[0], v[5], v[10], v[15], word1);
+            mix_0_0(v[1], v[6], v[11], v[12]);
+            mix_0_0(v[2], v[7], v[8], v[13]);
+            mix_0_0(v[3], v[4], v[9], v[14]);
+    
+            mix_0_0(v[0], v[4], v[8], v[12]);
+            mix_0_0(v[1], v[5], v[9], v[13]);
+            mix_0_0(v[2], v[6], v[10], v[14]);
+            mix_0_0(v[3], v[7], v[11], v[15]);
+            mix_0_0(v[0], v[5], v[10], v[15]);
+            mix_0_0(v[1], v[6], v[11], v[12]);
+            mix_0_y(v[2], v[7], v[8], v[13], word1);
+            mix_0_0(v[3], v[4], v[9], v[14]);
+
+            mix_0_0(v[0], v[4], v[8], v[12]);
+            mix_0_y(v[1], v[5], v[9], v[13], word1);
+            mix_0_0(v[2], v[6], v[10], v[14]);
+            mix_0_0(v[3], v[7], v[11], v[15]);
+            mix_0_0(v[0], v[5], v[10], v[15]);
+            mix_0_0(v[1], v[6], v[11], v[12]);
+            mix_0_0(v[2], v[7], v[8], v[13]);
+            mix_0_0(v[3], v[4], v[9], v[14]);
+
+            mix_0_0(v[0], v[4], v[8], v[12]);
+            mix_0_0(v[1], v[5], v[9], v[13]);
+            mix_0_0(v[2], v[6], v[10], v[14]);
+            mix_0_0(v[3], v[7], v[11], v[15]);
+            mix_0_y(v[0], v[5], v[10], v[15], word1);
+            mix_0_0(v[1], v[6], v[11], v[12]);
+            mix_0_0(v[2], v[7], v[8], v[13]);
+            mix_0_0(v[3], v[4], v[9], v[14]);
+
+            mix_0_0(v[0], v[4], v[8], v[12]);
+            mix_0_0(v[1], v[5], v[9], v[13]);
+            mix_0_0(v[2], v[6], v[10], v[14]);
+            mix_0_0(v[3], v[7], v[11], v[15]);
+            mix_0_0(v[0], v[5], v[10], v[15]);
+            mix_0_0(v[1], v[6], v[11], v[12]);
+            mix_0_0(v[2], v[7], v[8], v[13]);
+            mix_x_0(v[3], v[4], v[9], v[14], word1);
+
+            mix_0_0(v[0], v[4], v[8], v[12]);
+            mix_x_0(v[1], v[5], v[9], v[13], word1);
+            mix_0_0(v[2], v[6], v[10], v[14]);
+            mix_0_0(v[3], v[7], v[11], v[15]);
+            mix_0_0(v[0], v[5], v[10], v[15]);
+            mix_0_0(v[1], v[6], v[11], v[12]);
+            mix_0_0(v[2], v[7], v[8], v[13]);
+            mix_0_0(v[3], v[4], v[9], v[14]);
+
+            mix_0_0(v[0], v[4], v[8], v[12]);
+            mix_0_0(v[1], v[5], v[9], v[13]);
+            mix_0_y(v[2], v[6], v[10], v[14], word1);
+            mix_0_0(v[3], v[7], v[11], v[15]);
+            mix_0_0(v[0], v[5], v[10], v[15]);
+            mix_0_0(v[1], v[6], v[11], v[12]);
+            mix_0_0(v[2], v[7], v[8], v[13]);
+            mix_0_0(v[3], v[4], v[9], v[14]);
+
+            mix_0_0(v[0], v[4], v[8], v[12]);
+            mix_0_0(v[1], v[5], v[9], v[13]);
+            mix_0_0(v[2], v[6], v[10], v[14]);
+            mix_0_0(v[3], v[7], v[11], v[15]);
+            mix_0_0(v[0], v[5], v[10], v[15]);
+            mix_0_0(v[1], v[6], v[11], v[12]);
+            mix_x_0(v[2], v[7], v[8], v[13], word1);
+            mix_0_0(v[3], v[4], v[9], v[14]);
+
+            mix_0_0(v[0], v[4], v[8], v[12]);
+            mix_0_0(v[1], v[5], v[9], v[13]);
+            mix_0_0(v[2], v[6], v[10], v[14]);
+            mix_x_0(v[3], v[7], v[11], v[15], word1);
+            mix_0_0(v[0], v[5], v[10], v[15]);
+            mix_0_0(v[1], v[6], v[11], v[12]);
+            mix_0_0(v[2], v[7], v[8], v[13]);
+            mix_0_0(v[3], v[4], v[9], v[14]);
+
+            mix_0_y(v[0], v[4], v[8], v[12], word1);
+            mix_0_0(v[1], v[5], v[9], v[13]);
+            mix_0_0(v[2], v[6], v[10], v[14]);
+            mix_0_0(v[3], v[7], v[11], v[15]);
+            mix_0_0(v[0], v[5], v[10], v[15]);
+            mix_0_0(v[1], v[6], v[11], v[12]);
+            mix_0_0(v[2], v[7], v[8], v[13]);
+            mix_0_0(v[3], v[4], v[9], v[14]);
+
+            mix_0_0(v[0], v[4], v[8], v[12]);
+            mix_0_0(v[1], v[5], v[9], v[13]);
+            mix_0_0(v[2], v[6], v[10], v[14]);
+            mix_0_0(v[3], v[7], v[11], v[15]);
+            mix_x_0(v[0], v[5], v[10], v[15], word1);
+            mix_0_0(v[1], v[6], v[11], v[12]);
+            mix_0_0(v[2], v[7], v[8], v[13]);
+            mix_0_0(v[3], v[4], v[9], v[14]);
+    
+            // compress v into the blake state; this produces the 50-byte hash
+            // (two Xi values)
+            blake_state_pool[input + 0 * NR_INPUTS(PARAM_N, PARAM_K)] = blake_state[0] ^ v[0] ^ v[8];
+            blake_state_pool[input + 1 * NR_INPUTS(PARAM_N, PARAM_K)] = blake_state[1] ^ v[1] ^ v[9];
+            blake_state_pool[input + 2 * NR_INPUTS(PARAM_N, PARAM_K)] = blake_state[2] ^ v[2] ^ v[10];
+            blake_state_pool[input + 3 * NR_INPUTS(PARAM_N, PARAM_K)] = blake_state[3] ^ v[3] ^ v[11];
+            blake_state_pool[input + 4 * NR_INPUTS(PARAM_N, PARAM_K)] = blake_state[4] ^ v[4] ^ v[12];
+            blake_state_pool[input + 5 * NR_INPUTS(PARAM_N, PARAM_K)] = blake_state[5] ^ v[5] ^ v[13];
+            blake_state_pool[input + 6 * NR_INPUTS(PARAM_N, PARAM_K)] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
+        }
     }
-        
+    
     barrier(CLK_LOCAL_MEM_FENCE);
 
     uint nr_collisions_copy = *nr_collisions;
@@ -1396,17 +1415,17 @@ void equihash_round(
         }
         barrier(CLK_LOCAL_MEM_FENCE);
         if (round == 1) {
-            parallel_xor_and_store_round1(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+            parallel_xor_and_store_round1(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
         } else if (round == 3) {
-            parallel_xor_and_store_round3(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+            parallel_xor_and_store_round3(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
         } else if (round == 5) {
-            parallel_xor_and_store_round5(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+            parallel_xor_and_store_round5(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
         } else if (round == 2) {
-            parallel_xor_and_store_round2(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+            parallel_xor_and_store_round2(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
         } else if (round == 4) {
-            parallel_xor_and_store_round4(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+            parallel_xor_and_store_round4(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
         } else {
-            xor_and_store(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+            xor_and_store(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
         }
         nr_collisions_copy -= min(nr_collisions_copy, (uint)get_local_size(0));
         barrier(CLK_LOCAL_MEM_FENCE);
@@ -1419,9 +1438,10 @@ void equihash_round(
 
 #define KERNEL_ROUND(kernel_name, N) \
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE, 1, 1))) \
-void kernel_name(uint device_thread, __global char *ht_src, __global char *ht_dst, \
-	__global uint *rowCountersSrc, __global uint *rowCountersDst, \
-       	__global uint *debug) \
+void kernel_name(uint device_thread, __global char *hash_table_src, __global char *hash_table_dst, \
+	__global uint *row_counters_src, __global uint *row_counters_dst, \
+    __constant ulong *blake_state, \
+    __global ulong *blake_state_pool) \
 { \
     __local uint    slot_cache[ADJUSTED_LDS_ARRAY_SIZE(UINTS_IN_XI(N - 1) * _NR_SLOTS(N - 1))]; \
     __local SLOT_INDEX_TYPE collision_array_a[ADJUSTED_LDS_ARRAY_SIZE(_LDS_COLL_SIZE(N - 1))]; \
@@ -1429,8 +1449,8 @@ void kernel_name(uint device_thread, __global char *ht_src, __global char *ht_ds
     __local uint    nr_collisions[1]; \
 	__local uint    bin_first_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_BINS(N - 1))]; \
 	__local SLOT_INDEX_TYPE bin_next_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS(N - 1))]; \
-    equihash_round(device_thread, (N), ht_src, ht_dst, debug, slot_cache, collision_array_a, collision_array_b, \
-	    nr_collisions, rowCountersSrc, rowCountersDst, bin_first_slots, bin_next_slots); \
+    equihash_round(device_thread, (N), hash_table_src, hash_table_dst, slot_cache, collision_array_a, collision_array_b, \
+	    nr_collisions, row_counters_src, row_counters_dst, bin_first_slots, bin_next_slots, blake_state, blake_state_pool); \
 }
 
 KERNEL_ROUND(kernel_round1, 1)
@@ -1458,9 +1478,9 @@ void mark_potential_sol(__global potential_sols_t *potential_sols, uint ref0, ui
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_POTENTIAL_SOLS, 1, 1)))
 void kernel_potential_sols(
     uint device_thread,
-    __global char *ht_src,
+    __global char *hash_table_src,
     __global potential_sols_t *potential_sols,
-    __global uint *rowCountersSrc)
+    __global uint *row_counters_src)
 {
     __local uint refs[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS((PARAM_K - 1)))];
     __local uint data[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS((PARAM_K - 1)))];
@@ -1480,14 +1500,14 @@ void kernel_potential_sols(
     for (i = get_local_id(0); i < _NR_SLOTS((PARAM_K - 1)); i += get_local_size(0))
         bin_next_slots[i] = _NR_SLOTS((PARAM_K - 1));
 
-    nr_slots = get_nr_slots(device_thread, PARAM_K - 1, rowCountersSrc, assigned_row_index);
+    nr_slots = get_nr_slots(device_thread, PARAM_K - 1, row_counters_src, assigned_row_index);
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
     // in the final hash table, we are looking for a match on both the bits
     // part of the previous PREFIX colliding bits, and the last PREFIX bits.
     for (uint i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
-        __global uint2 *p = (__global uint2 *)get_slot_ptr(ht_src, PARAM_K - 1, assigned_row_index, i);
+        __global uint2 *p = (__global uint2 *)get_slot_ptr(hash_table_src, PARAM_K - 1, assigned_row_index, i);
         uint2 slot_data = *p;
         uint data_i = data[i] = slot_data.x;
         uint ref_i  = refs[i] = slot_data.y;
@@ -1510,8 +1530,8 @@ __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_SOLS, 1, 1)))
 void kernel_sols(__global char *ht0,
     __global char *ht1,
     __global sols_t *sols,
-    __global uint *rowCountersSrc,
-    __global uint *rowCountersDst,
+    __global uint *row_counters_src,
+    __global uint *row_counters_dst,
     __global char *ht2,
     __global char *ht3,
     __global char *ht4,

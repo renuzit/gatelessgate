@@ -123,7 +123,7 @@
         .userdata imm_const_buffer, 1, 8, 4
         .arg device_thread, "uint", uint
         .arg blake_state, "ulong*", ulong*, constant, , 0, 12
-        .arg ht, "char*", char*, global, , 13
+        .arg hash_table, "char*", char*, global, , 13
         .arg row_counters, "uint*", uint*, global, , 11, unused
         .arg sync_flags, "uint*", uint*, global, , 11, unused
     .text
@@ -2762,10 +2762,10 @@
         .userdata imm_const_buffer, 0, 4, 4
         .userdata imm_const_buffer, 1, 8, 4
         .arg device_thread, "uint", uint
-        .arg ht_src, "char*", char*, global, const, 12
-        .arg ht_dst, "char*", char*, global, , 13
-        .arg rowCountersSrc, "uint*", uint*, global, , 11, unused
-        .arg rowCountersDst, "uint*", uint*, global, , 11, unused
+        .arg hash_table_src, "char*", char*, global, const, 12
+        .arg hash_table_dst, "char*", char*, global, , 13
+        .arg row_counters_src, "uint*", uint*, global, , 11, unused
+        .arg row_counters_dst, "uint*", uint*, global, , 11, unused
         .arg debug, "uint*", uint*, global, , 11, unused
     .text
         s_mov_b32       m0, 0xffff
@@ -3214,10 +3214,10 @@
         .userdata imm_const_buffer, 0, 4, 4
         .userdata imm_const_buffer, 1, 8, 4
         .arg device_thread, "uint", uint
-        .arg ht_src, "char*", char*, global, const, 12
-        .arg ht_dst, "char*", char*, global, , 13
-        .arg rowCountersSrc, "uint*", uint*, global, , 11, unused
-        .arg rowCountersDst, "uint*", uint*, global, , 11, unused
+        .arg hash_table_src, "char*", char*, global, const, 12
+        .arg hash_table_dst, "char*", char*, global, , 13
+        .arg row_counters_src, "uint*", uint*, global, , 11, unused
+        .arg row_counters_dst, "uint*", uint*, global, , 11, unused
         .arg debug, "uint*", uint*, global, , 11, unused
     .text
         s_mov_b32       m0, 0xffff
@@ -3656,10 +3656,10 @@
         .userdata imm_const_buffer, 0, 4, 4
         .userdata imm_const_buffer, 1, 8, 4
         .arg device_thread, "uint", uint
-        .arg ht_src, "char*", char*, global, const, 12
-        .arg ht_dst, "char*", char*, global, , 13
-        .arg rowCountersSrc, "uint*", uint*, global, , 11, unused
-        .arg rowCountersDst, "uint*", uint*, global, , 11, unused
+        .arg hash_table_src, "char*", char*, global, const, 12
+        .arg hash_table_dst, "char*", char*, global, , 13
+        .arg row_counters_src, "uint*", uint*, global, , 11, unused
+        .arg row_counters_dst, "uint*", uint*, global, , 11, unused
         .arg debug, "uint*", uint*, global, , 11, unused
     .text
         s_mov_b32       m0, 0xffff
@@ -4095,10 +4095,10 @@
         .userdata imm_const_buffer, 0, 4, 4
         .userdata imm_const_buffer, 1, 8, 4
         .arg device_thread, "uint", uint
-        .arg ht_src, "char*", char*, global, const, 12
-        .arg ht_dst, "char*", char*, global, , 13
-        .arg rowCountersSrc, "uint*", uint*, global, , 11, unused
-        .arg rowCountersDst, "uint*", uint*, global, , 11, unused
+        .arg hash_table_src, "char*", char*, global, const, 12
+        .arg hash_table_dst, "char*", char*, global, , 13
+        .arg row_counters_src, "uint*", uint*, global, , 11, unused
+        .arg row_counters_dst, "uint*", uint*, global, , 11, unused
         .arg debug, "uint*", uint*, global, , 11, unused
     .text
         s_mov_b32       m0, 0xffff
@@ -4529,10 +4529,10 @@
         .userdata imm_const_buffer, 0, 4, 4
         .userdata imm_const_buffer, 1, 8, 4
         .arg device_thread, "uint", uint
-        .arg ht_src, "char*", char*, global, const, 12
-        .arg ht_dst, "char*", char*, global, , 13
-        .arg rowCountersSrc, "uint*", uint*, global, , 11, unused
-        .arg rowCountersDst, "uint*", uint*, global, , 11, unused
+        .arg hash_table_src, "char*", char*, global, const, 12
+        .arg hash_table_dst, "char*", char*, global, , 13
+        .arg row_counters_src, "uint*", uint*, global, , 11, unused
+        .arg row_counters_dst, "uint*", uint*, global, , 11, unused
         .arg debug, "uint*", uint*, global, , 11, unused
     .text
         s_mov_b32       m0, 0xffff
@@ -4961,10 +4961,10 @@
         .userdata imm_const_buffer, 0, 4, 4
         .userdata imm_const_buffer, 1, 8, 4
         .arg device_thread, "uint", uint
-        .arg ht_src, "char*", char*, global, const, 12
-        .arg ht_dst, "char*", char*, global, , 13
-        .arg rowCountersSrc, "uint*", uint*, global, , 11, unused
-        .arg rowCountersDst, "uint*", uint*, global, , 11, unused
+        .arg hash_table_src, "char*", char*, global, const, 12
+        .arg hash_table_dst, "char*", char*, global, , 13
+        .arg row_counters_src, "uint*", uint*, global, , 11, unused
+        .arg row_counters_dst, "uint*", uint*, global, , 11, unused
         .arg debug, "uint*", uint*, global, , 11, unused
     .text
         s_mov_b32       m0, 0xffff
@@ -5340,10 +5340,10 @@
         .userdata imm_const_buffer, 0, 4, 4
         .userdata imm_const_buffer, 1, 8, 4
         .arg device_thread, "uint", uint
-        .arg ht_src, "char*", char*, global, const, 12
-        .arg ht_dst, "char*", char*, global, , 13
-        .arg rowCountersSrc, "uint*", uint*, global, , 11, unused
-        .arg rowCountersDst, "uint*", uint*, global, , 11, unused
+        .arg hash_table_src, "char*", char*, global, const, 12
+        .arg hash_table_dst, "char*", char*, global, , 13
+        .arg row_counters_src, "uint*", uint*, global, , 11, unused
+        .arg row_counters_dst, "uint*", uint*, global, , 11, unused
         .arg debug, "uint*", uint*, global, , 11, unused
     .text
         s_mov_b32       m0, 0xffff
@@ -5719,10 +5719,10 @@
         .userdata imm_const_buffer, 0, 4, 4
         .userdata imm_const_buffer, 1, 8, 4
         .arg device_thread, "uint", uint
-        .arg ht_src, "char*", char*, global, const, 12
-        .arg ht_dst, "char*", char*, global, , 13
-        .arg rowCountersSrc, "uint*", uint*, global, , 11, unused
-        .arg rowCountersDst, "uint*", uint*, global, , 11, unused
+        .arg hash_table_src, "char*", char*, global, const, 12
+        .arg hash_table_dst, "char*", char*, global, , 13
+        .arg row_counters_src, "uint*", uint*, global, , 11, unused
+        .arg row_counters_dst, "uint*", uint*, global, , 11, unused
         .arg debug, "uint*", uint*, global, , 11, unused
     .text
         s_mov_b32       m0, 0xffff
@@ -6086,9 +6086,9 @@
         .userdata imm_const_buffer, 0, 4, 4
         .userdata imm_const_buffer, 1, 8, 4
         .arg device_thread, "uint", uint
-        .arg ht_src, "char*", char*, global, const, 12
+        .arg hash_table_src, "char*", char*, global, const, 12
         .arg potential_sols, "potential_sols_t*", structure*, 65536, global, , 13
-        .arg rowCountersSrc, "uint*", uint*, global, , 11, unused
+        .arg row_counters_src, "uint*", uint*, global, , 11, unused
     .text
         s_mov_b32       m0, 0xffff
         s_buffer_load_dword s0, s[4:7], 0x18
@@ -6380,8 +6380,8 @@
         .arg ht0, "char*", char*, global, , 11
         .arg ht1, "char*", char*, global, , 11
         .arg sols, "sols_t*", structure*, 32768, global, , 12
-        .arg rowCountersSrc, "uint*", uint*, global, , 11
-        .arg rowCountersDst, "uint*", uint*, global, , 11
+        .arg row_counters_src, "uint*", uint*, global, , 11
+        .arg row_counters_dst, "uint*", uint*, global, , 11
         .arg ht2, "char*", char*, global, , 11
         .arg ht3, "char*", char*, global, , 11
         .arg ht4, "char*", char*, global, , 11

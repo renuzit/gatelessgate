@@ -100,19 +100,19 @@ typedef __global slot_t *global_pointer_to_slot_t;
 ** Return 0 if successfully stored, or 1 if the row overflowed.
 */
 
-__global char *get_slot_ptr(__global char *ht, uint round, uint row, uint slot)
+__global char *get_slot_ptr(__global char *hash_table, uint round, uint row, uint slot)
 {
-    return ht + (row * _NR_SLOTS(round) + slot) * _SLOT_LEN(round);
+    return hash_table + (row * _NR_SLOTS(round) + slot) * _SLOT_LEN(round);
 }
 
-__global uint *get_xi_ptr(__global char *ht, uint round, uint row, uint slot)
+__global uint *get_xi_ptr(__global char *hash_table, uint round, uint row, uint slot)
 {
-    return (__global uint *)get_slot_ptr(ht, round, row, slot);
+    return (__global uint *)get_slot_ptr(hash_table, round, row, slot);
 }
 
-__global uint *get_ref_ptr(__global char *ht, uint round, uint row, uint slot)
+__global uint *get_ref_ptr(__global char *hash_table, uint round, uint row, uint slot)
 {
-    return get_xi_ptr(ht, round, row, slot) + UINTS_IN_XI(round);
+    return get_xi_ptr(hash_table, round, row, slot) + UINTS_IN_XI(round);
 }
 
 uint get_row(uint round, uint xi0)
@@ -324,7 +324,7 @@ vb = rotate((vb ^ vc), (ulong)64 - 63);
 */
 
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_ROUND0, 1, 1)))
-void kernel_round0(uint device_thread, __constant ulong *blake_state, __global char *ht,
+void kernel_round0(uint device_thread, __constant ulong *blake_state, __global char *hash_table,
     __global uint *row_counters, __global uint *sync_flags)
 {
 #ifdef AMD_GCN_ASM
@@ -543,7 +543,7 @@ void kernel_round0(uint device_thread, __constant ulong *blake_state, __global c
             slot.slot.xi[4] = ((xi5 << 24) | (xi4 >> 8));
             slot.slot.xi[5] = ((xi6 << 24) | (xi5 >> 8));
             slot.slot.xi[UINTS_IN_XI(0)] = input * 2 + index;
-            __global char *p = get_slot_ptr(ht, 0, row, nr_slots);
+            __global char *p = get_slot_ptr(hash_table, 0, row, nr_slots);
             *(__global uint8 *)p = slot.ui8;
         }
     }
@@ -560,7 +560,7 @@ void kernel_round0(uint device_thread, __constant ulong *blake_state, __global c
 ** Return 0 if successfully stored, or 1 if the row overflowed.
 */
 
-uint xor_and_store(uint device_thread, uint round, __global char *ht_src, __global char *ht_dst, uint row,
+uint xor_and_store(uint device_thread, uint round, __global char *hash_table_src, __global char *hash_table_dst, uint row,
     uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
     __global uint *row_counters,
     __local uint *gds_dummy_base)
@@ -622,7 +622,7 @@ uint xor_and_store(uint device_thread, uint round, __global char *ht_src, __glob
             if (new_slot_index >= _NR_SLOTS(round)) {
                 ret = 1;
             } else {
-                p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_index);
+                p = (__global slot_t *)get_slot_ptr(hash_table_dst, round, new_row, new_slot_index);
             }
         }
     }
@@ -656,8 +656,8 @@ uint xor_and_store(uint device_thread, uint round, __global char *ht_src, __glob
 uint parallel_xor_and_store(
     uint device_thread,
     uint round, 
-    __global char *ht_src, 
-    __global char *ht_dst,
+    __global char *hash_table_src, 
+    __global char *hash_table_dst,
     uint row,
     uint slot_a,
     uint slot_b,
@@ -733,7 +733,7 @@ uint parallel_xor_and_store(
 
     barrier(CLK_LOCAL_MEM_FENCE);
     if (THREADS_PER_WRITE(round) == 2 && new_slot_indexes[write_index] < _NR_SLOTS(round)) {
-        __global uint4 *p = (__global uint4 *)get_slot_ptr(ht_dst, round, new_row, new_slot_indexes[write_index]) + write_thread_index;
+        __global uint4 *p = (__global uint4 *)get_slot_ptr(hash_table_dst, round, new_row, new_slot_indexes[write_index]) + write_thread_index;
 #ifdef __GCNMINC__
         __asm("flat_store_dwordx4 %0, %1"
               :
@@ -742,7 +742,7 @@ uint parallel_xor_and_store(
         *p = slot.ui4[write_thread_index];
 #endif
     } else if (THREADS_PER_WRITE(round) == 4 && new_slot_indexes[write_index] < _NR_SLOTS(round)) {
-        __global uint2 *p = (__global uint2 *)get_slot_ptr(ht_dst, round, new_row, new_slot_indexes[write_index]) + write_thread_index;
+        __global uint2 *p = (__global uint2 *)get_slot_ptr(hash_table_dst, round, new_row, new_slot_indexes[write_index]) + write_thread_index;
         *p = slot.ui2[write_thread_index];
     }
     //barrier(CLK_LOCAL_MEM_FENCE);
@@ -754,8 +754,8 @@ uint parallel_xor_and_store(
 uint parallel_xor_and_store_gcnminc(
     uint device_thread,
     uint round, 
-    __global char *ht_src, 
-    __global char *ht_dst,
+    __global char *hash_table_src, 
+    __global char *hash_table_dst,
     uint row,
     uint slot_a,
     uint slot_b,
@@ -832,7 +832,7 @@ uint parallel_xor_and_store_gcnminc(
 
     barrier(CLK_LOCAL_MEM_FENCE);
     if (THREADS_PER_WRITE(round) == 2 && new_slot_indexes[write_index] < _NR_SLOTS(round)) {
-        __global uint4 *p = (__global uint4 *)get_slot_ptr(ht_dst, round, new_row, new_slot_indexes[write_index]) + write_thread_index;
+        __global uint4 *p = (__global uint4 *)get_slot_ptr(hash_table_dst, round, new_row, new_slot_indexes[write_index]) + write_thread_index;
 #ifdef __GCNMINC__
         __asm("flat_store_dwordx4 %0, %1"
               :
@@ -841,7 +841,7 @@ uint parallel_xor_and_store_gcnminc(
         *(p + write_thread_index) = slot.ui4[write_thread_index];
 #endif
     } else if (THREADS_PER_WRITE(round) == 4 && new_slot_indexes[write_index] < _NR_SLOTS(round)) {
-        __global slot_t *p = (__global slot_t *)get_slot_ptr(ht_dst, round, new_row, new_slot_indexes[write_index]);
+        __global slot_t *p = (__global slot_t *)get_slot_ptr(hash_table_dst, round, new_row, new_slot_indexes[write_index]);
         *(((__global uint2 *)p) + write_thread_index) = slot.ui2[write_thread_index];
     }
     //barrier(CLK_LOCAL_MEM_FENCE);
@@ -851,22 +851,22 @@ uint parallel_xor_and_store_gcnminc(
 #endif
 
 /*
-** Execute one Equihash round. Read from ht_src, XOR colliding pairs of Xi,
-** store them in ht_dst. Each work group processes only one row at a time.
+** Execute one Equihash round. Read from hash_table_src, XOR colliding pairs of Xi,
+** store them in hash_table_dst. Each work group processes only one row at a time.
 */
 
 void equihash_round(
     uint device_thread,
     uint round,
-    __global char *ht_src,
-    __global char *ht_dst,
+    __global char *hash_table_src,
+    __global char *hash_table_dst,
     __global uint *debug,
     __local uint  *slot_cache,
     __local SLOT_INDEX_TYPE *collision_array_a,
     __local SLOT_INDEX_TYPE *collision_array_b,
     __local uint *nr_collisions,
-    __global uint *rowCountersSrc,
-    __global uint *rowCountersDst,
+    __global uint *row_counters_src,
+    __global uint *row_counters_dst,
     __local uint *bin_first_slots,
     __local SLOT_INDEX_TYPE *bin_next_slots,
     __local SLOT_INDEX_TYPE *new_slot_indexes,
@@ -900,7 +900,7 @@ void equihash_round(
 #ifdef __GCNMINC__
     uint thread_index = 0;
     if (get_local_id(0) % 64 == 0)
-        nr_slots = get_nr_slots(round - 1, rowCountersSrc, assigned_row_index);
+        nr_slots = get_nr_slots(round - 1, row_counters_src, assigned_row_index);
     //barrier(CLK_LOCAL_MEM_FENCE);
     __asm("ds_bpermute_b32 %0, %1, %2\r\n"
           //"s_waitcnt lgkmcnt(0)"
@@ -914,7 +914,7 @@ void equihash_round(
     barrier(CLK_LOCAL_MEM_FENCE);
 #else
     if (get_local_id(0) == 0)
-        nr_collisions[0] = nr_slots = get_nr_slots(round - 1, rowCountersSrc, assigned_row_index);
+        nr_collisions[0] = nr_slots = get_nr_slots(round - 1, row_counters_src, assigned_row_index);
     barrier(CLK_LOCAL_MEM_FENCE);
     if (get_local_id(0))
         nr_slots = nr_collisions[0];
@@ -938,9 +938,9 @@ void equihash_round(
         uint slot_cache_index = i;
 #ifdef OPTIM_8BYTE_READS
         uint2 slot_data0, slot_data1, slot_data2;
-        if (UINTS_IN_XI(round - 1) >= 1) slot_data0 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
-        if (UINTS_IN_XI(round - 1) >= 3) slot_data1 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 1);
-        if (UINTS_IN_XI(round - 1) >= 5) slot_data2 = *((__global uint2 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 2);
+        if (UINTS_IN_XI(round - 1) >= 1) slot_data0 = *((__global uint2 *)get_slot_ptr(hash_table_src, round - 1, assigned_row_index, slot_cache_index) + 0);
+        if (UINTS_IN_XI(round - 1) >= 3) slot_data1 = *((__global uint2 *)get_slot_ptr(hash_table_src, round - 1, assigned_row_index, slot_cache_index) + 1);
+        if (UINTS_IN_XI(round - 1) >= 5) slot_data2 = *((__global uint2 *)get_slot_ptr(hash_table_src, round - 1, assigned_row_index, slot_cache_index) + 2);
 
         if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s0;
         if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s1;
@@ -953,7 +953,7 @@ void equihash_round(
         uint xi0;
         if (UINTS_IN_XI(round - 1) >= 5) {
             uint8 slot_data0;
-            slot_data0 = *((__global uint8 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
+            slot_data0 = *((__global uint8 *)get_slot_ptr(hash_table_src, round - 1, assigned_row_index, slot_cache_index) + 0);
 
             if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s0;
             if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s1;
@@ -964,7 +964,7 @@ void equihash_round(
             xi0 = slot_data0.s0;
         } else {
             uint4 slot_data0;
-            slot_data0 = *((__global uint4 *)get_slot_ptr(ht_src, round - 1, assigned_row_index, slot_cache_index) + 0);
+            slot_data0 = *((__global uint4 *)get_slot_ptr(hash_table_src, round - 1, assigned_row_index, slot_cache_index) + 0);
  
             if (UINTS_IN_XI(round - 1) >= 1) slot_cache[0 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s0;
             if (UINTS_IN_XI(round - 1) >= 2) slot_cache[1 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data0.s1;
@@ -975,7 +975,7 @@ void equihash_round(
 #else
         uint xi[6];
         for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
-            xi[j] = *((__global uint *)get_xi_ptr(ht_src, round - 1, assigned_row_index, slot_index) + j);
+            xi[j] = *((__global uint *)get_xi_ptr(hash_table_src, round - 1, assigned_row_index, slot_index) + j);
         for (j = 0; j < UINTS_IN_XI(round - 1); ++j)
             slot_cache[j * _NR_SLOTS(round - 1) + slot_cache_index] = xi[j];
         uint xi0 = xi[0];
@@ -1029,9 +1029,9 @@ void equihash_round(
         }
         barrier(CLK_LOCAL_MEM_FENCE);
         if (THREADS_PER_WRITE(round) > 1) {
-            parallel_xor_and_store(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst, new_slot_indexes, gds_dummy_base);
+            parallel_xor_and_store(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst, new_slot_indexes, gds_dummy_base);
         } else {
-            xor_and_store(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst, gds_dummy_base);
+            xor_and_store(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst, gds_dummy_base);
         }
 
         nr_collisions_copy -= min(nr_collisions_copy, (uint)get_local_size(0) / THREADS_PER_WRITE(round));
@@ -1045,8 +1045,8 @@ void equihash_round(
 
 #define KERNEL_ROUND(kernel_name, N) \
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE, 1, 1))) \
-void kernel_name(uint device_thread, __global char *ht_src, __global char *ht_dst, \
-	__global uint *rowCountersSrc, __global uint *rowCountersDst, \
+void kernel_name(uint device_thread, __global char *hash_table_src, __global char *hash_table_dst, \
+	__global uint *row_counters_src, __global uint *row_counters_dst, \
        	__global uint *debug) \
 { \
 	__local uint  gds_dummy_base[1];\
@@ -1057,8 +1057,8 @@ void kernel_name(uint device_thread, __global char *ht_src, __global char *ht_ds
 	__local uint    bin_first_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_BINS(N - 1))]; \
 	__local SLOT_INDEX_TYPE bin_next_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS(N - 1))]; \
 	__local SLOT_INDEX_TYPE new_slot_indexes[ADJUSTED_LDS_ARRAY_SIZE((THREADS_PER_WRITE(N) > 1) ? LOCAL_WORK_SIZE / THREADS_PER_WRITE(N) : 0)]; \
-    equihash_round(device_thread, (N), ht_src, ht_dst, debug, slot_cache, collision_array_a, collision_array_b, \
-	    nr_collisions, rowCountersSrc, rowCountersDst, bin_first_slots, bin_next_slots, new_slot_indexes, gds_dummy_base); \
+    equihash_round(device_thread, (N), hash_table_src, hash_table_dst, debug, slot_cache, collision_array_a, collision_array_b, \
+	    nr_collisions, row_counters_src, row_counters_dst, bin_first_slots, bin_next_slots, new_slot_indexes, gds_dummy_base); \
 }
 
 KERNEL_ROUND(kernel_round1, 1)
@@ -1087,9 +1087,9 @@ void mark_potential_sol(__global potential_sols_t *potential_sols, uint ref0, ui
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_POTENTIAL_SOLS, 1, 1)))
 void kernel_potential_sols(
     uint device_thread,
-    __global char *ht_src,
+    __global char *hash_table_src,
     __global potential_sols_t *potential_sols,
-    __global uint *rowCountersSrc)
+    __global uint *row_counters_src)
 {
 #ifdef AMD_GCN_ASM
     __local uint gds_dummy_base[1];
@@ -1118,7 +1118,7 @@ void kernel_potential_sols(
 #ifdef __GCNMINC__
     uint thread_index = 0;
     if (get_local_id(0) % 64 == 0)
-        nr_slots = get_nr_slots(PARAM_K - 1, rowCountersSrc, assigned_row_index);
+        nr_slots = get_nr_slots(PARAM_K - 1, row_counters_src, assigned_row_index);
     //barrier(CLK_LOCAL_MEM_FENCE);
     __asm("ds_bpermute_b32 %0, %1, %2\r\n"
           "s_waitcnt lgkmcnt(0)"
@@ -1131,7 +1131,7 @@ void kernel_potential_sols(
         nr_slots = nr_slots_shared;
 #else
     if (get_local_id(0) == 0)
-        nr_slots_shared = nr_slots = get_nr_slots((PARAM_K - 1), rowCountersSrc, assigned_row_index);
+        nr_slots_shared = nr_slots = get_nr_slots((PARAM_K - 1), row_counters_src, assigned_row_index);
     barrier(CLK_LOCAL_MEM_FENCE);
     if (get_local_id(0))
         nr_slots = nr_slots_shared;
@@ -1142,7 +1142,7 @@ void kernel_potential_sols(
     // in the final hash table, we are looking for a match on both the bits
     // part of the previous PREFIX colliding bits, and the last PREFIX bits.
     for (uint i = get_local_id(0); i < nr_slots; i += get_local_size(0)) {
-        __global uint *p = (__global uint *)get_slot_ptr(ht_src, PARAM_K - 1, assigned_row_index, i);
+        __global uint *p = (__global uint *)get_slot_ptr(hash_table_src, PARAM_K - 1, assigned_row_index, i);
         uint data_i = data[i] = *p++;
         uint ref_i  = refs[i] = *p;
         uint bin_to_use =
@@ -1164,8 +1164,8 @@ __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_SOLS, 1, 1)))
 void kernel_sols(__global char *ht0,
     __global char *ht1,
     __global sols_t *sols,
-    __global uint *rowCountersSrc,
-    __global uint *rowCountersDst,
+    __global uint *row_counters_src,
+    __global uint *row_counters_dst,
     __global char *ht2,
     __global char *ht3,
     __global char *ht4,

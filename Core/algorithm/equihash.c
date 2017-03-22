@@ -246,7 +246,7 @@ uint32_t equihash_verify_sol(struct work *work, sols_t *sols, int sol_i, int par
         inputs[i] = htobe32(inputs[i]);
 
     CompressArray((unsigned char*)inputs, (1 << param_k) * 4, work->equihash_data + 143, ZCASH_SOL_LEN(param_n, param_k), 21, 1);
-
+   
     gen_hash(work->equihash_data, ZCASH_SOL_LEN(param_n, param_k) + 143, work->hash);
 
     if (*(uint64_t*)(work->hash + 24) < *(uint64_t*)(work->target + 24)) {

@@ -796,6 +796,10 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize, algorithm_t *alg
     snprintf(buffer, sizeof(buffer), "CLbuffer0");
     if (status != CL_SUCCESS)
       goto out;
+    clState->buffer12 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(0), NULL, &status);
+    snprintf(buffer, sizeof(buffer), "buffer12");
+    if (status != CL_SUCCESS)
+      goto out;
     clState->buffer1 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(1), NULL, &status);
     snprintf(buffer, sizeof(buffer), "buffer1");
     if (status != CL_SUCCESS)
@@ -806,6 +810,10 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize, algorithm_t *alg
       goto out;
     clState->buffer3 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, ROW_COUNTERS_SIZE, NULL, &status);
     snprintf(buffer, sizeof(buffer), "buffer3");
+    if (status != CL_SUCCESS)
+      goto out;
+    clState->buffer13 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, ROW_COUNTERS_SIZE, NULL, &status);
+    snprintf(buffer, sizeof(buffer), "buffer13");
     if (status != CL_SUCCESS)
       goto out;
     clState->buffer4 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, HASH_TABLE_SIZE(2), NULL, &status);
@@ -840,7 +848,7 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize, algorithm_t *alg
 	snprintf(buffer, sizeof(buffer), "buffer11");
 	if (status != CL_SUCCESS)
 		goto out;
-	clState->padbuffer8 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, 2 * sizeof(uint32_t), NULL, &status);
+	clState->padbuffer8 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, NR_INPUTS(200, 9) * 24 * sizeof(uint64_t), NULL, &status);
     snprintf(buffer, sizeof(buffer), "padbuffer8");
     if (status != CL_SUCCESS)
       goto out;
