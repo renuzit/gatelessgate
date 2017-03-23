@@ -848,7 +848,7 @@ _clState *initCl(unsigned int gpu, char *name, size_t nameSize, algorithm_t *alg
 	snprintf(buffer, sizeof(buffer), "buffer11");
 	if (status != CL_SUCCESS)
 		goto out;
-	clState->padbuffer8 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, NR_INPUTS(200, 9) * 24 * sizeof(uint64_t), NULL, &status);
+	clState->padbuffer8 = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, 8, NULL, &status);
     snprintf(buffer, sizeof(buffer), "padbuffer8");
     if (status != CL_SUCCESS)
       goto out;

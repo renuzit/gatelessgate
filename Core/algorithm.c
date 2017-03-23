@@ -1183,8 +1183,8 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
     uint64_t mid_hash[8];
     equihash_calc_mid_hash(mid_hash, blk->work->equihash_data);
     status = clEnqueueWriteBuffer(clState->commandQueue, clState->MidstateBuf, CL_TRUE, 0, sizeof(mid_hash), mid_hash, 0, NULL, NULL);
-    uint32_t dbg[2] = { 0 };
-    status |= clEnqueueWriteBuffer(clState->commandQueue, clState->padbuffer8, CL_TRUE, 0, sizeof(dbg), &dbg, 0, NULL, NULL);
+    //uint32_t dbg[2] = { 0 };
+    //status |= clEnqueueWriteBuffer(clState->commandQueue, clState->padbuffer8, CL_TRUE, 0, sizeof(dbg), &dbg, 0, NULL, NULL);
 
     cl_mem buf_ht[9] = {
         clState->CLbuffer0,
@@ -1198,11 +1198,11 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
         clState->buffer10,
     };
     cl_mem row_counters[2] = { clState->buffer2, clState->buffer3 };
-    cl_mem buf_ht_next_round0 = clState->buffer12;
-    cl_mem row_counters_next_round0 = clState->buffer13;
+    cl_mem buf_ht_round0 = clState->buffer12;
+    cl_mem row_counters_round0 = clState->buffer13;
     cl_mem buf_potential_sols = clState->buffer11;
     cl_uint round;
-    for (round = 0; round < param_k; round++) {
+    for (round = 1; round < param_k; round++) {
         unsigned int num = 0;
         cl_kernel *kernel = &clState->extra_kernels[0];
         CL_SET_VARG(1, &device_thread);
@@ -1210,6 +1210,7 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
         CL_SET_ARG(buf_ht[(round + 7) % 8]);
         CL_SET_ARG(row_counters[(round + 1) % 2]);
         CL_SET_ARG(row_counters[round % 2]);
+        CL_SET_ARG(row_counters_round0);
         CL_SET_ARG(clState->outputBuffer);
         CL_SET_ARG(buf_potential_sols);
         CL_SET_ARG(clState->padbuffer8);
@@ -1233,8 +1234,10 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
             CL_SET_VARG(1, &device_thread);
             CL_SET_ARG(buf_ht[(round - 1)]);
             CL_SET_ARG(buf_ht[round]);
+            CL_SET_ARG(buf_ht_round0);
             CL_SET_ARG(row_counters[(round - 1) % 2]);
             CL_SET_ARG(row_counters[round % 2]);
+            CL_SET_ARG(row_counters_round0);
             CL_SET_ARG(clState->MidstateBuf);
             worksize = LOCAL_WORK_SIZE;
             work_items = _NR_ROWS(round - 1) * worksize;
@@ -1245,6 +1248,7 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
         status |= clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL, &work_items, &worksize, 0, NULL, NULL);
     }
 
+#if 0
     unsigned int num = 0;
     cl_kernel *kernel = &clState->extra_kernels[0];
     CL_SET_VARG(1, &device_thread);
@@ -1252,6 +1256,7 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
     CL_SET_ARG(buf_ht[0]);
     CL_SET_ARG(row_counters[(round + 1) % 2]);
     CL_SET_ARG(row_counters[round % 2]);
+    CL_SET_ARG(row_counters_round0);
     CL_SET_ARG(clState->outputBuffer);
     CL_SET_ARG(buf_potential_sols);
     CL_SET_ARG(clState->padbuffer8);
@@ -1260,9 +1265,9 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
     if (work_items % worksize)
         work_items += worksize - work_items % worksize;
     status |= clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL, &work_items, &worksize, 0, NULL, NULL);
-
-    num = 0;
-    kernel = &clState->extra_kernels[1 + 8 + 1];
+#endif
+    unsigned int num = 0;
+    cl_kernel *kernel = &clState->extra_kernels[1 + 8 + 1];
     CL_SET_VARG(1, &device_thread);
     CL_SET_ARG(buf_ht[param_k - 1]);
     CL_SET_ARG(buf_potential_sols);
@@ -1290,6 +1295,12 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
     work_items = MAX_POTENTIAL_SOLS * worksize;
     status |= clEnqueueNDRangeKernel(clState->commandQueue, clState->kernel, 1, NULL, &work_items, &worksize, 0, NULL, NULL);
 
+   clState->CLbuffer0 = buf_ht_round0;
+   clState->buffer12 = buf_ht[0];
+
+   clState->buffer2 = row_counters_round0;
+   clState->buffer13 = row_counters[0];
+    
     return status;
 }
 

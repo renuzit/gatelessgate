@@ -234,8 +234,17 @@ __constant ulong blake_iv[] =
     0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
 };
 
-__kernel
-void kernel_init_ht(uint device_thread, uint round, __global uint *hash_table, __global uint *row_counters_src, __global uint *row_counters_dst, __global sols_t *sols, __global potential_sols_t *potential_sols, __global ulong *blake_state_pool, __constant ulong *blake_state)
+__kernel void kernel_init_ht(
+    uint device_thread, 
+    uint round, 
+    __global uint *hash_table, 
+    __global uint *row_counters_src, 
+    __global uint *row_counters_dst, 
+    __global uint *row_counters_round0, 
+    __global sols_t *sols, 
+    __global potential_sols_t *potential_sols, 
+    __global ulong *blake_state_pool, 
+    __constant ulong *blake_state)
 {
     uint gds_index = (get_global_id(0) << 2);
         
@@ -251,166 +260,12 @@ void kernel_init_ht(uint device_thread, uint round, __global uint *hash_table, _
                 [m0_gds] "s" (M0_GDS)
               : "m0");
     }
+    if (round == 1 && get_global_id(0) < (_NR_ROWS(round) + ROWS_PER_UINT - 1) / ROWS_PER_UINT)
+        row_counters_round0[get_global_id(0)] = 0;
     if (round <= 8 && !USE_GDS_ROW_COUNTERS(device_thread, round, get_global_id(0)) && get_global_id(0) < (_NR_ROWS(round) + ROWS_PER_UINT - 1) / ROWS_PER_UINT)
         row_counters_dst[get_global_id(0)] = 0;
     if (round == 8 && !get_global_id(0))
         sols->nr = sols->likely_invalids = potential_sols->nr = 0;
-
-    if (round == 1 && get_global_id(0) < NR_INPUTS(PARAM_N, PARAM_K)) {
-        uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
-        slot_t slot;
-        ulong               h[7], v[16];
-
-        uint input = get_global_id(0);
-    
-        h[0] = blake_state_pool[input + 0 * NR_INPUTS(PARAM_N, PARAM_K)];
-        h[1] = blake_state_pool[input + 1 * NR_INPUTS(PARAM_N, PARAM_K)];
-        h[2] = blake_state_pool[input + 2 * NR_INPUTS(PARAM_N, PARAM_K)];
-        h[3] = blake_state_pool[input + 3 * NR_INPUTS(PARAM_N, PARAM_K)];
-        h[4] = blake_state_pool[input + 4 * NR_INPUTS(PARAM_N, PARAM_K)];
-        h[5] = blake_state_pool[input + 5 * NR_INPUTS(PARAM_N, PARAM_K)];
-        h[6] = blake_state_pool[input + 6 * NR_INPUTS(PARAM_N, PARAM_K)];
-
-        // store the two Xi values in the hash table;
-
-        uint new_row = get_row(0, h[0]);
-        __global uint4 *p = (__global uint4 *)get_slot_ptr(hash_table, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
-        uint nr_slots = inc_gds_row_counter(device_thread, 0, row_counters_src, new_row);
-        if (nr_slots < _NR_SLOTS(0))
-            p = (__global uint4 *)get_slot_ptr(hash_table, 0, new_row, nr_slots);
-        
-        uint4 write_buffer0, write_buffer1;
-        __global uint4 *pp = p + 1;
-        __global uint4 *q;
-        __global uint4 *qq;
-        __asm("ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
-              "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
-              "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
-	        
-              "v_alignbit_b32_e32 %[xi4], %[h2].y, %[h2].x, 8\n"
-              "v_alignbit_b32_e32 %[xi5], %[h3].x, %[h2].y, 8\n"
-          
-              "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
-              "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
-	      
-	          "v_alignbit_b32_e32 %[xi0], %[h0].y, %[h0].x, 8\n"
-              "v_alignbit_b32_e32 %[xi1], %[h1].x, %[h0].y, 8\n"
-              "v_alignbit_b32_e32 %[xi2], %[h1].y, %[h1].x, 8\n"
-              "v_alignbit_b32_e32 %[xi3], %[h2].x, %[h1].y, 8\n"
-              "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
-	          "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
-	          "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
-	        
-	            "s_waitcnt lgkmcnt(0)\n"
-	          
-                "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
-                "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
-                "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
-	            "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
-	            "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
-	            "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
-	            "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
-	            "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
-	            "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
-                "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
-
-	            "flat_store_dwordx4 %[q], %[write_buffer0]\n"
-                "flat_store_dwordx4 %[qq], %[write_buffer1]\n"
-
-	            "s_waitcnt expcnt(0)\n"
-	        
-                : [write_buffer0] "=&v" (write_buffer0),
-                [write_buffer1] "=&v" (write_buffer1),
-                [pp] "=&v" (pp),
-                [q] "=&v" (q), 
-                [qq] "=&v" (qq),
-                [xi0] "=&v" (xi0),
-                [xi1] "=&v" (xi1),
-                [xi2] "=&v" (xi2),
-                [xi3] "=&v" (xi3),
-                [xi4] "=&v" (xi4),
-                [xi5] "=&v" (xi5),
-                [xi6] "=&v" (xi6)
-                
-                : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
-                  [p] "v" (p), 
-                  [pp] "2" (pp), 
-                  [h0] "v" (h[0]),
-                  [h1] "v" (h[1]),
-                  [h2] "v" (h[2]),
-                  [h3] "v" (h[3]),
-                  [ref] "v" (input * 2 + 0)
-                
-                : "memory", "vcc");
-
-        new_row = get_row(0, (uint)h[3] >> 8);
-        p = (__global uint4 *)get_slot_ptr(hash_table, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
-        nr_slots = inc_gds_row_counter(device_thread, 0, row_counters_src, new_row);
-        if (nr_slots < _NR_SLOTS(0))
-            p = (__global uint4 *)get_slot_ptr(hash_table, 0, new_row, nr_slots);
-
-        pp = p + 1;
-        __asm(  "ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
-                "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
-	            "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
-
-                "v_alignbit_b32 %[xi4], %[h5].y, %[h5].x, 16\n"
-                "v_alignbit_b32 %[xi5], %[h6].x, %[h5].y, 16\n"
-
-                "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
-                "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
-
-                "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
-	            "v_alignbit_b32 %[xi0], %[h3].y, %[h3].x, 16\n"
-                "v_alignbit_b32 %[xi1], %[h4].x, %[h3].y, 16\n"
-                "v_alignbit_b32 %[xi2], %[h4].y, %[h4].x, 16\n"
-                "v_alignbit_b32 %[xi3], %[h5].x, %[h4].y, 16\n"
-	            "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
-	            "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
-              
-	            "s_waitcnt lgkmcnt(0)\n"
-	          
-                "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
-                "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
-                "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
-	            "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
-	            "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
-	            "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
-	            "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
-	            "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
-	            "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
-                "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
-
-	            "flat_store_dwordx4 %[q], %[write_buffer0]\n"
-                "flat_store_dwordx4 %[qq], %[write_buffer1]\n"
-            
-	            "s_waitcnt expcnt(0)\n"
-	          
-                : [write_buffer0] "=&v" (write_buffer0),
-                [write_buffer1] "=&v" (write_buffer1),
-                [p] "=&v" (p), 
-                [pp] "=&v" (pp),
-                [q] "=&v" (q), 
-                [qq] "=&v" (qq),
-                [xi0] "=&v" (xi0),
-                [xi1] "=&v" (xi1),
-                [xi2] "=&v" (xi2),
-                [xi3] "=&v" (xi3),
-                [xi4] "=&v" (xi4),
-                [xi5] "=&v" (xi5),
-                [xi6] "=&v" (xi6)
-                
-                : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
-                [p] "2" (p), 
-                [pp] "3" (pp),
-                [h3] "v" (h[3]),
-                [h4] "v" (h[4]),
-                [h5] "v" (h[5]),
-                [h6] "v" (h[6]),
-                [ref] "v" (input * 2 + 1)
-                
-                : "memory", "vcc");
-    }
 }
 
 
@@ -1067,12 +922,14 @@ void equihash_round(
     const uint round,
     __global char *hash_table_src,
     __global char *hash_table_dst,
+    __global char *hash_table_round0,
     __local uint  *slot_cache,
     __local SLOT_INDEX_TYPE *collision_array_a,
     __local SLOT_INDEX_TYPE *collision_array_b,
     __local uint *nr_collisions,
     __global uint *row_counters_src,
     __global uint *row_counters_dst,
+    __global uint *row_counters_round0,
     __local uint *bin_first_slots,
     __local SLOT_INDEX_TYPE *bin_next_slots,
     __constant ulong *blake_state,
@@ -1109,11 +966,20 @@ void equihash_round(
 
     // Perform a radix sort as slots get loaded into LDS.
     // Make sure all the work items in the work group enter the loop.
-    uint first_round_for_background_threads = 1;
-    uint nr_rounds_for_background_threads = 2;
-    uint nr_background_threads = get_local_size(0) / nr_rounds_for_background_threads;
-    uint nr_foreground_threads = (first_round_for_background_threads <= round || round < first_round_for_background_threads + nr_rounds_for_background_threads) 
-                                     ? (get_local_size(0) - nr_background_threads) : get_local_size(0);
+#define NR_ROUNDS_WITH_BACKGROUND_THREADS 4
+#define ROUND_WITH_BACKGROUND_THREADS_1 1
+#define ROUND_WITH_BACKGROUND_THREADS_2 3
+#define ROUND_WITH_BACKGROUND_THREADS_3 5
+#define ROUND_WITH_BACKGROUND_THREADS_4 7
+#define BACKGROUND_THREADS_ENABLED(round) \
+    (   (round) == ROUND_WITH_BACKGROUND_THREADS_1 \
+     || (round) == ROUND_WITH_BACKGROUND_THREADS_2 \
+     || (round) == ROUND_WITH_BACKGROUND_THREADS_3 \
+     || (round) == ROUND_WITH_BACKGROUND_THREADS_4)
+
+    uint nr_background_threads = get_local_size(0) / NR_ROUNDS_WITH_BACKGROUND_THREADS;
+    uint nr_foreground_threads = (BACKGROUND_THREADS_ENABLED(round) ? (get_local_size(0) - nr_background_threads) : get_local_size(0));
+
     if (get_local_id(0) < nr_foreground_threads) {
         for (i = get_local_id(0); i < nr_slots; i += nr_foreground_threads) {
             uint slot_a_index = i;
@@ -1243,19 +1109,24 @@ void equihash_round(
                 slot_b_index = bin_next_slots[slot_b_index];
             }
         }
-    } else if (get_local_id(0) >= nr_foreground_threads) {
+    } else if (BACKGROUND_THREADS_ENABLED(round)) {
         ulong               v[16], temp_vb, temp_vd;
         uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
         slot_t slot;
         ulong               h[7];
 
         uint input = get_group_id(0) * nr_background_threads + get_local_id(0) - nr_foreground_threads;
-        input += (NR_INPUTS(PARAM_N, PARAM_K) / nr_rounds_for_background_threads) * (round - first_round_for_background_threads);
-        // shift "i" to occupy the high 32 bits of the second ulong word in the
-        // message block
+        switch (round) {
+        case ROUND_WITH_BACKGROUND_THREADS_1: input += 1 * (NR_INPUTS(PARAM_N, PARAM_K) / NR_ROUNDS_WITH_BACKGROUND_THREADS); break;
+        case ROUND_WITH_BACKGROUND_THREADS_2: input += 2 * (NR_INPUTS(PARAM_N, PARAM_K) / NR_ROUNDS_WITH_BACKGROUND_THREADS); break;
+        case ROUND_WITH_BACKGROUND_THREADS_3: input += 3 * (NR_INPUTS(PARAM_N, PARAM_K) / NR_ROUNDS_WITH_BACKGROUND_THREADS); break;
+        }
 
-        ulong word1 = (ulong)input << 32;
         if (input < NR_INPUTS(PARAM_N, PARAM_K)) {
+            // shift "i" to occupy the high 32 bits of the second ulong word in the
+            // message block
+            ulong word1 = (ulong)input << 32;
+
             // init vector v
             v[0] = blake_state[0];
             v[1] = blake_state[1];
@@ -1388,13 +1259,153 @@ void equihash_round(
     
             // compress v into the blake state; this produces the 50-byte hash
             // (two Xi values)
-            blake_state_pool[input + 0 * NR_INPUTS(PARAM_N, PARAM_K)] = blake_state[0] ^ v[0] ^ v[8];
-            blake_state_pool[input + 1 * NR_INPUTS(PARAM_N, PARAM_K)] = blake_state[1] ^ v[1] ^ v[9];
-            blake_state_pool[input + 2 * NR_INPUTS(PARAM_N, PARAM_K)] = blake_state[2] ^ v[2] ^ v[10];
-            blake_state_pool[input + 3 * NR_INPUTS(PARAM_N, PARAM_K)] = blake_state[3] ^ v[3] ^ v[11];
-            blake_state_pool[input + 4 * NR_INPUTS(PARAM_N, PARAM_K)] = blake_state[4] ^ v[4] ^ v[12];
-            blake_state_pool[input + 5 * NR_INPUTS(PARAM_N, PARAM_K)] = blake_state[5] ^ v[5] ^ v[13];
-            blake_state_pool[input + 6 * NR_INPUTS(PARAM_N, PARAM_K)] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
+            h[0] = blake_state[0] ^ v[0] ^ v[8];
+            h[1] = blake_state[1] ^ v[1] ^ v[9];
+            h[2] = blake_state[2] ^ v[2] ^ v[10];
+            h[3] = blake_state[3] ^ v[3] ^ v[11];
+            h[4] = blake_state[4] ^ v[4] ^ v[12];
+            h[5] = blake_state[5] ^ v[5] ^ v[13];
+            h[6] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
+
+            // store the two Xi values in the hash table;
+
+            uint new_row = get_row(0, h[0]);
+            __global uint4 *p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
+            uint nr_slots = inc_gds_row_counter(device_thread, 0, row_counters_round0, new_row);
+            if (nr_slots < _NR_SLOTS(0))
+                p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, new_row, nr_slots);
+        
+            uint4 write_buffer0, write_buffer1;
+            __global uint4 *pp = p + 1;
+            __global uint4 *q;
+            __global uint4 *qq;
+            __asm("ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
+                  "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
+                  "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
+	        
+                  "v_alignbit_b32_e32 %[xi4], %[h2].y, %[h2].x, 8\n"
+                  "v_alignbit_b32_e32 %[xi5], %[h3].x, %[h2].y, 8\n"
+          
+                  "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
+                  "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
+	      
+	              "v_alignbit_b32_e32 %[xi0], %[h0].y, %[h0].x, 8\n"
+                  "v_alignbit_b32_e32 %[xi1], %[h1].x, %[h0].y, 8\n"
+                  "v_alignbit_b32_e32 %[xi2], %[h1].y, %[h1].x, 8\n"
+                  "v_alignbit_b32_e32 %[xi3], %[h2].x, %[h1].y, 8\n"
+                  "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
+	              "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
+	              "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
+	        
+	                "s_waitcnt lgkmcnt(0)\n"
+	          
+                    "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
+                    "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
+                    "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
+	                "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
+	                "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
+	                "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
+	                "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
+	                "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
+	                "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
+                    "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
+
+	                "flat_store_dwordx4 %[q], %[write_buffer0]\n"
+                    "flat_store_dwordx4 %[qq], %[write_buffer1]\n"
+
+	                "s_waitcnt expcnt(0)\n"
+	        
+                    : [write_buffer0] "=&v" (write_buffer0),
+                    [write_buffer1] "=&v" (write_buffer1),
+                    [pp] "=&v" (pp),
+                    [q] "=&v" (q), 
+                    [qq] "=&v" (qq),
+                    [xi0] "=&v" (xi0),
+                    [xi1] "=&v" (xi1),
+                    [xi2] "=&v" (xi2),
+                    [xi3] "=&v" (xi3),
+                    [xi4] "=&v" (xi4),
+                    [xi5] "=&v" (xi5),
+                    [xi6] "=&v" (xi6)
+                
+                    : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
+                      [p] "v" (p), 
+                      [pp] "2" (pp), 
+                      [h0] "v" (h[0]),
+                      [h1] "v" (h[1]),
+                      [h2] "v" (h[2]),
+                      [h3] "v" (h[3]),
+                      [ref] "v" (input * 2 + 0)
+                
+                    : "memory", "vcc");
+
+            new_row = get_row(0, (uint)h[3] >> 8);
+            p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
+            nr_slots = inc_gds_row_counter(device_thread, 0, row_counters_round0, new_row);
+            if (nr_slots < _NR_SLOTS(0))
+                p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, new_row, nr_slots);
+
+            pp = p + 1;
+            __asm(  "ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
+                    "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
+	                "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
+
+                    "v_alignbit_b32 %[xi4], %[h5].y, %[h5].x, 16\n"
+                    "v_alignbit_b32 %[xi5], %[h6].x, %[h5].y, 16\n"
+
+                    "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
+                    "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
+
+                    "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
+	                "v_alignbit_b32 %[xi0], %[h3].y, %[h3].x, 16\n"
+                    "v_alignbit_b32 %[xi1], %[h4].x, %[h3].y, 16\n"
+                    "v_alignbit_b32 %[xi2], %[h4].y, %[h4].x, 16\n"
+                    "v_alignbit_b32 %[xi3], %[h5].x, %[h4].y, 16\n"
+	                "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
+	                "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
+              
+	                "s_waitcnt lgkmcnt(0)\n"
+	          
+                    "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
+                    "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
+                    "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
+	                "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
+	                "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
+	                "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
+	                "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
+	                "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
+	                "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
+                    "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
+
+	                "flat_store_dwordx4 %[q], %[write_buffer0]\n"
+                    "flat_store_dwordx4 %[qq], %[write_buffer1]\n"
+            
+	                "s_waitcnt expcnt(0)\n"
+	          
+                    : [write_buffer0] "=&v" (write_buffer0),
+                    [write_buffer1] "=&v" (write_buffer1),
+                    [p] "=&v" (p), 
+                    [pp] "=&v" (pp),
+                    [q] "=&v" (q), 
+                    [qq] "=&v" (qq),
+                    [xi0] "=&v" (xi0),
+                    [xi1] "=&v" (xi1),
+                    [xi2] "=&v" (xi2),
+                    [xi3] "=&v" (xi3),
+                    [xi4] "=&v" (xi4),
+                    [xi5] "=&v" (xi5),
+                    [xi6] "=&v" (xi6)
+                
+                    : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
+                    [p] "2" (p), 
+                    [pp] "3" (pp),
+                    [h3] "v" (h[3]),
+                    [h4] "v" (h[4]),
+                    [h5] "v" (h[5]),
+                    [h6] "v" (h[6]),
+                    [ref] "v" (input * 2 + 1)
+                
+                    : "memory", "vcc");
         }
     }
     
@@ -1438,8 +1449,14 @@ void equihash_round(
 
 #define KERNEL_ROUND(kernel_name, N) \
 __kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE, 1, 1))) \
-void kernel_name(uint device_thread, __global char *hash_table_src, __global char *hash_table_dst, \
-	__global uint *row_counters_src, __global uint *row_counters_dst, \
+void kernel_name( \
+    uint device_thread, \
+    __global char *hash_table_src, \
+    __global char *hash_table_dst, \
+    __global char *hash_table_round0, \
+	__global uint *row_counters_src, \
+    __global uint *row_counters_dst, \
+    __global uint *row_counters_round0, \
     __constant ulong *blake_state, \
     __global ulong *blake_state_pool) \
 { \
@@ -1449,8 +1466,8 @@ void kernel_name(uint device_thread, __global char *hash_table_src, __global cha
     __local uint    nr_collisions[1]; \
 	__local uint    bin_first_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_BINS(N - 1))]; \
 	__local SLOT_INDEX_TYPE bin_next_slots[ADJUSTED_LDS_ARRAY_SIZE(_NR_SLOTS(N - 1))]; \
-    equihash_round(device_thread, (N), hash_table_src, hash_table_dst, slot_cache, collision_array_a, collision_array_b, \
-	    nr_collisions, row_counters_src, row_counters_dst, bin_first_slots, bin_next_slots, blake_state, blake_state_pool); \
+    equihash_round(device_thread, (N), hash_table_src, hash_table_dst, hash_table_round0, slot_cache, collision_array_a, collision_array_b, \
+	    nr_collisions, row_counters_src, row_counters_dst, row_counters_round0, bin_first_slots, bin_next_slots, blake_state, blake_state_pool); \
 }
 
 KERNEL_ROUND(kernel_round1, 1)
