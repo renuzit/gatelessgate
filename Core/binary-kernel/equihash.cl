@@ -863,7 +863,7 @@ void xor_and_store(uint device_thread, uint round, __global char *hash_table_src
     uint slot_a, uint slot_b, __local uint *ai, __local uint *bi,
     __global uint *row_counters)
 {
-    const int even_round = !(round & 0x1);
+    int even_round = !(round & 0x1);
     uint new_row;
     uint new_slot_index = _NR_SLOTS(round);
     uint xi0, xi1, xi2, xi3, xi4, xi5;
@@ -918,8 +918,8 @@ void xor_and_store(uint device_thread, uint round, __global char *hash_table_src
 */
 
 void equihash_round(
-    const uint device_thread,
-    const uint round,
+    uint device_thread,
+    uint round,
     __global char *hash_table_src,
     __global char *hash_table_dst,
     __global char *hash_table_round0,
@@ -949,11 +949,11 @@ void equihash_round(
 #define _NR_BINS_LOG(round) (PREFIX(PARAM_N, PARAM_K) - _NR_ROWS_LOG(round))
 #define _NR_BINS(round) (1 << _NR_BINS_LOG(round))
 
-    const uint assigned_row_index = get_group_id(0);
+    uint assigned_row_index = get_group_id(0);
     if (assigned_row_index >= _NR_ROWS(round - 1))
         return;
 
-    const uint nr_slots = get_nr_slots(device_thread, round - 1, row_counters_src, assigned_row_index);
+    uint nr_slots = get_nr_slots(device_thread, round - 1, row_counters_src, assigned_row_index);
 
     bin_first_slots[get_local_id(0)] = _NR_SLOTS(round - 1);
     for (i = get_local_id(0); i < _NR_SLOTS(round - 1); i += get_local_size(0))
@@ -967,9 +967,8 @@ void equihash_round(
     // Perform a radix sort as slots get loaded into LDS.
     // Make sure all the work items in the work group enter the loop.
 
-    uint nr_background_threads = (round == 6) ? 0 : 
-                                 (round == 7) ? (get_local_size(0) / 4) : 
-                                 (round == 8) ? (get_local_size(0) / 4 * 3) : 
+    uint nr_background_threads = (round == 7) ? (get_local_size(0) / 2) : 
+                                 (round == 8) ? (get_local_size(0) / 2) : 
                                                 0;
     uint nr_foreground_threads = (get_local_size(0) - nr_background_threads);
 
@@ -977,13 +976,21 @@ void equihash_round(
     // The cache hit ratio improves this way.
     switch (round) {
     case 8: input += 0 * (NR_INPUTS(PARAM_N, PARAM_K) / 4); break;
-    case 7: input += 3 * (NR_INPUTS(PARAM_N, PARAM_K) / 4); break;
-    //case 6: input += 3 * (NR_INPUTS(PARAM_N, PARAM_K) / 4); break;
+    case 7: input += 2 * (NR_INPUTS(PARAM_N, PARAM_K) / 4); break;
     }
 
     // shift "i" to occupy the high 32 bits of the second ulong word in the
     // message block
     ulong word1 = (ulong)input << 32;
+
+    ulong               v[16], temp_vb, temp_vd;
+    uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
+    slot_t slot;
+    ulong               h[7];
+
+    uint new_row0, new_row1, new_slot_index0, new_slot_index1;
+    uint4 write_buffer0, write_buffer1;
+    __global uint4 *p, *pp, *q, *qq;
 
     if (get_local_id(0) < nr_foreground_threads) {
         for (i = get_local_id(0); i < nr_slots; i += nr_foreground_threads) {
@@ -1115,10 +1122,6 @@ void equihash_round(
             }
         }
     } else if (input < NR_INPUTS(PARAM_N, PARAM_K)) {
-        ulong               v[16], temp_vb, temp_vd;
-        uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
-        slot_t slot;
-        ulong               h[7];
 
         // init vector v
         v[0] = blake_state[0];
@@ -1256,22 +1259,16 @@ void equihash_round(
         h[1] = blake_state[1] ^ v[1] ^ v[9];
         h[2] = blake_state[2] ^ v[2] ^ v[10];
         h[3] = blake_state[3] ^ v[3] ^ v[11];
-        h[4] = blake_state[4] ^ v[4] ^ v[12];
-        h[5] = blake_state[5] ^ v[5] ^ v[13];
-        h[6] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
 
         // store the two Xi values in the hash table;
 
-        uint new_row = get_row(0, h[0]);
-        __global uint4 *p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
-        uint nr_slots = inc_gds_row_counter(device_thread, 0, row_counters_round0, new_row);
-        if (nr_slots < _NR_SLOTS(0))
-            p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, new_row, nr_slots);
+        new_row0 = get_row(0, h[0]);
+        new_slot_index0 = inc_gds_row_counter(device_thread, 0, row_counters_round0, new_row0);
+        p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
+        if (new_slot_index0 < _NR_SLOTS(0))
+            p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, new_row0, new_slot_index0);
         
-        uint4 write_buffer0, write_buffer1;
-        __global uint4 *pp = p + 1;
-        __global uint4 *q;
-        __global uint4 *qq;
+        pp = p + 1;
         __asm("ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
                 "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
                 "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
@@ -1332,12 +1329,52 @@ void equihash_round(
                     [ref] "v" (input * 2 + 0)
                 
                 : "memory", "vcc");
+    }
+    
+    barrier(CLK_LOCAL_MEM_FENCE);
 
-        new_row = get_row(0, (uint)h[3] >> 8);
+    uint nr_collisions_copy = *nr_collisions;
+    if (nr_collisions_copy >= _LDS_COLL_SIZE(round - 1))
+        nr_collisions_copy = _LDS_COLL_SIZE(round - 1);
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    if (get_local_id(0) < nr_foreground_threads) {
+        while (nr_collisions_copy > 0) {
+            uint collision, slot_index_a = _NR_SLOTS(round - 1), slot_index_b;
+            __local uint *slot_cache_a, *slot_cache_b;
+            uint write_index = get_local_id(0);
+            if (write_index < nr_collisions_copy) {
+                slot_index_a = collision_array_a[nr_collisions_copy - 1 - write_index];
+                slot_index_b = collision_array_b[nr_collisions_copy - 1 - write_index];
+                slot_cache_a = (__local uint *)&slot_cache[slot_index_a];
+                slot_cache_b = (__local uint *)&slot_cache[slot_index_b];
+            }
+            if (round == 1) {
+                parallel_xor_and_store_round1(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
+            } else if (round == 3) {
+                parallel_xor_and_store_round3(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
+            } else if (round == 5) {
+                parallel_xor_and_store_round5(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
+            } else if (round == 2) {
+                parallel_xor_and_store_round2(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
+            } else if (round == 4) {
+                parallel_xor_and_store_round4(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
+            } else {
+                xor_and_store(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
+            }
+            nr_collisions_copy -= min(nr_collisions_copy, nr_foreground_threads);
+        }
+    } else {
+        new_row1 = get_row(0, h[3] >> 8);
+        new_slot_index1 = inc_gds_row_counter(device_thread, 0, row_counters_round0, new_row1);
         p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
-        nr_slots = inc_gds_row_counter(device_thread, 0, row_counters_round0, new_row);
-        if (nr_slots < _NR_SLOTS(0))
-            p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, new_row, nr_slots);
+        if (new_slot_index1 < _NR_SLOTS(0))
+            p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, new_row1, new_slot_index1);
+
+        h[4] = blake_state[4] ^ v[4] ^ v[12];
+        h[5] = blake_state[5] ^ v[5] ^ v[13];
+        h[6] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
 
         pp = p + 1;
         __asm(  "ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
@@ -1401,43 +1438,6 @@ void equihash_round(
                 [ref] "v" (input * 2 + 1)
                 
                 : "memory", "vcc");
-    }
-    
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    uint nr_collisions_copy = *nr_collisions;
-    if (nr_collisions_copy >= _LDS_COLL_SIZE(round - 1))
-        nr_collisions_copy = _LDS_COLL_SIZE(round - 1);
-
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    if (get_local_id(0) < nr_foreground_threads) {
-        while (nr_collisions_copy > 0) {
-            uint collision, slot_index_a = _NR_SLOTS(round - 1), slot_index_b;
-            __local uint *slot_cache_a, *slot_cache_b;
-            uint write_index = get_local_id(0);
-            if (write_index < nr_collisions_copy) {
-                slot_index_a = collision_array_a[nr_collisions_copy - 1 - write_index];
-                slot_index_b = collision_array_b[nr_collisions_copy - 1 - write_index];
-                slot_cache_a = (__local uint *)&slot_cache[slot_index_a];
-                slot_cache_b = (__local uint *)&slot_cache[slot_index_b];
-            }
-            if (round == 1) {
-                parallel_xor_and_store_round1(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
-            } else if (round == 3) {
-                parallel_xor_and_store_round3(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
-            } else if (round == 5) {
-                parallel_xor_and_store_round5(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
-            } else if (round == 2) {
-                parallel_xor_and_store_round2(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
-            } else if (round == 4) {
-                parallel_xor_and_store_round4(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
-            } else {
-                xor_and_store(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
-            }
-            nr_collisions_copy -= min(nr_collisions_copy, nr_foreground_threads);
-        }
-    } else {
     }
 }
 
