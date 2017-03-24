@@ -966,19 +966,24 @@ void equihash_round(
 
     // Perform a radix sort as slots get loaded into LDS.
     // Make sure all the work items in the work group enter the loop.
-#define NR_ROUNDS_WITH_BACKGROUND_THREADS 4
-#define ROUND_WITH_BACKGROUND_THREADS_1 1
-#define ROUND_WITH_BACKGROUND_THREADS_2 3
-#define ROUND_WITH_BACKGROUND_THREADS_3 5
-#define ROUND_WITH_BACKGROUND_THREADS_4 7
-#define BACKGROUND_THREADS_ENABLED(round) \
-    (   (round) == ROUND_WITH_BACKGROUND_THREADS_1 \
-     || (round) == ROUND_WITH_BACKGROUND_THREADS_2 \
-     || (round) == ROUND_WITH_BACKGROUND_THREADS_3 \
-     || (round) == ROUND_WITH_BACKGROUND_THREADS_4)
 
-    uint nr_background_threads = get_local_size(0) / NR_ROUNDS_WITH_BACKGROUND_THREADS;
-    uint nr_foreground_threads = (BACKGROUND_THREADS_ENABLED(round) ? (get_local_size(0) - nr_background_threads) : get_local_size(0));
+    uint nr_background_threads = (round == 6) ? 0 : 
+                                 (round == 7) ? (get_local_size(0) / 4) : 
+                                 (round == 8) ? (get_local_size(0) / 4 * 3) : 
+                                                0;
+    uint nr_foreground_threads = (get_local_size(0) - nr_background_threads);
+
+    uint input = get_group_id(0) * nr_background_threads + get_local_id(0) - nr_foreground_threads;
+    // The cache hit ratio improves this way.
+    switch (round) {
+    case 8: input += 0 * (NR_INPUTS(PARAM_N, PARAM_K) / 4); break;
+    case 7: input += 3 * (NR_INPUTS(PARAM_N, PARAM_K) / 4); break;
+    //case 6: input += 3 * (NR_INPUTS(PARAM_N, PARAM_K) / 4); break;
+    }
+
+    // shift "i" to occupy the high 32 bits of the second ulong word in the
+    // message block
+    ulong word1 = (ulong)input << 32;
 
     if (get_local_id(0) < nr_foreground_threads) {
         for (i = get_local_id(0); i < nr_slots; i += nr_foreground_threads) {
@@ -1109,304 +1114,293 @@ void equihash_round(
                 slot_b_index = bin_next_slots[slot_b_index];
             }
         }
-    } else if (BACKGROUND_THREADS_ENABLED(round)) {
+    } else if (input < NR_INPUTS(PARAM_N, PARAM_K)) {
         ulong               v[16], temp_vb, temp_vd;
         uint xi0, xi1, xi2, xi3, xi4, xi5, xi6;
         slot_t slot;
         ulong               h[7];
 
-        uint input = get_group_id(0) * nr_background_threads + get_local_id(0) - nr_foreground_threads;
-        switch (round) {
-        case ROUND_WITH_BACKGROUND_THREADS_1: input += 1 * (NR_INPUTS(PARAM_N, PARAM_K) / NR_ROUNDS_WITH_BACKGROUND_THREADS); break;
-        case ROUND_WITH_BACKGROUND_THREADS_2: input += 2 * (NR_INPUTS(PARAM_N, PARAM_K) / NR_ROUNDS_WITH_BACKGROUND_THREADS); break;
-        case ROUND_WITH_BACKGROUND_THREADS_3: input += 3 * (NR_INPUTS(PARAM_N, PARAM_K) / NR_ROUNDS_WITH_BACKGROUND_THREADS); break;
-        }
+        // init vector v
+        v[0] = blake_state[0];
+        v[1] = blake_state[1];
+        v[2] = blake_state[2];
+        v[3] = blake_state[3];
+        v[4] = blake_state[4];
+        v[5] = blake_state[5];
+        v[6] = blake_state[6];
+        v[7] = blake_state[7];
+        v[8] = blake_iv[0];
+        v[9] = blake_iv[1];
+        v[10] = blake_iv[2];
+        v[11] = blake_iv[3];
+        v[12] = blake_iv[4];
+        v[13] = blake_iv[5];
+        v[14] = blake_iv[6];
+        v[15] = blake_iv[7];
+        // mix in length of data
+        v[12] ^= ZCASH_BLOCK_HEADER_LEN + 4 /* length of "i" */;
+        // last block
+        v[14] ^= (ulong)-1;
 
-        if (input < NR_INPUTS(PARAM_N, PARAM_K)) {
-            // shift "i" to occupy the high 32 bits of the second ulong word in the
-            // message block
-            ulong word1 = (ulong)input << 32;
+        mix_0_y(v[0], v[4], v[8], v[12], word1);
+        mix_0_0(v[1], v[5], v[9], v[13]);
+        mix_0_0(v[2], v[6], v[10], v[14]);
+        mix_0_0(v[3], v[7], v[11], v[15]);
+        mix_0_0(v[0], v[5], v[10], v[15]);
+        mix_0_0(v[1], v[6], v[11], v[12]);
+        mix_0_0(v[2], v[7], v[8], v[13]);
+        mix_0_0(v[3], v[4], v[9], v[14]);
 
-            // init vector v
-            v[0] = blake_state[0];
-            v[1] = blake_state[1];
-            v[2] = blake_state[2];
-            v[3] = blake_state[3];
-            v[4] = blake_state[4];
-            v[5] = blake_state[5];
-            v[6] = blake_state[6];
-            v[7] = blake_state[7];
-            v[8] = blake_iv[0];
-            v[9] = blake_iv[1];
-            v[10] = blake_iv[2];
-            v[11] = blake_iv[3];
-            v[12] = blake_iv[4];
-            v[13] = blake_iv[5];
-            v[14] = blake_iv[6];
-            v[15] = blake_iv[7];
-            // mix in length of data
-            v[12] ^= ZCASH_BLOCK_HEADER_LEN + 4 /* length of "i" */;
-            // last block
-            v[14] ^= (ulong)-1;
-
-            mix_0_y(v[0], v[4], v[8], v[12], word1);
-            mix_0_0(v[1], v[5], v[9], v[13]);
-            mix_0_0(v[2], v[6], v[10], v[14]);
-            mix_0_0(v[3], v[7], v[11], v[15]);
-            mix_0_0(v[0], v[5], v[10], v[15]);
-            mix_0_0(v[1], v[6], v[11], v[12]);
-            mix_0_0(v[2], v[7], v[8], v[13]);
-            mix_0_0(v[3], v[4], v[9], v[14]);
-
-            mix_0_0(v[0], v[4], v[8], v[12]);
-            mix_0_0(v[1], v[5], v[9], v[13]);
-            mix_0_0(v[2], v[6], v[10], v[14]);
-            mix_0_0(v[3], v[7], v[11], v[15]);
-            mix_x_0(v[0], v[5], v[10], v[15], word1);
-            mix_0_0(v[1], v[6], v[11], v[12]);
-            mix_0_0(v[2], v[7], v[8], v[13]);
-            mix_0_0(v[3], v[4], v[9], v[14]);
+        mix_0_0(v[0], v[4], v[8], v[12]);
+        mix_0_0(v[1], v[5], v[9], v[13]);
+        mix_0_0(v[2], v[6], v[10], v[14]);
+        mix_0_0(v[3], v[7], v[11], v[15]);
+        mix_x_0(v[0], v[5], v[10], v[15], word1);
+        mix_0_0(v[1], v[6], v[11], v[12]);
+        mix_0_0(v[2], v[7], v[8], v[13]);
+        mix_0_0(v[3], v[4], v[9], v[14]);
     
-            mix_0_0(v[0], v[4], v[8], v[12]);
-            mix_0_0(v[1], v[5], v[9], v[13]);
-            mix_0_0(v[2], v[6], v[10], v[14]);
-            mix_0_0(v[3], v[7], v[11], v[15]);
-            mix_0_0(v[0], v[5], v[10], v[15]);
-            mix_0_0(v[1], v[6], v[11], v[12]);
-            mix_0_y(v[2], v[7], v[8], v[13], word1);
-            mix_0_0(v[3], v[4], v[9], v[14]);
+        mix_0_0(v[0], v[4], v[8], v[12]);
+        mix_0_0(v[1], v[5], v[9], v[13]);
+        mix_0_0(v[2], v[6], v[10], v[14]);
+        mix_0_0(v[3], v[7], v[11], v[15]);
+        mix_0_0(v[0], v[5], v[10], v[15]);
+        mix_0_0(v[1], v[6], v[11], v[12]);
+        mix_0_y(v[2], v[7], v[8], v[13], word1);
+        mix_0_0(v[3], v[4], v[9], v[14]);
 
-            mix_0_0(v[0], v[4], v[8], v[12]);
-            mix_0_y(v[1], v[5], v[9], v[13], word1);
-            mix_0_0(v[2], v[6], v[10], v[14]);
-            mix_0_0(v[3], v[7], v[11], v[15]);
-            mix_0_0(v[0], v[5], v[10], v[15]);
-            mix_0_0(v[1], v[6], v[11], v[12]);
-            mix_0_0(v[2], v[7], v[8], v[13]);
-            mix_0_0(v[3], v[4], v[9], v[14]);
+        mix_0_0(v[0], v[4], v[8], v[12]);
+        mix_0_y(v[1], v[5], v[9], v[13], word1);
+        mix_0_0(v[2], v[6], v[10], v[14]);
+        mix_0_0(v[3], v[7], v[11], v[15]);
+        mix_0_0(v[0], v[5], v[10], v[15]);
+        mix_0_0(v[1], v[6], v[11], v[12]);
+        mix_0_0(v[2], v[7], v[8], v[13]);
+        mix_0_0(v[3], v[4], v[9], v[14]);
 
-            mix_0_0(v[0], v[4], v[8], v[12]);
-            mix_0_0(v[1], v[5], v[9], v[13]);
-            mix_0_0(v[2], v[6], v[10], v[14]);
-            mix_0_0(v[3], v[7], v[11], v[15]);
-            mix_0_y(v[0], v[5], v[10], v[15], word1);
-            mix_0_0(v[1], v[6], v[11], v[12]);
-            mix_0_0(v[2], v[7], v[8], v[13]);
-            mix_0_0(v[3], v[4], v[9], v[14]);
+        mix_0_0(v[0], v[4], v[8], v[12]);
+        mix_0_0(v[1], v[5], v[9], v[13]);
+        mix_0_0(v[2], v[6], v[10], v[14]);
+        mix_0_0(v[3], v[7], v[11], v[15]);
+        mix_0_y(v[0], v[5], v[10], v[15], word1);
+        mix_0_0(v[1], v[6], v[11], v[12]);
+        mix_0_0(v[2], v[7], v[8], v[13]);
+        mix_0_0(v[3], v[4], v[9], v[14]);
 
-            mix_0_0(v[0], v[4], v[8], v[12]);
-            mix_0_0(v[1], v[5], v[9], v[13]);
-            mix_0_0(v[2], v[6], v[10], v[14]);
-            mix_0_0(v[3], v[7], v[11], v[15]);
-            mix_0_0(v[0], v[5], v[10], v[15]);
-            mix_0_0(v[1], v[6], v[11], v[12]);
-            mix_0_0(v[2], v[7], v[8], v[13]);
-            mix_x_0(v[3], v[4], v[9], v[14], word1);
+        mix_0_0(v[0], v[4], v[8], v[12]);
+        mix_0_0(v[1], v[5], v[9], v[13]);
+        mix_0_0(v[2], v[6], v[10], v[14]);
+        mix_0_0(v[3], v[7], v[11], v[15]);
+        mix_0_0(v[0], v[5], v[10], v[15]);
+        mix_0_0(v[1], v[6], v[11], v[12]);
+        mix_0_0(v[2], v[7], v[8], v[13]);
+        mix_x_0(v[3], v[4], v[9], v[14], word1);
 
-            mix_0_0(v[0], v[4], v[8], v[12]);
-            mix_x_0(v[1], v[5], v[9], v[13], word1);
-            mix_0_0(v[2], v[6], v[10], v[14]);
-            mix_0_0(v[3], v[7], v[11], v[15]);
-            mix_0_0(v[0], v[5], v[10], v[15]);
-            mix_0_0(v[1], v[6], v[11], v[12]);
-            mix_0_0(v[2], v[7], v[8], v[13]);
-            mix_0_0(v[3], v[4], v[9], v[14]);
+        mix_0_0(v[0], v[4], v[8], v[12]);
+        mix_x_0(v[1], v[5], v[9], v[13], word1);
+        mix_0_0(v[2], v[6], v[10], v[14]);
+        mix_0_0(v[3], v[7], v[11], v[15]);
+        mix_0_0(v[0], v[5], v[10], v[15]);
+        mix_0_0(v[1], v[6], v[11], v[12]);
+        mix_0_0(v[2], v[7], v[8], v[13]);
+        mix_0_0(v[3], v[4], v[9], v[14]);
 
-            mix_0_0(v[0], v[4], v[8], v[12]);
-            mix_0_0(v[1], v[5], v[9], v[13]);
-            mix_0_y(v[2], v[6], v[10], v[14], word1);
-            mix_0_0(v[3], v[7], v[11], v[15]);
-            mix_0_0(v[0], v[5], v[10], v[15]);
-            mix_0_0(v[1], v[6], v[11], v[12]);
-            mix_0_0(v[2], v[7], v[8], v[13]);
-            mix_0_0(v[3], v[4], v[9], v[14]);
+        mix_0_0(v[0], v[4], v[8], v[12]);
+        mix_0_0(v[1], v[5], v[9], v[13]);
+        mix_0_y(v[2], v[6], v[10], v[14], word1);
+        mix_0_0(v[3], v[7], v[11], v[15]);
+        mix_0_0(v[0], v[5], v[10], v[15]);
+        mix_0_0(v[1], v[6], v[11], v[12]);
+        mix_0_0(v[2], v[7], v[8], v[13]);
+        mix_0_0(v[3], v[4], v[9], v[14]);
 
-            mix_0_0(v[0], v[4], v[8], v[12]);
-            mix_0_0(v[1], v[5], v[9], v[13]);
-            mix_0_0(v[2], v[6], v[10], v[14]);
-            mix_0_0(v[3], v[7], v[11], v[15]);
-            mix_0_0(v[0], v[5], v[10], v[15]);
-            mix_0_0(v[1], v[6], v[11], v[12]);
-            mix_x_0(v[2], v[7], v[8], v[13], word1);
-            mix_0_0(v[3], v[4], v[9], v[14]);
+        mix_0_0(v[0], v[4], v[8], v[12]);
+        mix_0_0(v[1], v[5], v[9], v[13]);
+        mix_0_0(v[2], v[6], v[10], v[14]);
+        mix_0_0(v[3], v[7], v[11], v[15]);
+        mix_0_0(v[0], v[5], v[10], v[15]);
+        mix_0_0(v[1], v[6], v[11], v[12]);
+        mix_x_0(v[2], v[7], v[8], v[13], word1);
+        mix_0_0(v[3], v[4], v[9], v[14]);
 
-            mix_0_0(v[0], v[4], v[8], v[12]);
-            mix_0_0(v[1], v[5], v[9], v[13]);
-            mix_0_0(v[2], v[6], v[10], v[14]);
-            mix_x_0(v[3], v[7], v[11], v[15], word1);
-            mix_0_0(v[0], v[5], v[10], v[15]);
-            mix_0_0(v[1], v[6], v[11], v[12]);
-            mix_0_0(v[2], v[7], v[8], v[13]);
-            mix_0_0(v[3], v[4], v[9], v[14]);
+        mix_0_0(v[0], v[4], v[8], v[12]);
+        mix_0_0(v[1], v[5], v[9], v[13]);
+        mix_0_0(v[2], v[6], v[10], v[14]);
+        mix_x_0(v[3], v[7], v[11], v[15], word1);
+        mix_0_0(v[0], v[5], v[10], v[15]);
+        mix_0_0(v[1], v[6], v[11], v[12]);
+        mix_0_0(v[2], v[7], v[8], v[13]);
+        mix_0_0(v[3], v[4], v[9], v[14]);
 
-            mix_0_y(v[0], v[4], v[8], v[12], word1);
-            mix_0_0(v[1], v[5], v[9], v[13]);
-            mix_0_0(v[2], v[6], v[10], v[14]);
-            mix_0_0(v[3], v[7], v[11], v[15]);
-            mix_0_0(v[0], v[5], v[10], v[15]);
-            mix_0_0(v[1], v[6], v[11], v[12]);
-            mix_0_0(v[2], v[7], v[8], v[13]);
-            mix_0_0(v[3], v[4], v[9], v[14]);
+        mix_0_y(v[0], v[4], v[8], v[12], word1);
+        mix_0_0(v[1], v[5], v[9], v[13]);
+        mix_0_0(v[2], v[6], v[10], v[14]);
+        mix_0_0(v[3], v[7], v[11], v[15]);
+        mix_0_0(v[0], v[5], v[10], v[15]);
+        mix_0_0(v[1], v[6], v[11], v[12]);
+        mix_0_0(v[2], v[7], v[8], v[13]);
+        mix_0_0(v[3], v[4], v[9], v[14]);
 
-            mix_0_0(v[0], v[4], v[8], v[12]);
-            mix_0_0(v[1], v[5], v[9], v[13]);
-            mix_0_0(v[2], v[6], v[10], v[14]);
-            mix_0_0(v[3], v[7], v[11], v[15]);
-            mix_x_0(v[0], v[5], v[10], v[15], word1);
-            mix_0_0(v[1], v[6], v[11], v[12]);
-            mix_0_0(v[2], v[7], v[8], v[13]);
-            mix_0_0(v[3], v[4], v[9], v[14]);
-    
-            // compress v into the blake state; this produces the 50-byte hash
-            // (two Xi values)
-            h[0] = blake_state[0] ^ v[0] ^ v[8];
-            h[1] = blake_state[1] ^ v[1] ^ v[9];
-            h[2] = blake_state[2] ^ v[2] ^ v[10];
-            h[3] = blake_state[3] ^ v[3] ^ v[11];
-            h[4] = blake_state[4] ^ v[4] ^ v[12];
-            h[5] = blake_state[5] ^ v[5] ^ v[13];
-            h[6] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
+        mix_0_0(v[0], v[4], v[8], v[12]);
+        mix_0_0(v[1], v[5], v[9], v[13]);
+        mix_0_0(v[2], v[6], v[10], v[14]);
+        mix_0_0(v[3], v[7], v[11], v[15]);
+        mix_x_0(v[0], v[5], v[10], v[15], word1);
+        mix_0_0(v[1], v[6], v[11], v[12]);
+        mix_0_0(v[2], v[7], v[8], v[13]);
+        mix_0_0(v[3], v[4], v[9], v[14]);
 
-            // store the two Xi values in the hash table;
+        // compress v into the blake state; this produces the 50-byte hash
+        // (two Xi values)
+        h[0] = blake_state[0] ^ v[0] ^ v[8];
+        h[1] = blake_state[1] ^ v[1] ^ v[9];
+        h[2] = blake_state[2] ^ v[2] ^ v[10];
+        h[3] = blake_state[3] ^ v[3] ^ v[11];
+        h[4] = blake_state[4] ^ v[4] ^ v[12];
+        h[5] = blake_state[5] ^ v[5] ^ v[13];
+        h[6] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
 
-            uint new_row = get_row(0, h[0]);
-            __global uint4 *p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
-            uint nr_slots = inc_gds_row_counter(device_thread, 0, row_counters_round0, new_row);
-            if (nr_slots < _NR_SLOTS(0))
-                p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, new_row, nr_slots);
+        // store the two Xi values in the hash table;
+
+        uint new_row = get_row(0, h[0]);
+        __global uint4 *p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
+        uint nr_slots = inc_gds_row_counter(device_thread, 0, row_counters_round0, new_row);
+        if (nr_slots < _NR_SLOTS(0))
+            p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, new_row, nr_slots);
         
-            uint4 write_buffer0, write_buffer1;
-            __global uint4 *pp = p + 1;
-            __global uint4 *q;
-            __global uint4 *qq;
-            __asm("ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
-                  "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
-                  "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
+        uint4 write_buffer0, write_buffer1;
+        __global uint4 *pp = p + 1;
+        __global uint4 *q;
+        __global uint4 *qq;
+        __asm("ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
+                "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
+                "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
 	        
-                  "v_alignbit_b32_e32 %[xi4], %[h2].y, %[h2].x, 8\n"
-                  "v_alignbit_b32_e32 %[xi5], %[h3].x, %[h2].y, 8\n"
+                "v_alignbit_b32_e32 %[xi4], %[h2].y, %[h2].x, 8\n"
+                "v_alignbit_b32_e32 %[xi5], %[h3].x, %[h2].y, 8\n"
           
-                  "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
-                  "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
+                "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
+                "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
 	      
-	              "v_alignbit_b32_e32 %[xi0], %[h0].y, %[h0].x, 8\n"
-                  "v_alignbit_b32_e32 %[xi1], %[h1].x, %[h0].y, 8\n"
-                  "v_alignbit_b32_e32 %[xi2], %[h1].y, %[h1].x, 8\n"
-                  "v_alignbit_b32_e32 %[xi3], %[h2].x, %[h1].y, 8\n"
-                  "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
-	              "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
-	              "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
+	            "v_alignbit_b32_e32 %[xi0], %[h0].y, %[h0].x, 8\n"
+                "v_alignbit_b32_e32 %[xi1], %[h1].x, %[h0].y, 8\n"
+                "v_alignbit_b32_e32 %[xi2], %[h1].y, %[h1].x, 8\n"
+                "v_alignbit_b32_e32 %[xi3], %[h2].x, %[h1].y, 8\n"
+                "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
+	            "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
+	            "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
 	        
-	                "s_waitcnt lgkmcnt(0)\n"
+	            "s_waitcnt lgkmcnt(0)\n"
 	          
-                    "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
-                    "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
-                    "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
-	                "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
-	                "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
-	                "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
-	                "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
-	                "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
-	                "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
-                    "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
+                "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
+                "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
 
-	                "flat_store_dwordx4 %[q], %[write_buffer0]\n"
-                    "flat_store_dwordx4 %[qq], %[write_buffer1]\n"
+                "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
+	            "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
+                "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
 
-	                "s_waitcnt expcnt(0)\n"
+	            "flat_store_dwordx4 %[q], %[write_buffer0] \n"
+                "flat_store_dwordx4 %[qq], %[write_buffer1] \n"
+
+	            "s_waitcnt expcnt(0)\n" // dangerous
 	        
-                    : [write_buffer0] "=&v" (write_buffer0),
-                    [write_buffer1] "=&v" (write_buffer1),
-                    [pp] "=&v" (pp),
-                    [q] "=&v" (q), 
-                    [qq] "=&v" (qq),
-                    [xi0] "=&v" (xi0),
-                    [xi1] "=&v" (xi1),
-                    [xi2] "=&v" (xi2),
-                    [xi3] "=&v" (xi3),
-                    [xi4] "=&v" (xi4),
-                    [xi5] "=&v" (xi5),
-                    [xi6] "=&v" (xi6)
+                : [write_buffer0] "=&v" (write_buffer0),
+                [write_buffer1] "=&v" (write_buffer1),
+                [pp] "=&v" (pp),
+                [q] "=&v" (q), 
+                [qq] "=&v" (qq),
+                [xi0] "=&v" (xi0),
+                [xi1] "=&v" (xi1),
+                [xi2] "=&v" (xi2),
+                [xi3] "=&v" (xi3),
+                [xi4] "=&v" (xi4),
+                [xi5] "=&v" (xi5),
+                [xi6] "=&v" (xi6)
                 
-                    : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
-                      [p] "v" (p), 
-                      [pp] "2" (pp), 
-                      [h0] "v" (h[0]),
-                      [h1] "v" (h[1]),
-                      [h2] "v" (h[2]),
-                      [h3] "v" (h[3]),
-                      [ref] "v" (input * 2 + 0)
-                
-                    : "memory", "vcc");
-
-            new_row = get_row(0, (uint)h[3] >> 8);
-            p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
-            nr_slots = inc_gds_row_counter(device_thread, 0, row_counters_round0, new_row);
-            if (nr_slots < _NR_SLOTS(0))
-                p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, new_row, nr_slots);
-
-            pp = p + 1;
-            __asm(  "ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
-                    "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
-	                "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
-
-                    "v_alignbit_b32 %[xi4], %[h5].y, %[h5].x, 16\n"
-                    "v_alignbit_b32 %[xi5], %[h6].x, %[h5].y, 16\n"
-
-                    "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
-                    "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
-
-                    "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
-	                "v_alignbit_b32 %[xi0], %[h3].y, %[h3].x, 16\n"
-                    "v_alignbit_b32 %[xi1], %[h4].x, %[h3].y, 16\n"
-                    "v_alignbit_b32 %[xi2], %[h4].y, %[h4].x, 16\n"
-                    "v_alignbit_b32 %[xi3], %[h5].x, %[h4].y, 16\n"
-	                "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
-	                "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
-              
-	                "s_waitcnt lgkmcnt(0)\n"
-	          
-                    "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
-                    "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
-                    "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
-	                "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
-	                "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
-	                "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
-	                "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
-	                "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
-	                "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
-                    "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
-
-	                "flat_store_dwordx4 %[q], %[write_buffer0]\n"
-                    "flat_store_dwordx4 %[qq], %[write_buffer1]\n"
-            
-	                "s_waitcnt expcnt(0)\n"
-	          
-                    : [write_buffer0] "=&v" (write_buffer0),
-                    [write_buffer1] "=&v" (write_buffer1),
-                    [p] "=&v" (p), 
-                    [pp] "=&v" (pp),
-                    [q] "=&v" (q), 
-                    [qq] "=&v" (qq),
-                    [xi0] "=&v" (xi0),
-                    [xi1] "=&v" (xi1),
-                    [xi2] "=&v" (xi2),
-                    [xi3] "=&v" (xi3),
-                    [xi4] "=&v" (xi4),
-                    [xi5] "=&v" (xi5),
-                    [xi6] "=&v" (xi6)
-                
-                    : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
-                    [p] "2" (p), 
-                    [pp] "3" (pp),
+                : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
+                    [p] "v" (p), 
+                    [pp] "2" (pp), 
+                    [h0] "v" (h[0]),
+                    [h1] "v" (h[1]),
+                    [h2] "v" (h[2]),
                     [h3] "v" (h[3]),
-                    [h4] "v" (h[4]),
-                    [h5] "v" (h[5]),
-                    [h6] "v" (h[6]),
-                    [ref] "v" (input * 2 + 1)
+                    [ref] "v" (input * 2 + 0)
                 
-                    : "memory", "vcc");
-        }
+                : "memory", "vcc");
+
+        new_row = get_row(0, (uint)h[3] >> 8);
+        p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, _NR_ROWS(0) - 1, _NR_SLOTS(0) - 1);
+        nr_slots = inc_gds_row_counter(device_thread, 0, row_counters_round0, new_row);
+        if (nr_slots < _NR_SLOTS(0))
+            p = (__global uint4 *)get_slot_ptr(hash_table_round0, 0, new_row, nr_slots);
+
+        pp = p + 1;
+        __asm(  "ds_swizzle_b32 %[pp].x, %[pp].x offset:0x041f\n"
+                "ds_swizzle_b32 %[pp].y, %[pp].y offset:0x041f\n"
+	            "ds_swizzle_b32 %[xi6], %[ref] offset:0x041f\n"
+
+                "v_alignbit_b32 %[xi4], %[h5].y, %[h5].x, 16\n"
+                "v_alignbit_b32 %[xi5], %[h6].x, %[h5].y, 16\n"
+
+                "ds_swizzle_b32 %[xi4], %[xi4] offset:0x041f\n"
+                "ds_swizzle_b32 %[xi5], %[xi5] offset:0x041f\n"
+
+                "v_cmp_eq_u32_e32 vcc, 1, %[second_thread]\n"
+	            "v_alignbit_b32 %[xi0], %[h3].y, %[h3].x, 16\n"
+                "v_alignbit_b32 %[xi1], %[h4].x, %[h3].y, 16\n"
+                "v_alignbit_b32 %[xi2], %[h4].y, %[h4].x, 16\n"
+                "v_alignbit_b32 %[xi3], %[h5].x, %[h4].y, 16\n"
+	            "v_mov_b32         %[write_buffer0].w, %[xi3]\n"
+	            "v_mov_b32         %[write_buffer1].w, %[xi3]\n"
+              
+	            "s_waitcnt lgkmcnt(0)\n"
+	          
+                "v_cndmask_b32_e32 %[q].x, %[pp].x, %[p].x, vcc\n"
+                "v_cndmask_b32_e32 %[q].y, %[pp].y, %[p].y, vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer0].x, %[xi4], %[xi0], vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer0].y, %[xi5], %[xi1], vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer0].z, %[xi6], %[xi2], vcc\n"
+
+                "v_cndmask_b32_e32 %[qq].x, %[p].x, %[pp].x, vcc\n"
+	            "v_cndmask_b32_e32 %[qq].y, %[p].y, %[pp].y, vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer1].x, %[xi0], %[xi4], vcc\n"
+	            "v_cndmask_b32_e32 %[write_buffer1].y, %[xi1], %[xi5], vcc\n"
+                "v_cndmask_b32_e32 %[write_buffer1].z, %[xi2], %[xi6], vcc\n"
+
+	            "flat_store_dwordx4 %[q], %[write_buffer0] \n"
+                "flat_store_dwordx4 %[qq], %[write_buffer1] \n"
+            
+	            "s_waitcnt expcnt(0)\n" // dangerous
+	          
+                : [write_buffer0] "=&v" (write_buffer0),
+                [write_buffer1] "=&v" (write_buffer1),
+                [p] "=&v" (p), 
+                [pp] "=&v" (pp),
+                [q] "=&v" (q), 
+                [qq] "=&v" (qq),
+                [xi0] "=&v" (xi0),
+                [xi1] "=&v" (xi1),
+                [xi2] "=&v" (xi2),
+                [xi3] "=&v" (xi3),
+                [xi4] "=&v" (xi4),
+                [xi5] "=&v" (xi5),
+                [xi6] "=&v" (xi6)
+                
+                : [second_thread] "v" ((uint)(get_local_id(0) & 0x1)),
+                [p] "2" (p), 
+                [pp] "3" (pp),
+                [h3] "v" (h[3]),
+                [h4] "v" (h[4]),
+                [h5] "v" (h[5]),
+                [h6] "v" (h[6]),
+                [ref] "v" (input * 2 + 1)
+                
+                : "memory", "vcc");
     }
     
     barrier(CLK_LOCAL_MEM_FENCE);
@@ -1414,32 +1408,36 @@ void equihash_round(
     uint nr_collisions_copy = *nr_collisions;
     if (nr_collisions_copy >= _LDS_COLL_SIZE(round - 1))
         nr_collisions_copy = _LDS_COLL_SIZE(round - 1);
-    while (nr_collisions_copy > 0) {
-        uint collision, slot_index_a = _NR_SLOTS(round - 1), slot_index_b;
-        __local uint *slot_cache_a, *slot_cache_b;
-        uint write_index = get_local_id(0);
-        if (write_index < nr_collisions_copy) {
-            slot_index_a = collision_array_a[nr_collisions_copy - 1 - write_index];
-            slot_index_b = collision_array_b[nr_collisions_copy - 1 - write_index];
-            slot_cache_a = (__local uint *)&slot_cache[slot_index_a];
-            slot_cache_b = (__local uint *)&slot_cache[slot_index_b];
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    if (get_local_id(0) < nr_foreground_threads) {
+        while (nr_collisions_copy > 0) {
+            uint collision, slot_index_a = _NR_SLOTS(round - 1), slot_index_b;
+            __local uint *slot_cache_a, *slot_cache_b;
+            uint write_index = get_local_id(0);
+            if (write_index < nr_collisions_copy) {
+                slot_index_a = collision_array_a[nr_collisions_copy - 1 - write_index];
+                slot_index_b = collision_array_b[nr_collisions_copy - 1 - write_index];
+                slot_cache_a = (__local uint *)&slot_cache[slot_index_a];
+                slot_cache_b = (__local uint *)&slot_cache[slot_index_b];
+            }
+            if (round == 1) {
+                parallel_xor_and_store_round1(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
+            } else if (round == 3) {
+                parallel_xor_and_store_round3(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
+            } else if (round == 5) {
+                parallel_xor_and_store_round5(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
+            } else if (round == 2) {
+                parallel_xor_and_store_round2(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
+            } else if (round == 4) {
+                parallel_xor_and_store_round4(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
+            } else {
+                xor_and_store(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
+            }
+            nr_collisions_copy -= min(nr_collisions_copy, nr_foreground_threads);
         }
-        barrier(CLK_LOCAL_MEM_FENCE);
-        if (round == 1) {
-            parallel_xor_and_store_round1(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
-        } else if (round == 3) {
-            parallel_xor_and_store_round3(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
-        } else if (round == 5) {
-            parallel_xor_and_store_round5(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
-        } else if (round == 2) {
-            parallel_xor_and_store_round2(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
-        } else if (round == 4) {
-            parallel_xor_and_store_round4(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
-        } else {
-            xor_and_store(device_thread, round, hash_table_src, hash_table_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, row_counters_dst);
-        }
-        nr_collisions_copy -= min(nr_collisions_copy, (uint)get_local_size(0));
-        barrier(CLK_LOCAL_MEM_FENCE);
+    } else {
     }
 }
 
@@ -1448,7 +1446,7 @@ void equihash_round(
 */
 
 #define KERNEL_ROUND(kernel_name, N) \
-__kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE, 1, 1))) \
+__kernel /*__attribute__((reqd_work_group_size(LOCAL_WORK_SIZE, 1, 1)))*/ \
 void kernel_name( \
     uint device_thread, \
     __global char *hash_table_src, \
@@ -1492,7 +1490,7 @@ void mark_potential_sol(__global potential_sols_t *potential_sols, uint ref0, ui
 ** Scan the hash tables to find Equihash solutions.
 */
 
-__kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_POTENTIAL_SOLS, 1, 1)))
+__kernel //__attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_POTENTIAL_SOLS, 1, 1)))
 void kernel_potential_sols(
     uint device_thread,
     __global char *hash_table_src,
@@ -1543,7 +1541,7 @@ void kernel_potential_sols(
 
 
 
-__kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_SOLS, 1, 1)))
+__kernel //__attribute__((reqd_work_group_size(LOCAL_WORK_SIZE_SOLS, 1, 1)))
 void kernel_sols(__global char *ht0,
     __global char *ht1,
     __global sols_t *sols,
