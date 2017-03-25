@@ -1232,13 +1232,22 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
             CL_SET_ARG(buf_ht[round]);
             CL_SET_ARG(row_counters[(round - 1) % 2]);
             CL_SET_ARG(row_counters[round % 2]);
-            worksize = LOCAL_WORK_SIZE;
+            worksize = (round == 8) ? LOCAL_WORK_SIZE_ROUND8 : LOCAL_WORK_SIZE;
             work_items = _NR_ROWS(round - 1) * worksize;
         }
         CL_SET_ARG(clState->padbuffer8);
         if (work_items % worksize)
             work_items += worksize - work_items % worksize;
-        status |= clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL, &work_items, &worksize, 0, NULL, NULL);
+        cl_event enqueue_event;
+        status |= clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL, &work_items, &worksize, 0, NULL, (round == 7) ? &enqueue_event : NULL);
+
+        if (round == 0) {
+            mutex_lock(&equihash_memory_transfer_lock);
+        } else if (round == 7) {
+            clWaitForEvents(1, &enqueue_event);
+            clReleaseEvent(enqueue_event);
+            mutex_unlock(&equihash_memory_transfer_lock);
+        }
     }
 
     unsigned int num = 0;

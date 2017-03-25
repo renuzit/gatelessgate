@@ -174,7 +174,7 @@ void get_row_counters_index(uint *row_counter_index, uint *row_counter_offset, u
 #define GDS_ROW_COUNTERS_SIZE 8192 // ((uint)ROW_COUNTERS_SIZE) 
 #define M0_GDS                (GDS_ROW_COUNTERS_SIZE * 2)
 
-#define USE_GDS_ROW_COUNTERS(device_thread, round, row_counter_index) 1 
+#define USE_GDS_ROW_COUNTERS(device_thread, round, row_counter_index) 1
 
 uint get_nr_slots(uint device_thread, uint round, __global uint *row_counters, uint row_index)
 {
@@ -1230,7 +1230,8 @@ void equihash_round(
 
     const uint nr_slots = get_nr_slots(device_thread, round - 1, rowCountersSrc, assigned_row_index);
 
-    bin_first_slots[get_local_id(0)] = _NR_SLOTS(round - 1);
+    for (i = get_local_id(0); i < _NR_BINS(round - 1); i += get_local_size(0))
+        bin_first_slots[i] = _NR_SLOTS(round - 1);
     for (i = get_local_id(0); i < _NR_SLOTS(round - 1); i += get_local_size(0))
         bin_next_slots[i] = _NR_SLOTS(round - 1);
 
@@ -1418,8 +1419,7 @@ void equihash_round(
 */
 
 #define KERNEL_ROUND(kernel_name, N) \
-__kernel __attribute__((reqd_work_group_size(LOCAL_WORK_SIZE, 1, 1))) \
-void kernel_name(uint device_thread, __global char *ht_src, __global char *ht_dst, \
+__kernel void kernel_name(uint device_thread, __global char *ht_src, __global char *ht_dst, \
 	__global uint *rowCountersSrc, __global uint *rowCountersDst, \
        	__global uint *debug) \
 { \

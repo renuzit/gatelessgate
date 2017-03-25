@@ -61,6 +61,7 @@ char *curly = ":D";
 #include "algorithm.h"
 #include "algorithm/ethash.h"
 #include "algorithm/pascal.h"
+#include "algorithm/equihash.h"
 #include "gbt-util.h"
 #include "pool.h"
 #include "config_parser.h"
@@ -9428,6 +9429,7 @@ int main(int argc, char *argv[])
     rwlock_init(&mining_thr_lock);
     rwlock_init(&devices_lock);
     mutex_init(&algo_switch_lock);
+    mutex_init(&equihash_memory_transfer_lock);
 
     mutex_init(&lp_lock);
     if (unlikely(pthread_cond_init(&lp_cond, NULL)))

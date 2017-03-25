@@ -19,6 +19,7 @@
 */
 #define rotr64(x, n) (((x) >> (n)) | ((x) << (64 - (n))))
 
+pthread_mutex_t equihash_memory_transfer_lock;
 
 static const uint8_t blake2b_sigma[12][16] = {
   {  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15 } ,
