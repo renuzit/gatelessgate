@@ -41,7 +41,7 @@
 //
 
 #define _NR_ROWS_LOG(round)      12
-#define _NR_SLOTS(round)         684
+#define _NR_SLOTS(round)         688
 #define _LDS_COLL_SIZE(round)    ((round) <= 6 ? 784 : 800)
 #define _NR_ROWS(round)          4096
 #define MAX_NR_ROWS              4096
@@ -122,15 +122,13 @@
 #define PREFIX(n, k)             ((n) / ((k) + 1))
 #define MAX_PREFIX               PREFIX(200, 9)
 #define NR_INPUTS(n, k)          (1 << PREFIX((n), (k)))
-#define HASH_TABLE_SIZE(round)	 (_NR_ROWS(round) * _NR_SLOTS(round) * _SLOT_LEN(round))
+#define HASH_TABLE_SIZE(round)	 (_NR_ROWS(round) * (_NR_SLOTS(round) + 64) * _SLOT_LEN(round))
 #define ZCASH_BLOCK_HEADER_LEN	 140
 #define ZCASH_BLOCK_OFFSET_NTIME (4 + 3 * 32)
 #define ZCASH_NONCE_LEN			 32
 #define ZCASH_SOLSIZE_LEN	     3
 #define ZCASH_SOL_LEN(n, k)      ((1 << (k)) * (PREFIX((n), (k)) + 1) / 8)  // 1344
 #define ZCASH_HASH_LEN(n, k)     (((k) + 1) * ((PREFIX((n), (k)) + 7) / 8)) // 50
-#define BLAKE_WPS                10
-// Maximum number of solutions reported by kernel to host
 #define MAX_SOLS			     11
 #define MAX_POTENTIAL_SOLS       4096
 #define SHA256_TARGET_LEN        (256 / 8)

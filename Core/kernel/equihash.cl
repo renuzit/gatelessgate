@@ -102,7 +102,15 @@ typedef __global slot_t *global_pointer_to_slot_t;
 
 __global char *get_slot_ptr(__global char *ht, uint round, uint row, uint slot)
 {
-    return ht + (row * _NR_SLOTS(round) + slot) * _SLOT_LEN(round);
+#ifdef NVIDIA
+    uint chunk_size_log = 4; 
+    chunk_size_log += (_SLOT_LEN(round) == 8) ? 2 : (_SLOT_LEN(round) == 16) ? 1 : 0; 
+    return ht + (slot >> chunk_size_log) * _NR_ROWS(round) * (1 << chunk_size_log)                 * _SLOT_LEN(round)
+              +                            row             * (1 << chunk_size_log)                 * _SLOT_LEN(round)
+              +                                              (slot & ((1 << chunk_size_log) - 1))  * _SLOT_LEN(round);
+#else
+        return ht + (row * _NR_SLOTS(round) + slot) * _SLOT_LEN(round);
+#endif
 }
 
 __global uint *get_xi_ptr(__global char *ht, uint round, uint row, uint slot)

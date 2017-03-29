@@ -733,9 +733,6 @@
     <None Include="..\kernel\ethash-new.cl">
       <Filter>Resource Files\kernel</Filter>
     </None>
-    <None Include="..\binary-kernel\neoscrypt.cl">
-      <Filter>Resource Files\binary-kernel</Filter>
-    </None>
     <None Include="..\binary-kernel\ethash-new.cl">
       <Filter>Resource Files\binary-kernel</Filter>
     </None>
