@@ -66,6 +66,9 @@
 
 #if defined(__GCNMINC__)
 
+#undef  _LDS_COLL_SIZE
+#define _LDS_COLL_SIZE(round)    512
+
 #define OPTIM_16BYTE_READS
 #define OPTIM_16BYTE_WRITES
 #define OPTIM_8BYTE_WRITES

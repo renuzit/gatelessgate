@@ -169,35 +169,16 @@ void get_row_counters_index(uint *row_counter_index, uint *row_counter_offset, u
     }
 }
 
-// The maximum size of GDS segments for RX 480 seems to be 16384.
-
-#define GDS_ROW_COUNTERS_SIZE 8192 // ((uint)ROW_COUNTERS_SIZE) 
-#define M0_GDS                (GDS_ROW_COUNTERS_SIZE * 2)
-
-#define USE_GDS_ROW_COUNTERS(device_thread, round, row_counter_index) 0
-
 uint get_nr_slots(uint device_thread, uint round, __global uint *row_counters, uint row_index)
 {
     uint row_counter_index, row_counter_offset, nr_slots;
     get_row_counters_index(&row_counter_index, &row_counter_offset, row_index);
-
-    uint gds_value;
-    if (USE_GDS_ROW_COUNTERS(device_thread, round, row_counter_index)) {
-         __asm("s_mov_b32   m0, %[m0_gds]\n"
-              "s_nop       0\n"
-              "ds_read_b32 %0, %1 gds\n"
-              "s_waitcnt lgkmcnt(0)\n"
-              : "=v" (gds_value)
-              : "v" ((row_counter_index << 2) + ((round & 1) ? GDS_ROW_COUNTERS_SIZE : 0)),
-                [m0_gds] "s" (M0_GDS)
-              : "m0");
-    } else {
-        gds_value = row_counters[row_counter_index];
-    }
-    nr_slots = (gds_value >> row_counter_offset) & ROW_MASK;
+    nr_slots = (row_counters[row_counter_index] >> row_counter_offset) & ROW_MASK;
     nr_slots = min(nr_slots, (uint)_NR_SLOTS(round)); // handle possible overflow in last round
     return nr_slots;
 }
+
+#define GDS_SEGMENT_SIZE 0x1000
 
 uint inc_gds_row_counter(uint device_thread, uint round, __global uint *row_counters, uint row)
 {
@@ -205,20 +186,31 @@ uint inc_gds_row_counter(uint device_thread, uint round, __global uint *row_coun
     get_row_counters_index(&row_counter_index, &row_counter_offset, row);
 
     uint nr_slots;
-    if (USE_GDS_ROW_COUNTERS(device_thread, round, row_counter_index)) {
-        __asm("s_mov_b32   m0, %[m0_gds]\n"
+    if (row_counter_index < (GDS_SEGMENT_SIZE >> 2)) {
+        __asm volatile
+             ("s_mov_b32   m0, %[gds_segment_size]\n"
               "s_nop       0\n"
               "ds_add_rtn_u32 %[nr_slots], %[shifted_row_counter_index], %[shifted_row_counter_offset] gds\n"
+              //"s_waitcnt   lgkmcnt(0) expcnt(0)\n"
               "s_waitcnt   lgkmcnt(0)\n"
               : [nr_slots] "=v" (nr_slots)
-              : [shifted_row_counter_index] "v" ((row_counter_index << 2) + ((round & 1) ? GDS_ROW_COUNTERS_SIZE : 0)),
+              : [shifted_row_counter_index] "v" (row_counter_index << 2),
                 [shifted_row_counter_offset] "v" (1U << row_counter_offset),
-                [m0_gds] "s" (M0_GDS)
-              : "m0");
+                [gds_segment_size] "s" (GDS_SEGMENT_SIZE)
+              : "m0", "memory");
     } else {
-        nr_slots = atomic_add(&row_counters[row_counter_index], (1U << row_counter_offset));
+        nr_slots = atomic_add(row_counters + row_counter_index, 1U << row_counter_offset);
     }
+
     nr_slots = (nr_slots >> row_counter_offset) & ROW_MASK;
+/*
+#ifndef OPTIM_IGNORE_ROW_COUNTER_OVERFLOWS
+    if (nr_slots >= _NR_SLOTS(round)) {
+        // avoid overflows
+        atomic_sub(row_counters + row_counter_index, 1 << row_counter_offset);
+    }
+#endif
+*/
     return nr_slots;
 }
 
@@ -229,22 +221,25 @@ uint inc_gds_row_counter(uint device_thread, uint round, __global uint *row_coun
 __kernel
 void kernel_init_ht(uint device_thread, uint round, __global uint *hash_table, __global uint *row_counters_src, __global uint *row_counters_dst, __global sols_t *sols, __global potential_sols_t *potential_sols, __global uint *sync_flags)
 {
-    uint gds_index = (get_global_id(0) << 2);
-        
-    if (USE_GDS_ROW_COUNTERS(device_thread, round, get_global_id(0)) && gds_index < GDS_ROW_COUNTERS_SIZE) {
-        uint gds_value;
-        __asm("s_mov_b32   m0, %[m0_gds]\n"
-              "s_nop       0\n"
-              "ds_write_b32 %0, %1 gds\n"
-              "s_waitcnt lgkmcnt(0) expcnt(0)\n"
-              : 
-              : "v" (gds_index + ((round & 1) ? (M0_GDS / 2) : 0)), // dest
-                "v" (0),
-                [m0_gds] "s" (M0_GDS)
-              : "m0");
+    if (get_global_id(0) < (_NR_ROWS(round) + ROWS_PER_UINT - 1) / ROWS_PER_UINT) {
+        uint gds_index = (get_global_id(0) << 2) ;
+        if (gds_index < GDS_SEGMENT_SIZE && gds_index < ROW_COUNTERS_SIZE) {
+            uint gds_value;
+            __asm volatile
+                 ("s_mov_b32   m0, %[gds_segment_size]\n"
+                  "s_nop       0\n"
+                  "ds_read_b32 %0, %1 gds\n"
+                  //"s_waitcnt lgkmcnt(0) expcnt(0)\n"
+                  "ds_write_b32 %1, %2 gds\n"
+                  "s_waitcnt lgkmcnt(0) expcnt(0)\n"
+                  : "=v" (gds_value)
+                  : "v" (gds_index), "v" (0), [gds_segment_size] "s" (GDS_SEGMENT_SIZE)
+                  : "m0", "memory");
+            row_counters_src[get_global_id(0)] = gds_value;
+        }
+        if (round <= 8)
+            row_counters_dst[get_global_id(0)] = 0;
     }
-    if (round <= 8 && !USE_GDS_ROW_COUNTERS(device_thread, round, get_global_id(0)) && get_global_id(0) < (_NR_ROWS(round) + ROWS_PER_UINT - 1) / ROWS_PER_UINT)
-        row_counters_dst[get_global_id(0)] = 0;
     if (round == 0 && !get_global_id(0))
         sols->nr = sols->likely_invalids = potential_sols->nr = 0;
 }
@@ -1230,20 +1225,19 @@ void equihash_round(
 
     const uint nr_slots = get_nr_slots(device_thread, round - 1, rowCountersSrc, assigned_row_index);
 
-    for (i = get_local_id(0); i < _NR_BINS(round - 1); i += get_local_size(0))
-        bin_first_slots[i] = _NR_SLOTS(round - 1);
+     bin_first_slots[get_local_id(0)] = _NR_SLOTS(round - 1);
     for (i = get_local_id(0); i < _NR_SLOTS(round - 1); i += get_local_size(0))
         bin_next_slots[i] = _NR_SLOTS(round - 1);
-
-    if (!get_local_id(0))
-        *nr_collisions = 0;
-
-    barrier(CLK_LOCAL_MEM_FENCE);
 
     // Perform a radix sort as slots get loaded into LDS.
     // Make sure all the work items in the work group enter the loop.
     uint i_max =  nr_slots + get_local_size(0) - (nr_slots / get_local_size(0)) - 1;
     for (i = get_local_id(0); i <= i_max; i += get_local_size(0)) {
+        if (!get_local_id(0))
+            *nr_collisions = 0;
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+
         uint slot_a_index = i;
         uint slot_b_index;
         uint slot_cache_index = i;
@@ -1362,11 +1356,7 @@ void equihash_round(
                 if (UINTS_IN_XI(round - 1) >= 4) slot_cache[3 * _NR_SLOTS(round - 1) + slot_cache_index] = slot_data1.s1;
 
             }
-        }
 
-        //barrier(CLK_LOCAL_MEM_FENCE);
-
-        if (i < nr_slots) {
             while (slot_b_index < _NR_SLOTS(round - 1)) {
                 uint coll_index = atomic_inc(nr_collisions);
                 if (coll_index >= _LDS_COLL_SIZE(round - 1))
@@ -1377,40 +1367,60 @@ void equihash_round(
             }
         }
         
-        //barrier(CLK_LOCAL_MEM_FENCE);
-    }
-        
-    barrier(CLK_LOCAL_MEM_FENCE);
+        barrier(CLK_LOCAL_MEM_FENCE);
 
-    uint nr_collisions_copy = *nr_collisions;
-    if (nr_collisions_copy >= _LDS_COLL_SIZE(round - 1))
-        nr_collisions_copy = _LDS_COLL_SIZE(round - 1);
-    while (nr_collisions_copy > 0) {
-        uint collision, slot_index_a = _NR_SLOTS(round - 1), slot_index_b;
+        uint nr_collisions_copy = *nr_collisions;
+        if (nr_collisions_copy >= _LDS_COLL_SIZE(round - 1))
+            nr_collisions_copy = _LDS_COLL_SIZE(round - 1);
+
         __local uint *slot_cache_a, *slot_cache_b;
-        uint write_index = get_local_id(0);
+        uint write_index;
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+        
+        write_index = get_local_id(0);
+        slot_a_index = _NR_SLOTS(round - 1);
         if (write_index < nr_collisions_copy) {
-            slot_index_a = collision_array_a[nr_collisions_copy - 1 - write_index];
-            slot_index_b = collision_array_b[nr_collisions_copy - 1 - write_index];
-            slot_cache_a = (__local uint *)&slot_cache[slot_index_a];
-            slot_cache_b = (__local uint *)&slot_cache[slot_index_b];
+            slot_a_index = collision_array_a[write_index];
+            slot_b_index = collision_array_b[write_index];
+            slot_cache_a = (__local uint *)&slot_cache[slot_a_index];
+            slot_cache_b = (__local uint *)&slot_cache[slot_b_index];
         }
-        barrier(CLK_LOCAL_MEM_FENCE);
         if (round == 1) {
-            parallel_xor_and_store_round1(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+            parallel_xor_and_store_round1(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_a_index, slot_b_index, slot_cache_a, slot_cache_b, rowCountersDst);
         } else if (round == 3) {
-            parallel_xor_and_store_round3(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+            parallel_xor_and_store_round3(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_a_index, slot_b_index, slot_cache_a, slot_cache_b, rowCountersDst);
         } else if (round == 5) {
-            parallel_xor_and_store_round5(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+            parallel_xor_and_store_round5(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_a_index, slot_b_index, slot_cache_a, slot_cache_b, rowCountersDst);
         } else if (round == 2) {
-            parallel_xor_and_store_round2(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+            parallel_xor_and_store_round2(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_a_index, slot_b_index, slot_cache_a, slot_cache_b, rowCountersDst);
         } else if (round == 4) {
-            parallel_xor_and_store_round4(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+            parallel_xor_and_store_round4(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_a_index, slot_b_index, slot_cache_a, slot_cache_b, rowCountersDst);
         } else {
-            xor_and_store(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_index_a, slot_index_b, slot_cache_a, slot_cache_b, rowCountersDst);
+            xor_and_store(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_a_index, slot_b_index, slot_cache_a, slot_cache_b, rowCountersDst);
         }
-        nr_collisions_copy -= min(nr_collisions_copy, (uint)get_local_size(0));
-        barrier(CLK_LOCAL_MEM_FENCE);
+        
+        write_index = get_local_size(0) + get_local_id(0);
+        slot_a_index = _NR_SLOTS(round - 1);
+        if (write_index < nr_collisions_copy) {
+            slot_a_index = collision_array_a[write_index];
+            slot_b_index = collision_array_b[write_index];
+            slot_cache_a = (__local uint *)&slot_cache[slot_a_index];
+            slot_cache_b = (__local uint *)&slot_cache[slot_b_index];
+        }
+        if (round == 1) {
+            parallel_xor_and_store_round1(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_a_index, slot_b_index, slot_cache_a, slot_cache_b, rowCountersDst);
+        } else if (round == 3) {
+            parallel_xor_and_store_round3(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_a_index, slot_b_index, slot_cache_a, slot_cache_b, rowCountersDst);
+        } else if (round == 5) {
+            parallel_xor_and_store_round5(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_a_index, slot_b_index, slot_cache_a, slot_cache_b, rowCountersDst);
+        } else if (round == 2) {
+            parallel_xor_and_store_round2(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_a_index, slot_b_index, slot_cache_a, slot_cache_b, rowCountersDst);
+        } else if (round == 4) {
+            parallel_xor_and_store_round4(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_a_index, slot_b_index, slot_cache_a, slot_cache_b, rowCountersDst);
+        } else {
+            xor_and_store(device_thread, round, ht_src, ht_dst, assigned_row_index, slot_a_index, slot_b_index, slot_cache_a, slot_cache_b, rowCountersDst);
+        }
     }
 }
 

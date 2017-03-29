@@ -1239,8 +1239,9 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
         if (work_items % worksize)
             work_items += worksize - work_items % worksize;
         cl_event enqueue_event;
+#ifdef _MSC_VER
         status |= clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL, &work_items, &worksize, 0, NULL, (round == 7) ? &enqueue_event : NULL);
-
+        
         if (round == 0) {
             mutex_lock(&equihash_memory_transfer_lock);
         } else if (round == 7) {
@@ -1248,6 +1249,9 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
             mutex_unlock(&equihash_memory_transfer_lock);
             clReleaseEvent(enqueue_event);
         }
+#else
+        status |= clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL, &work_items, &worksize, 0, NULL, NULL);
+#endif
     }
 
     unsigned int num = 0;
