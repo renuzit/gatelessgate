@@ -1480,43 +1480,48 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
 
             status = thrdata->queue_kernel_parameters(clState, &work->blk, thr->device_thread);
             cl_event read_event;
-            status |= clEnqueueReadBuffer(clState->commandQueue, clState->outputBuffer, CL_FALSE, 0, length, thrdata->res, 0, NULL, &read_event);
+            int is_platform_nvidia = (strcmp(platform_name, "NVIDIA CUDA") == 0);
+            status |= clEnqueueReadBuffer(
+                clState->commandQueue, 
+                clState->outputBuffer, 
+                is_platform_nvidia ? CL_FALSE : CL_TRUE, 
+                0, 
+                length, 
+                thrdata->res, 
+                0, NULL,
+                is_platform_nvidia ? &read_event : NULL);
 
             // NVIDIA busy CPU fix
-            if (strcmp(platform_name, "NVIDIA CUDA") == 0) {
-                struct timespec start_time, target_time;
+            if (is_platform_nvidia) {
+                struct timespec start_time, target_time, end_time;
                 get_time(&start_time);
 
-                double dstart, dtarget = 0;
+                double dstart, dtarget = 0, delta, dend;
                 dstart = timespec_to_double(&start_time);
                 dtarget = dstart + thrdata->kern_avg_run_time;
                 double_to_timespec(dtarget, &target_time);
 
                 // Ratio of time to busy wait for the solution (0-1)
                 // The higher value the higher CPU usage with Nvidia
-#define SLEEP_SKIP_RATIO 0.10
+#define SLEEP_SKIP_RATIO 0.15
 
                 struct timespec t;
                 get_time(&t);
                 double dt = timespec_to_double(&t);
-                double delta = dtarget - dt;
+                delta = dtarget - dt;
                 if (delta > 0) {
                     double_to_timespec(delta * (1 - SLEEP_SKIP_RATIO), &t);
                     nanosleep(&t, NULL);
                 }
                 clWaitForEvents(1, &read_event);
+                clReleaseEvent(read_event);
 
-                struct timespec end_time;
                 get_time(&end_time);
-
-                double dend;
                 dstart = timespec_to_double(&start_time);
                 dend = timespec_to_double(&end_time);
 
                 delta = dend - dstart;
                 thrdata->kern_avg_run_time = thrdata->kern_avg_run_time * 6.0 / 10.0 + delta * ((4.0 / 10.0));
-            } else {
-                clWaitForEvents(1, &read_event);
             }
 
             if (status == CL_SUCCESS) {

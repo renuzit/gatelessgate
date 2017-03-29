@@ -174,7 +174,7 @@ void get_row_counters_index(uint *row_counter_index, uint *row_counter_offset, u
 #define GDS_ROW_COUNTERS_SIZE 8192 // ((uint)ROW_COUNTERS_SIZE) 
 #define M0_GDS                (GDS_ROW_COUNTERS_SIZE * 2)
 
-#define USE_GDS_ROW_COUNTERS(device_thread, round, row_counter_index) 1
+#define USE_GDS_ROW_COUNTERS(device_thread, round, row_counter_index) 0
 
 uint get_nr_slots(uint device_thread, uint round, __global uint *row_counters, uint row_index)
 {

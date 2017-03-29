@@ -189,21 +189,21 @@ static cl_int queue_scrypt_kernel(struct __clState *clState, struct _dev_blk_ctx
 
 static cl_int queue_pascal_kernel(struct __clState *clState, struct _dev_blk_ctx *blk, __maybe_unused cl_uint threads)
 {
-  cl_kernel *kernel = &clState->kernel;
-  unsigned int num = 0;
-  cl_ulong le_target;
-  cl_int status = 0;
+    cl_kernel *kernel = &clState->kernel;
+    unsigned int num = 0;
+    cl_ulong le_target;
+    cl_int status = 0;
 
-  le_target = *(cl_ulong *)(blk->work->device_target + 24);
-  flip196(clState->cldata, blk->work->data);
-  status = clEnqueueWriteBuffer(clState->commandQueue, clState->CLbuffer0, true, 0, 196, clState->cldata, 0, NULL, NULL);
+    le_target = *(cl_ulong *)(blk->work->device_target + 24);
+    flip196(clState->cldata, blk->work->data);
+    status = clEnqueueWriteBuffer(clState->commandQueue, clState->CLbuffer0, true, 0, 196, clState->cldata, 0, NULL, NULL);
 
-  CL_SET_ARG(clState->CLbuffer0);
-  CL_SET_ARG(clState->outputBuffer);
-  CL_SET_ARG(le_target);
-  CL_SET_ARG(blk->work->midstate);
+    CL_SET_ARG(clState->CLbuffer0);
+    CL_SET_ARG(clState->outputBuffer);
+    CL_SET_ARG(le_target);
+    CL_SET_ARG(blk->work->midstate);
 
-  return status;
+    return status;
 }
 
 static cl_int queue_neoscrypt_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint threads)
@@ -1142,7 +1142,7 @@ static cl_int queue_cryptonight_kernel(_clState *clState, dev_blk_ctx *blk, __ma
     CL_NEXTKERNEL_SET_ARG(clState->States);
     CL_SET_ARG(clState->BranchBuffer[0]);
     CL_SET_ARG(clState->outputBuffer);
-    CL_SET_ARG(tgt32);  
+    CL_SET_ARG(tgt32);
 
     // last to be set in driver-opencl.c
 
