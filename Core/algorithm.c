@@ -1245,8 +1245,8 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
             mutex_lock(&equihash_memory_transfer_lock);
         } else if (round == 7) {
             clWaitForEvents(1, &enqueue_event);
-            clReleaseEvent(enqueue_event);
             mutex_unlock(&equihash_memory_transfer_lock);
+            clReleaseEvent(enqueue_event);
         }
     }
 
@@ -1402,6 +1402,7 @@ static algorithm_settings_t algos[] = {
 
     { "ethash",     ALGO_ETHASH,   "", (1ULL << 32), (1ULL << 32), 1, 0, 0, 0xFF, 0xFFFF000000000000ULL, 0x00000000UL, 0, 128, 0, ethash_regenhash, NULL, queue_ethash_kernel, gen_hash, append_ethash_compiler_options },
     { "ethash-genoil",     ALGO_ETHASH,   "", (1ULL << 32), (1ULL << 32), 1, 0, 0, 0xFF, 0xFFFF000000000000ULL, 0x00000000UL, 0, 128, 0, ethash_regenhash, NULL, queue_ethash_kernel, gen_hash, append_ethash_compiler_options },
+    { "ethash-new",     ALGO_ETHASH,   "", 1, 1, 1, 0, 0, 0xFF, 0xFFFF000000000000ULL, 0x000000FFUL, 0, 128, 0, ethash_regenhash, NULL, queue_ethash_kernel, gen_hash, append_ethash_compiler_options },
 
     { "cryptonight", ALGO_CRYPTONIGHT, "", (1ULL << 32), (1ULL << 32), (1ULL << 32), 0, 0, 0xFF, 0xFFFFULL, 0x0000ffffUL, 6, 0, 0, cryptonight_regenhash, NULL, queue_cryptonight_kernel, gen_hash, NULL },
 

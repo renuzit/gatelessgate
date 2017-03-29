@@ -437,6 +437,8 @@ clrxasm "$(ProjectDir)..\kernel\equihash-gcn1-ocl12-32bit.asm" -g Tahiti -o "$(O
   </ItemGroup>
   <ItemGroup>
     <None Include="..\binary-kernel\equihash.cl" />
+    <None Include="..\binary-kernel\ethash-new.cl" />
+    <None Include="..\binary-kernel\neoscrypt.cl" />
     <None Include="..\kernel\aes_helper.cl" />
     <None Include="..\kernel\alexkarnew.cl" />
     <None Include="..\kernel\alexkarold.cl" />
@@ -464,6 +466,7 @@ clrxasm "$(ProjectDir)..\kernel\equihash-gcn1-ocl12-32bit.asm" -g Tahiti -o "$(O
     <None Include="..\kernel\equihash-zero.cl" />
     <None Include="..\kernel\equihash.cl" />
     <None Include="..\kernel\ethash-genoil.cl" />
+    <None Include="..\kernel\ethash-new.cl" />
     <None Include="..\kernel\ethash.cl" />
     <None Include="..\kernel\fresh.cl" />
     <None Include="..\kernel\fugue.cl" />
