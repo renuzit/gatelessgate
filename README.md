@@ -1,21 +1,21 @@
 # Gateless Gate
 
-- [Download precompiled binaries for 64-bit Windows (0.1.3-pre3)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.3-pre3/gatelessgate-0.1.3-pre3-win64.zip)
-- [Download the source code for Linux (0.1.3-pre3)](https://github.com/zawawawa/gatelessgate/archive/v0.1.3-pre3.tar.gz)
+- [Download precompiled binaries for 64-bit Windows (0.1.3-pre4)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.3-pre4/gatelessgate-0.1.3-pre4-win64.zip)
+- [Download the source code for Linux (0.1.3-pre4)](https://github.com/zawawawa/gatelessgate/archive/v0.1.3-pre4.tar.gz)
 - [Download precompiled binaries for 64-bit Windows (0.1.2)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.2/gatelessgate-0.1.2-win64.zip) 
 - [Download the source code for Linux (0.1.2)](https://github.com/zawawawa/gatelessgate/archive/v0.1.2.tar.gz)
 
 Gateless Gate is a cross-platform OpenCL ZEC/ETH/XMR/PASC/FTC miner for video cards with the AMD GCN architecture and the NVIDIA Maxwell and Pascal architectures.
 It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://github.com/mbevand/silentarmy) with a significant speed
 boost combined with the well-tested user-interface and back-end of [sgminer-gm](https://github.com/genesismining/sgminer-gm).
-This miner runs at around 250 sol/s on RX 480 and 180 sol/s on GTX 1060 3GB. For optimal performance, you need to run the miner on Linux for now.
+This miner runs at around 256 sol/s on stock RX 480 and 193 sol/s on stock GTX 1060 3GB. (For optimal performance for ZEC mining, you need to run the miner on Linux for now.)
 
 On 64-bit Windows operating systems, all you have to do for mining is to download the precompiled binary and edit and run 
 one of the .BAT files. This miner has been tested against AMD Crimson Software 16.9.2 and NVIDIA Display Driver 376.33.
 
 On Linux, you should be able to build the miner with the Makefile in the repository. Both AMDGPU-PRO drivers and fglrx drivers are supported now. Please refer to the documentation of the original sgminer-gm below for details. This miner has been tested with the following distributions:
 
-* Ubuntu 16.04.02 LTS with Linux Kernel 4.10.1 and AMDGPU-PRO 16.60.
+* Ubuntu 16.04.01 LTS with Linux Kernel 4.10.1 and AMDGPU-PRO 16.60.
 * Ubuntu 14.04.01 LTS with fglrx-updates.
 
 

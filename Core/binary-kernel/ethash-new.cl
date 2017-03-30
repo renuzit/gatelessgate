@@ -2,7 +2,7 @@
 uint2 amd_bitalign(uint2 src0, uint2 src1, uint2 src2)
 {
     uint2 dst;
-    __asm("v_alignbit_b32 %0, %2, %3, %4"
+    __asm("v_alignbit_b32 %0, %2, %3, %4\n"
           "v_alignbit_b32 %1, %5, %6, %7"
           : "=v" (dst.x), "=v" (dst.y)
           : "v" (src0.x), "v" (src1.x), "v" (src2.x),
@@ -15,8 +15,12 @@ uint2 amd_bitalign(uint2 src0, uint2 src1, uint2 src2)
 #elif defined(cl_nv_pragma_unroll)
 uint amd_bitalign(uint src0, uint src1, uint src2)
 {
-    uint dest;
-    asm("shf.r.wrap.b32 %0, %2, %1, %3;" : "=r"(dest) : "r"(src0), "r"(src1), "r"(src2));
+    uint2 dest;
+    asm("shf.r.wrap.b32 %0, %3, %2, %4;"
+        "shf.r.wrap.b32 %1, %6, %5, %7;"
+        : "=r"(dest.x), "=r"(dest.y) 
+        : "r"(src0.x), "r"(src1.x), "r"(src2.x),
+          "r"(src0.y), "r"(src1.y), "r"(src2.y));
     return dest;
 }
 #else
@@ -230,6 +234,32 @@ __kernel void search(
     uint isolate
     )
 {
+    uint2 const Keccak_f1600_RC[24] = {
+        (uint2)(0x00000001, 0x00000000),
+        (uint2)(0x00008082, 0x00000000),
+        (uint2)(0x0000808a, 0x80000000),
+        (uint2)(0x80008000, 0x80000000),
+        (uint2)(0x0000808b, 0x00000000),
+        (uint2)(0x80000001, 0x00000000),
+        (uint2)(0x80008081, 0x80000000),
+        (uint2)(0x00008009, 0x80000000),
+        (uint2)(0x0000008a, 0x00000000),
+        (uint2)(0x00000088, 0x00000000),
+        (uint2)(0x80008009, 0x00000000),
+        (uint2)(0x8000000a, 0x00000000),
+        (uint2)(0x8000808b, 0x00000000),
+        (uint2)(0x0000008b, 0x80000000),
+        (uint2)(0x00008089, 0x80000000),
+        (uint2)(0x00008003, 0x80000000),
+        (uint2)(0x00008002, 0x80000000),
+        (uint2)(0x00000080, 0x80000000),
+        (uint2)(0x0000800a, 0x00000000),
+        (uint2)(0x8000000a, 0x80000000),
+        (uint2)(0x80008081, 0x80000000),
+        (uint2)(0x00008080, 0x80000000),
+        (uint2)(0x80000001, 0x00000000),
+        (uint2)(0x80008008, 0x80000000),
+    };
     __global hash128_t const* g_dag = (__global hash128_t const*) _g_dag;
     const uint gid = get_global_id(0);
     const uint thread_id = get_local_id(0) % 4;
@@ -328,6 +358,32 @@ typedef union _Node
 
 static void SHA3_512(uint2 *s, uint isolate)
 {
+    uint2 const Keccak_f1600_RC[24] = {
+        (uint2)(0x00000001, 0x00000000),
+        (uint2)(0x00008082, 0x00000000),
+        (uint2)(0x0000808a, 0x80000000),
+        (uint2)(0x80008000, 0x80000000),
+        (uint2)(0x0000808b, 0x00000000),
+        (uint2)(0x80000001, 0x00000000),
+        (uint2)(0x80008081, 0x80000000),
+        (uint2)(0x00008009, 0x80000000),
+        (uint2)(0x0000008a, 0x00000000),
+        (uint2)(0x00000088, 0x00000000),
+        (uint2)(0x80008009, 0x00000000),
+        (uint2)(0x8000000a, 0x00000000),
+        (uint2)(0x8000808b, 0x00000000),
+        (uint2)(0x0000008b, 0x80000000),
+        (uint2)(0x00008089, 0x80000000),
+        (uint2)(0x00008003, 0x80000000),
+        (uint2)(0x00008002, 0x80000000),
+        (uint2)(0x00000080, 0x80000000),
+        (uint2)(0x0000800a, 0x00000000),
+        (uint2)(0x8000000a, 0x80000000),
+        (uint2)(0x80008081, 0x80000000),
+        (uint2)(0x00008080, 0x80000000),
+        (uint2)(0x80000001, 0x00000000),
+        (uint2)(0x80008008, 0x80000000),
+    };
     uint2 st[25];
     
     for (uint i = 0; i < 8; ++i)

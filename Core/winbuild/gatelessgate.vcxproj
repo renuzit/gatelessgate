@@ -436,8 +436,11 @@ clrxasm "$(ProjectDir)..\kernel\equihash-gcn1-ocl12-32bit.asm" -g Tahiti -o "$(O
     <ClInclude Include="dist\include\winbuild.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\..\README.md" />
     <None Include="..\binary-kernel\equihash.cl" />
     <None Include="..\binary-kernel\ethash-new.cl" />
+    <None Include="..\binary-kernel\neoscrypt.cl" />
+    <None Include="..\configure.ac" />
     <None Include="..\kernel\aes_helper.cl" />
     <None Include="..\kernel\alexkarnew.cl" />
     <None Include="..\kernel\alexkarold.cl" />
@@ -517,7 +520,6 @@ clrxasm "$(ProjectDir)..\kernel\equihash-gcn1-ocl12-32bit.asm" -g Tahiti -o "$(O
     <None Include="..\kernel\yescrypt.cl" />
     <None Include="..\kernel\yescrypt_essential.cl" />
     <None Include="..\kernel\zuikkis.cl" />
-    <None Include="..\README.md" />
     <None Include="README.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
