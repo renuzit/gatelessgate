@@ -16,7 +16,7 @@ cl_program load_opencl_binary_kernel(build_kernel_data *data)
 #ifdef _MSC_VER
   strcpy(bin_path, "binary-kernel\\");
 #else
-  strcpy(bin_path, "binary-kernel/");
+  strcpy(bin_path, "./binary-kernel/");
 #endif
   strcat(bin_path, data->binary_filename);
   binaryfile = fopen(bin_path, "rb");
