@@ -1183,8 +1183,8 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
     uint64_t mid_hash[8];
     equihash_calc_mid_hash(mid_hash, blk->work->equihash_data);
     status = clEnqueueWriteBuffer(clState->commandQueue, clState->MidstateBuf, CL_TRUE, 0, sizeof(mid_hash), mid_hash, 0, NULL, NULL);
-    uint32_t dbg[2] = { 0 };
-    status |= clEnqueueWriteBuffer(clState->commandQueue, clState->padbuffer8, CL_TRUE, 0, sizeof(dbg), &dbg, 0, NULL, NULL);
+    //uint32_t dbg[2] = { 0 };
+    //status |= clEnqueueWriteBuffer(clState->commandQueue, clState->padbuffer8, CL_TRUE, 0, sizeof(dbg), &dbg, 0, NULL, NULL);
 
     cl_mem buf_ht[9] = {
         clState->CLbuffer0,
@@ -1243,10 +1243,10 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
         status |= clEnqueueNDRangeKernel(clState->commandQueue, *kernel, 1, NULL, &work_items, &worksize, 0, NULL, (round == 7) ? &enqueue_event : NULL);
         
         if (round == 0) {
-            mutex_lock(&equihash_memory_transfer_lock);
+            mutex_lock(&blk->work->thr->cgpu->equihash_memory_transfer_lock);
         } else if (round == 7) {
             clWaitForEvents(1, &enqueue_event);
-            mutex_unlock(&equihash_memory_transfer_lock);
+            mutex_unlock(&blk->work->thr->cgpu->equihash_memory_transfer_lock);
             clReleaseEvent(enqueue_event);
         }
 #else
