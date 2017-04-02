@@ -262,9 +262,7 @@ del  "$(OutDir)*.bin"</Command>
     </Link>
     <PostBuildEvent>
       <Command>del "$(OutDir)kernel\*.*"
-del "$(OutDir)binary-kernel\*.*"
 xcopy /Y /E /I "$(ProjectDir)..\kernel" "$(OutDir)kernel"
-xcopy /Y /E /I "$(ProjectDir)..\binary-kernel" "$(OutDir)binary-kernel"
 copy /Y "$(ProjectDir)..\*.bat" "$(OutDir)"
 </Command>
     </PostBuildEvent>

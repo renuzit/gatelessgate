@@ -1,3 +1,7 @@
+#if (defined(__Tahiti__) || defined(__Pitcairn__) || defined(__Capeverde__) || defined(__Oland__) || defined(__Hainan__))
+#define LEGACY
+#endif
+
 #if defined(__GCNMINC__)
 uint2 amd_bitalign(uint2 src0, uint2 src1, uint2 src2)
 {
@@ -284,23 +288,14 @@ __kernel void search(
         for (uint a = 0; a < ACCESSES; a += 8) {
 #endif
             const uint lane_idx = 4*hash_id + a / 8 % 4;
-        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(0);
-        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(1);
-        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(2);
-        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(3);
-        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(4);
-        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(5);
-        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(6);
-        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(7);
-        barrier(CLK_LOCAL_MEM_FENCE);
         }
 
         barrier(CLK_LOCAL_MEM_FENCE);
