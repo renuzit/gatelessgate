@@ -1,4 +1,4 @@
-#ifdef cl_amd_media_ops2
+#if defined(cl_amd_media_ops2) && !defined(__GCNMINC__)
 #pragma OPENCL EXTENSION cl_amd_media_ops2 : enable
 #else
 uint amd_bfe(uint src0, uint src1, uint src2)
@@ -14,10 +14,33 @@ uint amd_bfe(uint src0, uint src1, uint src2)
 }
 #endif
 
-#ifdef cl_amd_media_ops
+#if defined(__GCNMINC__)
+uint2 amd_bitalign(uint2 src0, uint2 src1, uint2 src2)
+{
+    uint2 dst;
+    __asm("v_alignbit_b32 %0, %2, %3, %4\n"
+          "v_alignbit_b32 %1, %5, %6, %7"
+          : "=v" (dst.x), "=v" (dst.y)
+          : "v" (src0.x), "v" (src1.x), "v" (src2.x),
+		    "v" (src0.y), "v" (src1.y), "v" (src2.y));
+    return dst;
+}
+#define mem_fence barrier
+#elif defined(cl_amd_media_ops) && !defined(__GCNMINC__)
 #pragma OPENCL EXTENSION cl_amd_media_ops : enable
+#elif defined(cl_nv_pragma_unroll)
+uint amd_bitalign(uint src0, uint src1, uint src2)
+{
+    uint2 dest;
+    asm("shf.r.wrap.b32 %0, %3, %2, %4;\n"
+        "shf.r.wrap.b32 %1, %6, %5, %7;"
+        : "=r"(dest.x), "=r"(dest.y) 
+        : "r"(src0.x), "r"(src1.x), "r"(src2.x),
+          "r"(src0.y), "r"(src1.y), "r"(src2.y));
+    return dest;
+}
 #else
-#define amd_bitalign(src0, src1, src2) ((uint) (((((long)(src0)) << 32) | (long)(src1)) >> ((src2) & 31)))
+#define amd_bitalign(src0, src1, src2) ((uint) (((((ulong)(src0)) << 32) | (ulong)(src1)) >> ((src2) & 31)))
 #endif
 
 #ifdef cl_nv_pragma_unroll

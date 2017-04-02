@@ -20,6 +20,25 @@
 ** along with this program. If not, see <http://www.gnu.org/licenses/>.
 **/
 
+
+
+.ifarch gcn1.1
+	.macro v_lshlrev_b32, arg1, arg2, arg3
+		v_lshl_b32 \arg1, \arg3, \arg2
+	.endm
+	.macro v_lshlrev_b64, arg1, arg2, arg3
+		v_lshl_b64 \arg1, \arg3, \arg2
+	.endm
+    .macro v_add_u32, arg1, arg2, arg3, arg4
+	    v_add_i32 \arg1, \arg2, \arg3, \arg4
+	.endm
+    .macro v_mul_lo_u32, arg1, arg2, arg3
+	    v_mul_lo_i32 \arg1, \arg2, \arg3
+	.endm
+.endif
+
+
+
 .amdcl2
 .64bit
 .driver_version 200406
@@ -145,10 +164,10 @@
 /*7ed80280         */ v_mov_b32       v108, 0
 /*7e680280         */ v_mov_b32       v52, 0
 /*7eda0280         */ v_mov_b32       v109, 0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
 .L320_0:
 /*bf059608         */ s_cmp_le_i32    s8, 22
 /*bf840180         */ s_cbranch_scc0  .L1864_0
@@ -284,7 +303,7 @@
 /*2a222339         */ v_xor_b32       v17, v57, v17
 /*2a0ebb39         */ v_xor_b32       v7, v57, v93
 /*2a5ed139         */ v_xor_b32       v47, v57, v104
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*d1ce0034 02661d0f*/ v_alignbit_b32  v52, v15, v14, 25
 /*d1ce000e 02661f0e*/ v_alignbit_b32  v14, v14, v15, 25
 /*d1ce000f 0226352a*/ v_alignbit_b32  v15, v42, v26, 9
@@ -688,7 +707,7 @@
 /*d8ee0302 2800001f*/ ds_read2_b64    v[40:43], v31 offset0:2 offset1:3
 /*d8ee0100 2c00001f*/ ds_read2_b64    v[44:47], v31 offset1:1
 /*bf8c007f         */ s_waitcnt       lgkmcnt(0)
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*d285002d 0000112d*/ v_mul_lo_u32    v45, v45, s8
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*d2850028 00024f28*/ v_mul_lo_u32    v40, v40, v39
@@ -762,7 +781,7 @@
 /*2a527329         */ v_xor_b32       v41, v41, v57
 /*2a5e7f2f         */ v_xor_b32       v47, v47, v63
 /*2a5c7d2e         */ v_xor_b32       v46, v46, v62
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*d285002e 00024f2e*/ v_mul_lo_u32    v46, v46, v39
 /*d285002f 00024f2f*/ v_mul_lo_u32    v47, v47, v39
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
@@ -3632,7 +3651,7 @@
 /*d8ee0302 2800001f*/ ds_read2_b64    v[40:43], v31 offset0:2 offset1:3
 /*d8ee0100 2c00001f*/ ds_read2_b64    v[44:47], v31 offset1:1
 /*bf8c007f         */ s_waitcnt       lgkmcnt(0)
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*d285002d 0000112d*/ v_mul_lo_u32    v45, v45, s8
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*d2850028 00024f28*/ v_mul_lo_u32    v40, v40, v39
@@ -3706,7 +3725,7 @@
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a5e832f         */ v_xor_b32       v47, v47, v65
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*d285002e 00024f2e*/ v_mul_lo_u32    v46, v46, v39
 /*d285002f 00024f2f*/ v_mul_lo_u32    v47, v47, v39
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
@@ -6642,7 +6661,7 @@
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a5e832f         */ v_xor_b32       v47, v47, v65
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*d285002e 00024f2e*/ v_mul_lo_u32    v46, v46, v39
 /*d285002f 00024f2f*/ v_mul_lo_u32    v47, v47, v39
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
@@ -9506,7 +9525,7 @@
 /*d8ee0302 2600001f*/ ds_read2_b64    v[38:41], v31 offset0:2 offset1:3
 /*d8ee0100 2a00001f*/ ds_read2_b64    v[42:45], v31 offset1:1
 /*bf8c007f         */ s_waitcnt       lgkmcnt(0)
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*d285001f 0000112b*/ v_mul_lo_u32    v31, v43, s8
 /*d2850021 00023d27*/ v_mul_lo_u32    v33, v39, v30
 /*d2850023 00023d26*/ v_mul_lo_u32    v35, v38, v30
@@ -9580,7 +9599,7 @@
 /*2a426b21         */ v_xor_b32       v33, v33, v53
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*d2850028 00023d28*/ v_mul_lo_u32    v40, v40, v30
 /*d2850029 00023d29*/ v_mul_lo_u32    v41, v41, v30
 /*d2850021 00023d21*/ v_mul_lo_u32    v33, v33, v30
@@ -12447,8 +12466,8 @@
 /*7e600280         */ v_mov_b32       v48, 0
 /*7e620280         */ v_mov_b32       v49, 0
 /*7e420280         */ v_mov_b32       v33, 0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
 .L72800_0:
 /*bf059608         */ s_cmp_le_i32    s8, 22
 /*bf840180         */ s_cbranch_scc0  .L74344_0
@@ -12584,7 +12603,7 @@
 /*2a181936         */ v_xor_b32       v12, v54, v12
 /*2a1cc336         */ v_xor_b32       v14, v54, v97
 /*2a3ccb36         */ v_xor_b32       v30, v54, v101
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*d1ce0031 02661b03*/ v_alignbit_b32  v49, v3, v13, 25
 /*d1ce0003 0266070d*/ v_alignbit_b32  v3, v13, v3, 25
 /*d1ce000d 02265721*/ v_alignbit_b32  v13, v33, v43, 9
@@ -12993,12 +13012,12 @@
 /*7ebe0280         */ v_mov_b32       v95, 0
 /*7ec00280         */ v_mov_b32       v96, 0
 /*7e160280         */ v_mov_b32       v11, 0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
 .L512_1:
 /*bf059604         */ s_cmp_le_i32    s4, 22
 /*bf840180         */ s_cbranch_scc0  .L2056_1
@@ -13134,7 +13153,7 @@
 /*2a64653a         */ v_xor_b32       v50, v58, v50
 /*2a14bd3a         */ v_xor_b32       v10, v58, v94
 /*2a28d93a         */ v_xor_b32       v20, v58, v108
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*d1ce0035 02666333*/ v_alignbit_b32  v53, v51, v49, 25
 /*d1ce0031 02666731*/ v_alignbit_b32  v49, v49, v51, 25
 /*d1ce0033 02264d27*/ v_alignbit_b32  v51, v39, v38, 9
@@ -13492,8 +13511,8 @@
 /*7efe0354         */ v_mov_b32       v127, v84
 /*b0040003         */ s_movk_i32      s4, 0x3
 /*b0050040         */ s_movk_i32      s5, 0x40
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
 .L2848_1:
 /*bf088005         */ s_cmp_gt_u32    s5, 0
 /*bf8407b3         */ s_cbranch_scc0  .L10740_1
@@ -13619,7 +13638,7 @@
 /*d28f0018 00023086*/ v_lshlrev_b64   v[24:25], 6, v[24:25]
 /*3230300c         */ v_add_u32       v24, vcc, s12, v24
 /*38323317         */ v_addc_u32      v25, vcc, v23, v25, vcc
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*dc5c0000 1a000018*/ flat_load_dwordx4 v[26:29], v[24:25] slc glc
 /*d1196a1e 00012118*/ v_add_u32       v30, vcc, v24, 16
 /*d11c6a1f 01a90119*/ v_addc_u32      v31, vcc, v25, 0, vcc
@@ -13707,7 +13726,7 @@
 /*d28f0018 00023086*/ v_lshlrev_b64   v[24:25], 6, v[24:25]
 /*3230300c         */ v_add_u32       v24, vcc, s12, v24
 /*38323317         */ v_addc_u32      v25, vcc, v23, v25, vcc
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*dc5c0000 1a000018*/ flat_load_dwordx4 v[26:29], v[24:25] slc glc
 /*d1196a1e 00012118*/ v_add_u32       v30, vcc, v24, 16
 /*d11c6a1f 01a90119*/ v_addc_u32      v31, vcc, v25, 0, vcc
@@ -13881,7 +13900,7 @@
 /*d28f0018 00023086*/ v_lshlrev_b64   v[24:25], 6, v[24:25]
 /*3230300c         */ v_add_u32       v24, vcc, s12, v24
 /*38323317         */ v_addc_u32      v25, vcc, v23, v25, vcc
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*dc5c0000 1a000018*/ flat_load_dwordx4 v[26:29], v[24:25] slc glc
 /*d1196a1e 00012118*/ v_add_u32       v30, vcc, v24, 16
 /*d11c6a1f 01a90119*/ v_addc_u32      v31, vcc, v25, 0, vcc
@@ -13969,7 +13988,7 @@
 /*d28f0018 00023086*/ v_lshlrev_b64   v[24:25], 6, v[24:25]
 /*3230300c         */ v_add_u32       v24, vcc, s12, v24
 /*38323317         */ v_addc_u32      v25, vcc, v23, v25, vcc
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*dc5c0000 1a000018*/ flat_load_dwordx4 v[26:29], v[24:25] slc glc
 /*d1196a1e 00012118*/ v_add_u32       v30, vcc, v24, 16
 /*d11c6a1f 01a90119*/ v_addc_u32      v31, vcc, v25, 0, vcc
@@ -14057,7 +14076,7 @@
 /*d28f0018 00023086*/ v_lshlrev_b64   v[24:25], 6, v[24:25]
 /*3230300c         */ v_add_u32       v24, vcc, s12, v24
 /*38323317         */ v_addc_u32      v25, vcc, v23, v25, vcc
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*dc5c0000 1a000018*/ flat_load_dwordx4 v[26:29], v[24:25] slc glc
 /*d1196a1e 00012118*/ v_add_u32       v30, vcc, v24, 16
 /*d11c6a1f 01a90119*/ v_addc_u32      v31, vcc, v25, 0, vcc
@@ -14145,7 +14164,7 @@
 /*d28f0018 00023086*/ v_lshlrev_b64   v[24:25], 6, v[24:25]
 /*3230300c         */ v_add_u32       v24, vcc, s12, v24
 /*38323317         */ v_addc_u32      v25, vcc, v23, v25, vcc
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*dc5c0000 1a000018*/ flat_load_dwordx4 v[26:29], v[24:25] slc glc
 /*d1196a1e 00012118*/ v_add_u32       v30, vcc, v24, 16
 /*d11c6a1f 01a90119*/ v_addc_u32      v31, vcc, v25, 0, vcc
@@ -14233,7 +14252,7 @@
 /*d28f0018 00023086*/ v_lshlrev_b64   v[24:25], 6, v[24:25]
 /*3230300c         */ v_add_u32       v24, vcc, s12, v24
 /*38323317         */ v_addc_u32      v25, vcc, v23, v25, vcc
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*dc5c0000 1a000018*/ flat_load_dwordx4 v[26:29], v[24:25] slc glc
 /*d1196a1e 00012118*/ v_add_u32       v30, vcc, v24, 16
 /*d11c6a1f 01a90119*/ v_addc_u32      v31, vcc, v25, 0, vcc
@@ -14321,7 +14340,7 @@
 /*d28f0018 00023086*/ v_lshlrev_b64   v[24:25], 6, v[24:25]
 /*3230300c         */ v_add_u32       v24, vcc, s12, v24
 /*38323317         */ v_addc_u32      v25, vcc, v23, v25, vcc
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*dc5c0000 1a000018*/ flat_load_dwordx4 v[26:29], v[24:25] slc glc
 /*d1196a1e 00012118*/ v_add_u32       v30, vcc, v24, 16
 /*d11c6a1f 01a90119*/ v_addc_u32      v31, vcc, v25, 0, vcc
@@ -14409,7 +14428,7 @@
 /*d28f0018 00023086*/ v_lshlrev_b64   v[24:25], 6, v[24:25]
 /*3230300c         */ v_add_u32       v24, vcc, s12, v24
 /*38323317         */ v_addc_u32      v25, vcc, v23, v25, vcc
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*dc5c0000 1a000018*/ flat_load_dwordx4 v[26:29], v[24:25] slc glc
 /*d1196a1e 00012118*/ v_add_u32       v30, vcc, v24, 16
 /*d11c6a1f 01a90119*/ v_addc_u32      v31, vcc, v25, 0, vcc
@@ -14497,7 +14516,7 @@
 /*d28f0018 00023086*/ v_lshlrev_b64   v[24:25], 6, v[24:25]
 /*3230300c         */ v_add_u32       v24, vcc, s12, v24
 /*38323317         */ v_addc_u32      v25, vcc, v23, v25, vcc
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*dc5c0000 1a000018*/ flat_load_dwordx4 v[26:29], v[24:25] slc glc
 /*d1196a1e 00012118*/ v_add_u32       v30, vcc, v24, 16
 /*d11c6a1f 01a90119*/ v_addc_u32      v31, vcc, v25, 0, vcc
@@ -14585,7 +14604,7 @@
 /*d28f0018 00023086*/ v_lshlrev_b64   v[24:25], 6, v[24:25]
 /*3230300c         */ v_add_u32       v24, vcc, s12, v24
 /*38323317         */ v_addc_u32      v25, vcc, v23, v25, vcc
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*dc5c0000 1a000018*/ flat_load_dwordx4 v[26:29], v[24:25] slc glc
 /*d1196a1e 00012118*/ v_add_u32       v30, vcc, v24, 16
 /*d11c6a1f 01a90119*/ v_addc_u32      v31, vcc, v25, 0, vcc
@@ -14673,7 +14692,7 @@
 /*d28f0018 00023086*/ v_lshlrev_b64   v[24:25], 6, v[24:25]
 /*3230300c         */ v_add_u32       v24, vcc, s12, v24
 /*38323317         */ v_addc_u32      v25, vcc, v23, v25, vcc
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*dc5c0000 1a000018*/ flat_load_dwordx4 v[26:29], v[24:25] slc glc
 /*d1196a1e 00012118*/ v_add_u32       v30, vcc, v24, 16
 /*d11c6a1f 01a90119*/ v_addc_u32      v31, vcc, v25, 0, vcc
@@ -14761,7 +14780,7 @@
 /*d28f0018 00023086*/ v_lshlrev_b64   v[24:25], 6, v[24:25]
 /*3230300c         */ v_add_u32       v24, vcc, s12, v24
 /*38323317         */ v_addc_u32      v25, vcc, v23, v25, vcc
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*dc5c0000 1a000018*/ flat_load_dwordx4 v[26:29], v[24:25] slc glc
 /*d1196a1e 00012118*/ v_add_u32       v30, vcc, v24, 16
 /*d11c6a1f 01a90119*/ v_addc_u32      v31, vcc, v25, 0, vcc
@@ -14849,7 +14868,7 @@
 /*d28f0018 00023086*/ v_lshlrev_b64   v[24:25], 6, v[24:25]
 /*322c300c         */ v_add_u32       v22, vcc, s12, v24
 /*382e3317         */ v_addc_u32      v23, vcc, v23, v25, vcc
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*dc5c0000 18000016*/ flat_load_dwordx4 v[24:27], v[22:23] slc glc
 /*d1196a1c 00012116*/ v_add_u32       v28, vcc, v22, 16
 /*d11c6a1d 01a90117*/ v_addc_u32      v29, vcc, v23, 0, vcc
@@ -14951,13 +14970,13 @@
 /*7e2c0280         */ v_mov_b32       v22, 0
 /*7e620280         */ v_mov_b32       v49, 0
 /*7e640280         */ v_mov_b32       v50, 0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
+/*bf800000         */ /*s_nop           0x0*/
 .L10912_1:
 /*bf059600         */ s_cmp_le_i32    s0, 22
 /*bf84017f         */ s_cbranch_scc0  .L12452_1
@@ -15440,7 +15459,7 @@
 /*260a0b0b         */ v_and_b32       v5, v11, v5
 /*2a041702         */ v_xor_b32       v2, v2, v11
 /*2a380b02         */ v_xor_b32       v28, v2, v5
-/*bf800000         */ s_nop           0x0
+/*bf800000         */ /*s_nop           0x0*/
 /*d1196a0d 00016125*/ v_add_u32       v13, vcc, v37, 48
 /*d11c6a0e 01a90126*/ v_addc_u32      v14, vcc, v38, 0, vcc
 /*dc7c0000 0000190d*/ flat_store_dwordx4 v[13:14], v[25:28] slc glc

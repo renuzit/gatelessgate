@@ -721,17 +721,8 @@
     <None Include="..\kernel\wolf-skein.cl">
       <Filter>Resource Files\kernel</Filter>
     </None>
-    <None Include="..\kernel\equihash-zero.cl">
-      <Filter>Resource Files\kernel</Filter>
-    </None>
-    <None Include="..\kernel\equihash-gcn1-ocl12-32bit.asm">
-      <Filter>Resource Files\binary-kernel</Filter>
-    </None>
     <None Include="..\kernel\ethash-new.cl">
       <Filter>Resource Files\kernel</Filter>
-    </None>
-    <None Include="..\binary-kernel\ethash-new.cl">
-      <Filter>Resource Files\binary-kernel</Filter>
     </None>
     <None Include="..\binary-kernel\equihash.cl">
       <Filter>Resource Files\binary-kernel</Filter>
@@ -742,7 +733,10 @@
     <None Include="..\..\README.md">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="..\binary-kernel\neoscrypt.cl">
+    <None Include="..\binary-kernel\ethash-new-gcn3-amdcl2.asm">
+      <Filter>Resource Files\binary-kernel</Filter>
+    </None>
+    <None Include="..\binary-kernel\equihash-gcn1-amdcl-32bit.asm">
       <Filter>Resource Files\binary-kernel</Filter>
     </None>
   </ItemGroup>

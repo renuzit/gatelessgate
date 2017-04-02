@@ -178,7 +178,9 @@ uint get_nr_slots(uint device_thread, uint round, __global uint *row_counters, u
     return nr_slots;
 }
 
-#define GDS_SEGMENT_SIZE 0x1000
+#ifndef GDS_SEGMENT_SIZE
+#define GDS_SEGMENT_SIZE 0
+#endif
 
 uint inc_gds_row_counter(uint device_thread, uint round, __global uint *row_counters, uint row)
 {

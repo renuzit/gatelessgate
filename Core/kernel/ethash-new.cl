@@ -275,6 +275,8 @@ __kernel void search(
     
         init0 = share->uints[0];
 
+        barrier(CLK_LOCAL_MEM_FENCE);
+
 #ifdef LEGACY
         for (uint a = 0; a < (ACCESSES & isolate); a += 8) {
 #else
@@ -282,15 +284,26 @@ __kernel void search(
         for (uint a = 0; a < ACCESSES; a += 8) {
 #endif
             const uint lane_idx = 4*hash_id + a / 8 % 4;
+        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(0);
+        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(1);
+        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(2);
+        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(3);
+        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(4);
+        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(5);
+        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(6);
+        barrier(CLK_LOCAL_MEM_FENCE);
             MIX(7);
+        barrier(CLK_LOCAL_MEM_FENCE);
         }
+
+        barrier(CLK_LOCAL_MEM_FENCE);
         
         share->uint2s[thread_id] = (uint2)(fnv_reduce(mix.lo), fnv_reduce(mix.hi));
         

@@ -16,7 +16,7 @@ uint2 amd_bitalign(uint2 src0, uint2 src1, uint2 src2)
 uint amd_bitalign(uint src0, uint src1, uint src2)
 {
     uint2 dest;
-    asm("shf.r.wrap.b32 %0, %3, %2, %4;"
+    asm("shf.r.wrap.b32 %0, %3, %2, %4;\n"
         "shf.r.wrap.b32 %1, %6, %5, %7;"
         : "=r"(dest.x), "=r"(dest.y) 
         : "r"(src0.x), "r"(src1.x), "r"(src2.x),
