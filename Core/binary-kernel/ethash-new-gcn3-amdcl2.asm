@@ -22,6 +22,7 @@
 
 
 
+/* FIXME: Needs more work for GCN2. */
 .ifarch gcn1.1
 	.macro v_lshlrev_b32, arg1, arg2, arg3
 		v_lshl_b32 \arg1, \arg3, \arg2

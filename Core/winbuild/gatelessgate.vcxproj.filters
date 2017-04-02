@@ -739,5 +739,8 @@
     <None Include="..\binary-kernel\equihash-gcn1-amdcl-32bit.asm">
       <Filter>Resource Files\binary-kernel</Filter>
     </None>
+    <None Include="..\binary-kernel\ethash-new-gcn1-amdcl-64bit.asm">
+      <Filter>Resource Files\binary-kernel</Filter>
+    </None>
   </ItemGroup>
 </Project>

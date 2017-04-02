@@ -6,13 +6,19 @@
 
 del *.bin
 
-@rem Windiws 
+@rem Windows 
 
 clrxasm equihash-gcn1-amdcl-32bit.asm -g CapeVerde -o equihashCapeverdegw256l4.bin
 clrxasm equihash-gcn1-amdcl-32bit.asm -g Pitcairn -o equihashPitcairngw256l4.bin
 clrxasm equihash-gcn1-amdcl-32bit.asm -g Tahiti -o equihashTahitigw256l4.bin
 clrxasm equihash-gcn1-amdcl-32bit.asm -g Oland -o equihashOlandgw256l4.bin
 clrxasm equihash-gcn1-amdcl-32bit.asm -g Hainan -o equihashHainangw256l4.bin
+
+clrxasm ethash-new-gcn1-amdcl-64bit.asm -g CapeVerde -o ethash-newCapeverdegw192l4.bin
+clrxasm ethash-new-gcn1-amdcl-64bit.asm -g Pitcairn -o ethash-newPitcairngw192l4.bin
+clrxasm ethash-new-gcn1-amdcl-64bit.asm -g Tahiti -o ethash-newTahitigw192l4.bin
+clrxasm ethash-new-gcn1-amdcl-64bit.asm -g Oland -o ethash-newOlandgw192l4.bin
+clrxasm ethash-new-gcn1-amdcl-64bit.asm -g Hainan -o ethash-newHainangw192l4.bin
 
 clrxasm ethash-new-gcn3-amdcl2.asm -g Tonga -o ethash-newTongagw192l4.bin
 clrxasm ethash-new-gcn3-amdcl2.asm -g Fiji -o ethash-newFijigw192l4.bin
@@ -32,6 +38,12 @@ clrxasm equihash-gcn1-amdcl-32bit.asm -g Pitcairn -o equihashPitcairngw256l8.bin
 clrxasm equihash-gcn1-amdcl-32bit.asm -g Tahiti -o equihashTahitigw256l8.bin
 clrxasm equihash-gcn1-amdcl-32bit.asm -g Oland -o equihashOlandgw256l8.bin
 clrxasm equihash-gcn1-amdcl-32bit.asm -g Hainan -o equihashHainangw256l8.bin
+
+clrxasm ethash-new-gcn1-amdcl-64bit.asm -g CapeVerde -o ethash-newCapeverdegw192l8.bin
+clrxasm ethash-new-gcn1-amdcl-64bit.asm -g Pitcairn -o ethash-newPitcairngw192l8.bin
+clrxasm ethash-new-gcn1-amdcl-64bit.asm -g Tahiti -o ethash-newTahitigw192l8.bin
+clrxasm ethash-new-gcn1-amdcl-64bit.asm -g Oland -o ethash-newOlandgw192l8.bin
+clrxasm ethash-new-gcn1-amdcl-64bit.asm -g Hainan -o ethash-newHainangw192l8.bin
 
 clrxasm ethash-new-gcn3-amdcl2.asm -g Tonga -o ethash-newTongagw192l8.bin
 clrxasm ethash-new-gcn3-amdcl2.asm -g Fiji -o ethash-newFijigw192l8.bin

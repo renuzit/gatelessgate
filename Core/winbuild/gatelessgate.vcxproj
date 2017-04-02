@@ -437,6 +437,7 @@ copy /Y "$(ProjectDir)..\*.bat" "$(OutDir)"
     <None Include="..\..\README.md" />
     <None Include="..\binary-kernel\equihash-gcn1-amdcl-32bit.asm" />
     <None Include="..\binary-kernel\equihash.cl" />
+    <None Include="..\binary-kernel\ethash-new-gcn1-amdcl-64bit.asm" />
     <None Include="..\binary-kernel\ethash-new-gcn3-amdcl2.asm" />
     <None Include="..\configure.ac" />
     <None Include="..\kernel\aes_helper.cl" />
