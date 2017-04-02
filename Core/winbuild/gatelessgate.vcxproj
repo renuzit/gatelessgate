@@ -261,7 +261,10 @@ del  "$(OutDir)*.bin"</Command>
       <AdditionalOptions>/nodefaultlib:vcruntime.lib /nodefaultlib:msvcrt.lib %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /E /I "$(ProjectDir)..\kernel" "$(OutDir)kernel"
+      <Command>del "$(OutDir)kernel\*.*"
+del "$(OutDir)binary-kernel\*.*"
+xcopy /Y /E /I "$(ProjectDir)..\kernel" "$(OutDir)kernel"
+xcopy /Y /E /I "$(ProjectDir)..\binary-kernel" "$(OutDir)binary-kernel"
 copy /Y "$(ProjectDir)..\*.bat" "$(OutDir)"
 </Command>
     </PostBuildEvent>
