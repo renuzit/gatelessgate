@@ -1,10 +1,14 @@
+@rem In order to build binary kernels, you need:
+@rem * CLRadeonExtender ( https://github.com/zawawawa/GCNminC )
+@rem * GCNminC ( https://github.com/CLRX/CLRX-mirror )
+
 @rem GCN1: CapeVerde, Pitcairn, Tahiti, Oland, Hainan
 @rem GCN2: Bonaire, Hawaii, Mullins
 @rem GCN3: Tonga, Fiji, Carrizo
 @rem GCN4: Ellesmere, Baffin
 @rem ?: Spectre, Spooky, Kalindi, Iceland, Goose, Horse, Stoney
 
-del *.bin
+@rem del *.bin
 
 @rem Windows 
 
