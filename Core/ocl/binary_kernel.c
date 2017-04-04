@@ -54,7 +54,7 @@ cl_program load_opencl_binary_kernel(build_kernel_data *data)
       goto out;
     }
 
-    applog(LOG_DEBUG, "Loaded binary image %s", bin_path);
+    applog(LOG_NOTICE, "Loaded binary image %s", bin_path);
 
     /* create a cl program executable for all the devices specified */
     status = clBuildProgram(program, 1, data->device, NULL, NULL, NULL);

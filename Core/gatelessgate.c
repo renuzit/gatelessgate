@@ -9205,7 +9205,7 @@ bool add_cgpu(struct cgpu_info *cgpu)
 
     cgpu->eth_dag.current_epoch = 0xffffffffU;
     cglock_init(&cgpu->eth_dag.lock);
-    mutex_init(&cgpu->equihash_memory_transfer_lock);
+    mutex_init(&cgpu->memory_transfer_lock);
 
     adjust_mostdevs();
     return true;

@@ -648,7 +648,7 @@ struct cgpu_info {
 
   // zawawa
   struct timeval dev_start_tv;
-  pthread_mutex_t equihash_memory_transfer_lock;
+  pthread_mutex_t memory_transfer_lock;
 };
 
 extern bool add_cgpu(struct cgpu_info*);
