@@ -73,15 +73,8 @@
 .kernel search
     .config
         .dims x
-        .cws 192, 1, 1
-        .sgprsnum 16
-        .vgprsnum 110
         .localsize 3840
         .floatmode 0xc0
-        .pgmrsrc1 0x00ac009b
-        .pgmrsrc2 0x0000008c
-        .dx10clamp
-        .ieeemode
         .useargs
         .priority 0
         .arg _.global_offset_0, "size_t", long
@@ -759,7 +752,7 @@
 /*d11c6a07 01a90139*/ v_addc_u32      v7, vcc, v57, 0, vcc
 /*dc5c0000 3c000038*/ flat_load_dwordx4 v[60:63], v[56:57] slc glc
 /*dc5c0000 38000006*/ flat_load_dwordx4 v[56:59], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7b2d         */ v_xor_b32       v45, v45, v61
 /*2a58592d         */ v_xor_b32       v44, v45, v44
 /*d286003d 00025924*/ v_mul_hi_u32    v61, v36, v44
@@ -773,7 +766,7 @@
 /*327a5801         */ v_add_u32       v61, vcc, s1, v44
 /*d100002c 0022593d*/ v_cndmask_b32   v44, v61, v44, s[8:9]
 /*d100002c 002a58c1*/ v_cndmask_b32   v44, -1, v44, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002c15*/ ds_write_b32    v21, v44 offset:3072
 /*2a56772b         */ v_xor_b32       v43, v43, v59
 /*2a54752a         */ v_xor_b32       v42, v42, v58
@@ -803,7 +796,7 @@
 /*d11c6a39 01a9013c*/ v_addc_u32      v57, vcc, v60, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f000038*/ flat_load_dwordx4 v[63:66], v[56:57] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7b2e         */ v_xor_b32       v46, v46, v61
 /*2a606f2e         */ v_xor_b32       v48, v46, v55
 /*d2860037 00026124*/ v_mul_hi_u32    v55, v36, v48
@@ -817,7 +810,7 @@
 /*326e6001         */ v_add_u32       v55, vcc, s1, v48
 /*d1000030 00226137*/ v_cndmask_b32   v48, v55, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56852b         */ v_xor_b32       v43, v43, v66
 /*2a54832a         */ v_xor_b32       v42, v42, v65
@@ -846,9 +839,9 @@
 /*d11c6a39 01a9013d*/ v_addc_u32      v57, vcc, v61, 0, vcc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
 /*dc5c0000 3c00003c*/ flat_load_dwordx4 v[60:63], v[60:61] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527329         */ v_xor_b32       v41, v41, v57
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e7f2f         */ v_xor_b32       v47, v47, v63
 /*2a606d2f         */ v_xor_b32       v48, v47, v54
 /*d2860036 00026124*/ v_mul_hi_u32    v54, v36, v48
@@ -889,7 +882,7 @@
 /*d11c6a38 01a9013c*/ v_addc_u32      v56, vcc, v60, 0, vcc
 /*dc5c0000 37000037*/ flat_load_dwordx4 v[55:58], v[55:56] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527129         */ v_xor_b32       v41, v41, v56
 /*2a506f28         */ v_xor_b32       v40, v40, v55
 /*2a606b28         */ v_xor_b32       v48, v40, v53
@@ -904,7 +897,7 @@
 /*326a6001         */ v_add_u32       v53, vcc, s1, v48
 /*d1000030 00226135*/ v_cndmask_b32   v48, v53, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c7b2e         */ v_xor_b32       v46, v46, v61
@@ -932,7 +925,7 @@
 /*d11c6a37 01a9013b*/ v_addc_u32      v55, vcc, v59, 0, vcc
 /*dc5c0000 36000036*/ flat_load_dwordx4 v[54:57], v[54:55] slc glc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a526f29         */ v_xor_b32       v41, v41, v55
 /*2a606929         */ v_xor_b32       v48, v41, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -946,7 +939,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56732b         */ v_xor_b32       v43, v43, v57
 /*2a54712a         */ v_xor_b32       v42, v42, v56
@@ -976,7 +969,7 @@
 /*2a6e6288         */ v_xor_b32       v55, 8, v49
 /*dc5c0000 38000035*/ flat_load_dwordx4 v[56:59], v[53:54] slc glc
 /*dc5c0000 3c000006*/ flat_load_dwordx4 v[60:63], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56772b         */ v_xor_b32       v43, v43, v59
 /*2a54752a         */ v_xor_b32       v42, v42, v58
 /*2a60672a         */ v_xor_b32       v48, v42, v51
@@ -991,7 +984,7 @@
 /*32666001         */ v_add_u32       v51, vcc, s1, v48
 /*d1000030 00226133*/ v_cndmask_b32   v48, v51, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527329         */ v_xor_b32       v41, v41, v57
@@ -1030,7 +1023,7 @@
 /*2a7c628a         */ v_xor_b32       v62, 10, v49
 /*dc5c0000 3f00003a*/ flat_load_dwordx4 v[63:66], v[58:59] slc glc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56852b         */ v_xor_b32       v43, v43, v66
 /*2a64652b         */ v_xor_b32       v50, v43, v50
 /*d2860042 00026524*/ v_mul_hi_u32    v66, v36, v50
@@ -1044,7 +1037,7 @@
 /*32846401         */ v_add_u32       v66, vcc, s1, v50
 /*d1000032 00226542*/ v_cndmask_b32   v50, v66, v50, s[8:9]
 /*d1000032 002a64c1*/ v_cndmask_b32   v50, -1, v50, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003215*/ ds_write_b32    v21, v50 offset:3072
 /*2a54832a         */ v_xor_b32       v42, v42, v65
 /*2a528129         */ v_xor_b32       v41, v41, v64
@@ -1079,12 +1072,12 @@
 /*d11c6a3d 01a9013b*/ v_addc_u32      v61, vcc, v59, 0, vcc
 /*dc5c0000 3c00003c*/ flat_load_dwordx4 v[60:63], v[60:61] slc glc
 /*dc5c0000 4000003a*/ flat_load_dwordx4 v[64:67], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567f2b         */ v_xor_b32       v43, v43, v63
 /*2a547d2a         */ v_xor_b32       v42, v42, v62
 /*2a527b29         */ v_xor_b32       v41, v41, v61
 /*2a507928         */ v_xor_b32       v40, v40, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e872f         */ v_xor_b32       v47, v47, v67
 /*2a5c852e         */ v_xor_b32       v46, v46, v66
 /*2a5a832d         */ v_xor_b32       v45, v45, v65
@@ -1122,7 +1115,7 @@
 /*d11c6a3b 01a9013e*/ v_addc_u32      v59, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003a*/ flat_load_dwordx4 v[65:68], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7d2d         */ v_xor_b32       v45, v45, v62
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -1136,7 +1129,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -1165,7 +1158,7 @@
 /*d11c6a3b 01a9013d*/ v_addc_u32      v59, vcc, v61, 0, vcc
 /*dc5c0000 3c00003c*/ flat_load_dwordx4 v[60:63], v[60:61] slc glc
 /*dc5c0000 4000003a*/ flat_load_dwordx4 v[64:67], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7d2e         */ v_xor_b32       v46, v46, v62
 /*2a60652e         */ v_xor_b32       v48, v46, v50
 /*d2860032 00026124*/ v_mul_hi_u32    v50, v36, v48
@@ -1179,7 +1172,7 @@
 /*32646001         */ v_add_u32       v50, vcc, s1, v48
 /*d1000030 00226132*/ v_cndmask_b32   v48, v50, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a54852a         */ v_xor_b32       v42, v42, v66
@@ -1208,9 +1201,9 @@
 /*d11c6a3b 01a9013f*/ v_addc_u32      v59, vcc, v63, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e832f         */ v_xor_b32       v47, v47, v65
 /*2a60712f         */ v_xor_b32       v48, v47, v56
 /*d2860032 00026124*/ v_mul_hi_u32    v50, v36, v48
@@ -1251,7 +1244,7 @@
 /*d11c6a3b 01a9013f*/ v_addc_u32      v59, vcc, v63, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -1266,7 +1259,7 @@
 /*32646001         */ v_add_u32       v50, vcc, s1, v48
 /*d1000030 00226132*/ v_cndmask_b32   v48, v50, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -1294,7 +1287,7 @@
 /*d11c6a39 01a9013d*/ v_addc_u32      v57, vcc, v61, 0, vcc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
 /*dc5c0000 3c00003c*/ flat_load_dwordx4 v[60:63], v[60:61] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527329         */ v_xor_b32       v41, v41, v57
 /*2a606f29         */ v_xor_b32       v48, v41, v55
 /*d2860032 00026124*/ v_mul_hi_u32    v50, v36, v48
@@ -1308,7 +1301,7 @@
 /*32646001         */ v_add_u32       v50, vcc, s1, v48
 /*d1000030 00226132*/ v_cndmask_b32   v48, v50, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56772b         */ v_xor_b32       v43, v43, v59
 /*2a54752a         */ v_xor_b32       v42, v42, v58
@@ -1338,7 +1331,7 @@
 /*2a706290         */ v_xor_b32       v56, 16, v49
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
 /*2a606d2a         */ v_xor_b32       v48, v42, v54
@@ -1353,7 +1346,7 @@
 /*32646001         */ v_add_u32       v50, vcc, s1, v48
 /*d1000030 00226132*/ v_cndmask_b32   v48, v50, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527529         */ v_xor_b32       v41, v41, v58
@@ -1392,7 +1385,7 @@
 /*2a7e6292         */ v_xor_b32       v63, 18, v49
 /*dc5c0000 4000003b*/ flat_load_dwordx4 v[64:67], v[59:60] slc glc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6a6b2b         */ v_xor_b32       v53, v43, v53
 /*d2860043 00026b24*/ v_mul_hi_u32    v67, v36, v53
@@ -1406,7 +1399,7 @@
 /*32866a01         */ v_add_u32       v67, vcc, s1, v53
 /*d1000035 00226b43*/ v_cndmask_b32   v53, v67, v53, s[8:9]
 /*d1000035 002a6ac1*/ v_cndmask_b32   v53, -1, v53, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003515*/ ds_write_b32    v21, v53 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -1441,12 +1434,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -1484,7 +1477,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -1498,7 +1491,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -1527,7 +1520,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606b2e         */ v_xor_b32       v48, v46, v53
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -1541,7 +1534,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -1570,9 +1563,9 @@
 /*d11c6a3c 01a90107*/ v_addc_u32      v60, vcc, v7, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f000006*/ flat_load_dwordx4 v[63:66], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60732f         */ v_xor_b32       v48, v47, v57
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -1613,7 +1606,7 @@
 /*d11c6a3c 01a90107*/ v_addc_u32      v60, vcc, v7, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f000006*/ flat_load_dwordx4 v[63:66], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
 /*2a507728         */ v_xor_b32       v40, v40, v59
 /*2a607528         */ v_xor_b32       v48, v40, v58
@@ -1628,7 +1621,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c832e         */ v_xor_b32       v46, v46, v65
@@ -1656,7 +1649,7 @@
 /*d11c6a3a 01a90107*/ v_addc_u32      v58, vcc, v7, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d000006*/ flat_load_dwordx4 v[61:64], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -1670,7 +1663,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -1700,7 +1693,7 @@
 /*2a726298         */ v_xor_b32       v57, 24, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -1715,7 +1708,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -1754,7 +1747,7 @@
 /*2a7e629a         */ v_xor_b32       v63, 26, v49
 /*dc5c0000 4000003b*/ flat_load_dwordx4 v[64:67], v[59:60] slc glc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6c6d2b         */ v_xor_b32       v54, v43, v54
 /*d2860043 00026d24*/ v_mul_hi_u32    v67, v36, v54
@@ -1768,7 +1761,7 @@
 /*32866c01         */ v_add_u32       v67, vcc, s1, v54
 /*d1000036 00226d43*/ v_cndmask_b32   v54, v67, v54, s[8:9]
 /*d1000036 002a6cc1*/ v_cndmask_b32   v54, -1, v54, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003615*/ ds_write_b32    v21, v54 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -1803,12 +1796,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -1846,7 +1839,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -1860,7 +1853,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -1889,7 +1882,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606d2e         */ v_xor_b32       v48, v46, v54
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -1903,7 +1896,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -1932,9 +1925,9 @@
 /*d11c6a3c 01a90140*/ v_addc_u32      v60, vcc, v64, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f00003f*/ flat_load_dwordx4 v[63:66], v[63:64] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60732f         */ v_xor_b32       v48, v47, v57
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -1975,7 +1968,7 @@
 /*d11c6a3c 01a90140*/ v_addc_u32      v60, vcc, v64, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f00003f*/ flat_load_dwordx4 v[63:66], v[63:64] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
 /*2a507728         */ v_xor_b32       v40, v40, v59
 /*2a607528         */ v_xor_b32       v48, v40, v58
@@ -1990,7 +1983,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c832e         */ v_xor_b32       v46, v46, v65
@@ -2018,7 +2011,7 @@
 /*d11c6a3a 01a9013e*/ v_addc_u32      v58, vcc, v62, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -2032,7 +2025,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -2062,7 +2055,7 @@
 /*2a7262a0         */ v_xor_b32       v57, 32, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -2077,7 +2070,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -2114,7 +2107,7 @@
 /*2a7e62a2         */ v_xor_b32       v63, 34, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6a6b2b         */ v_xor_b32       v53, v43, v53
 /*d2860043 00026b24*/ v_mul_hi_u32    v67, v36, v53
@@ -2128,7 +2121,7 @@
 /*32866a01         */ v_add_u32       v67, vcc, s1, v53
 /*d1000035 00226b43*/ v_cndmask_b32   v53, v67, v53, s[8:9]
 /*d1000035 002a6ac1*/ v_cndmask_b32   v53, -1, v53, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003515*/ ds_write_b32    v21, v53 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -2163,12 +2156,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -2206,7 +2199,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -2220,7 +2213,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -2249,7 +2242,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606b2e         */ v_xor_b32       v48, v46, v53
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -2263,7 +2256,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -2292,9 +2285,9 @@
 /*d11c6a3c 01a90107*/ v_addc_u32      v60, vcc, v7, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f000006*/ flat_load_dwordx4 v[63:66], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -2335,7 +2328,7 @@
 /*d11c6a3b 01a90107*/ v_addc_u32      v59, vcc, v7, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -2350,7 +2343,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -2378,7 +2371,7 @@
 /*d11c6a3a 01a90107*/ v_addc_u32      v58, vcc, v7, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d000006*/ flat_load_dwordx4 v[61:64], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -2392,7 +2385,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -2422,7 +2415,7 @@
 /*2a7262a8         */ v_xor_b32       v57, 40, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -2437,7 +2430,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -2474,7 +2467,7 @@
 /*2a7e62aa         */ v_xor_b32       v63, 42, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6c6d2b         */ v_xor_b32       v54, v43, v54
 /*d2860043 00026d24*/ v_mul_hi_u32    v67, v36, v54
@@ -2488,7 +2481,7 @@
 /*32866c01         */ v_add_u32       v67, vcc, s1, v54
 /*d1000036 00226d43*/ v_cndmask_b32   v54, v67, v54, s[8:9]
 /*d1000036 002a6cc1*/ v_cndmask_b32   v54, -1, v54, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003615*/ ds_write_b32    v21, v54 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -2523,12 +2516,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -2566,7 +2559,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -2580,7 +2573,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -2609,7 +2602,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606d2e         */ v_xor_b32       v48, v46, v54
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -2623,7 +2616,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -2652,9 +2645,9 @@
 /*d11c6a3c 01a90140*/ v_addc_u32      v60, vcc, v64, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f00003f*/ flat_load_dwordx4 v[63:66], v[63:64] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -2695,7 +2688,7 @@
 /*d11c6a3b 01a9013f*/ v_addc_u32      v59, vcc, v63, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -2710,7 +2703,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -2738,7 +2731,7 @@
 /*d11c6a3a 01a9013e*/ v_addc_u32      v58, vcc, v62, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -2752,7 +2745,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -2782,7 +2775,7 @@
 /*2a7262b0         */ v_xor_b32       v57, 48, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -2797,7 +2790,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -2834,7 +2827,7 @@
 /*2a7e62b2         */ v_xor_b32       v63, 50, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6a6b2b         */ v_xor_b32       v53, v43, v53
 /*d2860043 00026b24*/ v_mul_hi_u32    v67, v36, v53
@@ -2848,7 +2841,7 @@
 /*32866a01         */ v_add_u32       v67, vcc, s1, v53
 /*d1000035 00226b43*/ v_cndmask_b32   v53, v67, v53, s[8:9]
 /*d1000035 002a6ac1*/ v_cndmask_b32   v53, -1, v53, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003515*/ ds_write_b32    v21, v53 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -2883,12 +2876,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -2926,7 +2919,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -2940,7 +2933,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -2969,7 +2962,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606b2e         */ v_xor_b32       v48, v46, v53
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -2983,7 +2976,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -3012,9 +3005,9 @@
 /*d11c6a3c 01a90107*/ v_addc_u32      v60, vcc, v7, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f000006*/ flat_load_dwordx4 v[63:66], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -3055,7 +3048,7 @@
 /*d11c6a3b 01a90107*/ v_addc_u32      v59, vcc, v7, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -3070,7 +3063,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -3098,7 +3091,7 @@
 /*d11c6a3a 01a90107*/ v_addc_u32      v58, vcc, v7, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d000006*/ flat_load_dwordx4 v[61:64], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -3112,7 +3105,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -3142,7 +3135,7 @@
 /*2a7262b8         */ v_xor_b32       v57, 56, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -3157,7 +3150,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -3194,7 +3187,7 @@
 /*2a6262ba         */ v_xor_b32       v49, 58, v49
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a6c6d2b         */ v_xor_b32       v54, v43, v54
 /*d286003b 00026d24*/ v_mul_hi_u32    v59, v36, v54
@@ -3208,7 +3201,7 @@
 /*32766c01         */ v_add_u32       v59, vcc, s1, v54
 /*d1000036 00226d3b*/ v_cndmask_b32   v54, v59, v54, s[8:9]
 /*d1000036 002a6cc1*/ v_cndmask_b32   v54, -1, v54, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003615*/ ds_write_b32    v21, v54 offset:3072
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
@@ -3243,12 +3236,12 @@
 /*d11c6a3d 01a9013b*/ v_addc_u32      v61, vcc, v59, 0, vcc
 /*dc5c0000 3c00003c*/ flat_load_dwordx4 v[60:63], v[60:61] slc glc
 /*dc5c0000 4000003a*/ flat_load_dwordx4 v[64:67], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567f2b         */ v_xor_b32       v43, v43, v63
 /*2a547d2a         */ v_xor_b32       v42, v42, v62
 /*2a527b29         */ v_xor_b32       v41, v41, v61
 /*2a507928         */ v_xor_b32       v40, v40, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e872f         */ v_xor_b32       v47, v47, v67
 /*2a5c852e         */ v_xor_b32       v46, v46, v66
 /*2a5a832d         */ v_xor_b32       v45, v45, v65
@@ -3286,7 +3279,7 @@
 /*d11c6a3b 01a9013e*/ v_addc_u32      v59, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003a*/ flat_load_dwordx4 v[65:68], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7d2d         */ v_xor_b32       v45, v45, v62
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -3300,7 +3293,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -3329,7 +3322,7 @@
 /*d11c6a3b 01a9013d*/ v_addc_u32      v59, vcc, v61, 0, vcc
 /*dc5c0000 3c00003c*/ flat_load_dwordx4 v[60:63], v[60:61] slc glc
 /*dc5c0000 4000003a*/ flat_load_dwordx4 v[64:67], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7d2e         */ v_xor_b32       v46, v46, v62
 /*2a60632e         */ v_xor_b32       v48, v46, v49
 /*d2860031 00026124*/ v_mul_hi_u32    v49, v36, v48
@@ -3343,7 +3336,7 @@
 /*32626001         */ v_add_u32       v49, vcc, s1, v48
 /*d1000030 00226131*/ v_cndmask_b32   v48, v49, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a54852a         */ v_xor_b32       v42, v42, v66
@@ -3372,9 +3365,9 @@
 /*d11c6a3b 01a90131*/ v_addc_u32      v59, vcc, v49, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000030*/ flat_load_dwordx4 v[62:65], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e832f         */ v_xor_b32       v47, v47, v65
 /*2a606d2f         */ v_xor_b32       v48, v47, v54
 /*d2860031 00026124*/ v_mul_hi_u32    v49, v36, v48
@@ -3415,7 +3408,7 @@
 /*d11c6a3b 01a90131*/ v_addc_u32      v59, vcc, v49, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000030*/ flat_load_dwordx4 v[62:65], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -3430,7 +3423,7 @@
 /*32626001         */ v_add_u32       v49, vcc, s1, v48
 /*d1000030 00226131*/ v_cndmask_b32   v48, v49, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -3458,7 +3451,7 @@
 /*d11c6a3a 01a90131*/ v_addc_u32      v58, vcc, v49, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d000030*/ flat_load_dwordx4 v[61:64], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860031 00026124*/ v_mul_hi_u32    v49, v36, v48
@@ -3472,7 +3465,7 @@
 /*32626001         */ v_add_u32       v49, vcc, s1, v48
 /*d1000030 00226131*/ v_cndmask_b32   v48, v49, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -3501,7 +3494,7 @@
 /*d11c6a39 01a90131*/ v_addc_u32      v57, vcc, v49, 0, vcc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
 /*dc5c0000 3c000030*/ flat_load_dwordx4 v[60:63], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56772b         */ v_xor_b32       v43, v43, v59
 /*2a54752a         */ v_xor_b32       v42, v42, v58
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -3516,7 +3509,7 @@
 /*32626001         */ v_add_u32       v49, vcc, s1, v48
 /*d1000030 00226131*/ v_cndmask_b32   v48, v49, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527329         */ v_xor_b32       v41, v41, v57
@@ -3544,7 +3537,7 @@
 /*d11c6a37 01a90131*/ v_addc_u32      v55, vcc, v49, 0, vcc
 /*dc5c0000 36000036*/ flat_load_dwordx4 v[54:57], v[54:55] slc glc
 /*dc5c0000 3a000030*/ flat_load_dwordx4 v[58:61], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56732b         */ v_xor_b32       v43, v43, v57
 /*2a606b2b         */ v_xor_b32       v48, v43, v53
 /*d2860024 00026124*/ v_mul_hi_u32    v36, v36, v48
@@ -3558,7 +3551,7 @@
 /*32604801         */ v_add_u32       v48, vcc, s1, v36
 /*d1000024 00224930*/ v_cndmask_b32   v36, v48, v36, s[8:9]
 /*d1000024 002a48c1*/ v_cndmask_b32   v36, -1, v36, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002415*/ ds_write_b32    v21, v36 offset:3072
 /*2a48712a         */ v_xor_b32       v36, v42, v56
 /*2a526f29         */ v_xor_b32       v41, v41, v55
@@ -3587,12 +3580,12 @@
 /*d11c6a31 01a90107*/ v_addc_u32      v49, vcc, v7, 0, vcc
 /*dc5c0000 34000030*/ flat_load_dwordx4 v[52:55], v[48:49] slc glc
 /*dc5c0000 38000006*/ flat_load_dwordx4 v[56:59], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4c6f2b         */ v_xor_b32       v38, v43, v55
 /*2a486d24         */ v_xor_b32       v36, v36, v54
 /*2a526b29         */ v_xor_b32       v41, v41, v53
 /*2a506928         */ v_xor_b32       v40, v40, v52
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a54772a         */ v_xor_b32       v42, v42, v59
 /*2a56752e         */ v_xor_b32       v43, v46, v58
 /*2a5a732d         */ v_xor_b32       v45, v45, v57
@@ -3617,7 +3610,7 @@
 /*bf88000c         */ s_cbranch_execz .L20264_0
 /*d8ee0302 08000003*/ ds_read2_b64    v[8:11], v3 offset0:2 offset1:3
 /*d8ee0100 5a000003*/ ds_read2_b64    v[90:93], v3 offset1:1
-/*bf8c017f         */ s_waitcnt       lgkmcnt(1)
+/*bf8c017f         */ s_waitcnt       lgkmcnt(0)
 /*7e9a0309         */ v_mov_b32       v77, v9
 /*7e9c030b         */ v_mov_b32       v78, v11
 /*7e36030a         */ v_mov_b32       v27, v10
@@ -3703,7 +3696,7 @@
 /*d11c6a07 01a9013b*/ v_addc_u32      v7, vcc, v59, 0, vcc
 /*dc5c0000 3e00003a*/ flat_load_dwordx4 v[62:65], v[58:59] slc glc
 /*dc5c0000 3a000006*/ flat_load_dwordx4 v[58:61], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a58592d         */ v_xor_b32       v44, v45, v44
 /*d286003f 00025924*/ v_mul_hi_u32    v63, v36, v44
@@ -3717,7 +3710,7 @@
 /*327e5801         */ v_add_u32       v63, vcc, s1, v44
 /*d100002c 0022593f*/ v_cndmask_b32   v44, v63, v44, s[8:9]
 /*d100002c 002a58c1*/ v_cndmask_b32   v44, -1, v44, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002c15*/ ds_write_b32    v21, v44 offset:3072
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
@@ -3747,7 +3740,7 @@
 /*d11c6a3b 01a9013e*/ v_addc_u32      v59, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003a*/ flat_load_dwordx4 v[65:68], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a60732e         */ v_xor_b32       v48, v46, v57
 /*d2860039 00026124*/ v_mul_hi_u32    v57, v36, v48
@@ -3761,7 +3754,7 @@
 /*32726001         */ v_add_u32       v57, vcc, s1, v48
 /*d1000030 00226139*/ v_cndmask_b32   v48, v57, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -3790,9 +3783,9 @@
 /*d11c6a3b 01a9013f*/ v_addc_u32      v59, vcc, v63, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e832f         */ v_xor_b32       v47, v47, v65
 /*2a60712f         */ v_xor_b32       v48, v47, v56
 /*d2860038 00026124*/ v_mul_hi_u32    v56, v36, v48
@@ -3833,7 +3826,7 @@
 /*d11c6a3a 01a9013e*/ v_addc_u32      v58, vcc, v62, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a507328         */ v_xor_b32       v40, v40, v57
 /*2a606f28         */ v_xor_b32       v48, v40, v55
@@ -3848,7 +3841,7 @@
 /*326e6001         */ v_add_u32       v55, vcc, s1, v48
 /*d1000030 00226137*/ v_cndmask_b32   v48, v55, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
@@ -3876,7 +3869,7 @@
 /*d11c6a39 01a9013d*/ v_addc_u32      v57, vcc, v61, 0, vcc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
 /*dc5c0000 3c00003c*/ flat_load_dwordx4 v[60:63], v[60:61] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527329         */ v_xor_b32       v41, v41, v57
 /*2a606d29         */ v_xor_b32       v48, v41, v54
 /*d2860036 00026124*/ v_mul_hi_u32    v54, v36, v48
@@ -3890,7 +3883,7 @@
 /*326c6001         */ v_add_u32       v54, vcc, s1, v48
 /*d1000030 00226136*/ v_cndmask_b32   v48, v54, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56772b         */ v_xor_b32       v43, v43, v59
 /*2a54752a         */ v_xor_b32       v42, v42, v58
@@ -3920,7 +3913,7 @@
 /*2a726288         */ v_xor_b32       v57, 8, v49
 /*dc5c0000 3a000037*/ flat_load_dwordx4 v[58:61], v[55:56] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606b2a         */ v_xor_b32       v48, v42, v53
@@ -3935,7 +3928,7 @@
 /*326a6001         */ v_add_u32       v53, vcc, s1, v48
 /*d1000030 00226135*/ v_cndmask_b32   v48, v53, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -3972,7 +3965,7 @@
 /*2a7e628a         */ v_xor_b32       v63, 10, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a68692b         */ v_xor_b32       v52, v43, v52
 /*d2860043 00026924*/ v_mul_hi_u32    v67, v36, v52
@@ -3986,7 +3979,7 @@
 /*32866801         */ v_add_u32       v67, vcc, s1, v52
 /*d1000034 00226943*/ v_cndmask_b32   v52, v67, v52, s[8:9]
 /*d1000034 002a68c1*/ v_cndmask_b32   v52, -1, v52, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003415*/ ds_write_b32    v21, v52 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -4021,12 +4014,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -4064,7 +4057,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a606b2d         */ v_xor_b32       v48, v45, v53
 /*d2860035 00026124*/ v_mul_hi_u32    v53, v36, v48
@@ -4078,7 +4071,7 @@
 /*326a6001         */ v_add_u32       v53, vcc, s1, v48
 /*d1000030 00226135*/ v_cndmask_b32   v48, v53, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -4107,7 +4100,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a60692e         */ v_xor_b32       v48, v46, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -4121,7 +4114,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -4150,9 +4143,9 @@
 /*d11c6a3c 01a90107*/ v_addc_u32      v60, vcc, v7, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f000006*/ flat_load_dwordx4 v[63:66], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -4193,7 +4186,7 @@
 /*d11c6a3b 01a90107*/ v_addc_u32      v59, vcc, v7, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -4208,7 +4201,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -4236,7 +4229,7 @@
 /*d11c6a3a 01a90107*/ v_addc_u32      v58, vcc, v7, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d000006*/ flat_load_dwordx4 v[61:64], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -4250,7 +4243,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -4280,7 +4273,7 @@
 /*2a726290         */ v_xor_b32       v57, 16, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -4295,7 +4288,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -4332,7 +4325,7 @@
 /*2a7e6292         */ v_xor_b32       v63, 18, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6c6d2b         */ v_xor_b32       v54, v43, v54
 /*d2860043 00026d24*/ v_mul_hi_u32    v67, v36, v54
@@ -4346,7 +4339,7 @@
 /*32866c01         */ v_add_u32       v67, vcc, s1, v54
 /*d1000036 00226d43*/ v_cndmask_b32   v54, v67, v54, s[8:9]
 /*d1000036 002a6cc1*/ v_cndmask_b32   v54, -1, v54, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003615*/ ds_write_b32    v21, v54 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -4381,12 +4374,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -4424,7 +4417,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -4438,7 +4431,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -4467,7 +4460,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606d2e         */ v_xor_b32       v48, v46, v54
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -4481,7 +4474,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -4510,9 +4503,9 @@
 /*d11c6a3c 01a90140*/ v_addc_u32      v60, vcc, v64, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f00003f*/ flat_load_dwordx4 v[63:66], v[63:64] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -4553,7 +4546,7 @@
 /*d11c6a3b 01a9013f*/ v_addc_u32      v59, vcc, v63, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -4568,7 +4561,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -4596,7 +4589,7 @@
 /*d11c6a3a 01a9013e*/ v_addc_u32      v58, vcc, v62, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -4610,7 +4603,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -4640,7 +4633,7 @@
 /*2a726298         */ v_xor_b32       v57, 24, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -4655,7 +4648,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -4692,7 +4685,7 @@
 /*2a7e629a         */ v_xor_b32       v63, 26, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6a6b2b         */ v_xor_b32       v53, v43, v53
 /*d2860043 00026b24*/ v_mul_hi_u32    v67, v36, v53
@@ -4706,7 +4699,7 @@
 /*32866a01         */ v_add_u32       v67, vcc, s1, v53
 /*d1000035 00226b43*/ v_cndmask_b32   v53, v67, v53, s[8:9]
 /*d1000035 002a6ac1*/ v_cndmask_b32   v53, -1, v53, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003515*/ ds_write_b32    v21, v53 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -4741,12 +4734,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -4784,7 +4777,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -4798,7 +4791,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -4827,7 +4820,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606b2e         */ v_xor_b32       v48, v46, v53
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -4841,7 +4834,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -4870,9 +4863,9 @@
 /*d11c6a3c 01a90107*/ v_addc_u32      v60, vcc, v7, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f000006*/ flat_load_dwordx4 v[63:66], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -4913,7 +4906,7 @@
 /*d11c6a3b 01a90107*/ v_addc_u32      v59, vcc, v7, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -4928,7 +4921,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -4956,7 +4949,7 @@
 /*d11c6a3a 01a90107*/ v_addc_u32      v58, vcc, v7, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d000006*/ flat_load_dwordx4 v[61:64], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -4970,7 +4963,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -5000,7 +4993,7 @@
 /*2a7262a0         */ v_xor_b32       v57, 32, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -5015,7 +5008,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -5052,7 +5045,7 @@
 /*2a7e62a2         */ v_xor_b32       v63, 34, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6c6d2b         */ v_xor_b32       v54, v43, v54
 /*d2860043 00026d24*/ v_mul_hi_u32    v67, v36, v54
@@ -5066,7 +5059,7 @@
 /*32866c01         */ v_add_u32       v67, vcc, s1, v54
 /*d1000036 00226d43*/ v_cndmask_b32   v54, v67, v54, s[8:9]
 /*d1000036 002a6cc1*/ v_cndmask_b32   v54, -1, v54, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003615*/ ds_write_b32    v21, v54 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -5101,12 +5094,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -5144,7 +5137,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -5158,7 +5151,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -5187,7 +5180,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606d2e         */ v_xor_b32       v48, v46, v54
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -5201,7 +5194,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -5230,9 +5223,9 @@
 /*d11c6a3c 01a90140*/ v_addc_u32      v60, vcc, v64, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f00003f*/ flat_load_dwordx4 v[63:66], v[63:64] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -5273,7 +5266,7 @@
 /*d11c6a3b 01a9013f*/ v_addc_u32      v59, vcc, v63, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -5288,7 +5281,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -5316,7 +5309,7 @@
 /*d11c6a3a 01a9013e*/ v_addc_u32      v58, vcc, v62, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -5330,7 +5323,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -5360,7 +5353,7 @@
 /*2a7262a8         */ v_xor_b32       v57, 40, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -5375,7 +5368,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -5412,7 +5405,7 @@
 /*2a7e62aa         */ v_xor_b32       v63, 42, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6a6b2b         */ v_xor_b32       v53, v43, v53
 /*d2860043 00026b24*/ v_mul_hi_u32    v67, v36, v53
@@ -5426,7 +5419,7 @@
 /*32866a01         */ v_add_u32       v67, vcc, s1, v53
 /*d1000035 00226b43*/ v_cndmask_b32   v53, v67, v53, s[8:9]
 /*d1000035 002a6ac1*/ v_cndmask_b32   v53, -1, v53, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003515*/ ds_write_b32    v21, v53 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -5461,12 +5454,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -5504,7 +5497,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -5518,7 +5511,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -5547,7 +5540,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606b2e         */ v_xor_b32       v48, v46, v53
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -5561,7 +5554,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -5590,9 +5583,9 @@
 /*d11c6a3c 01a90107*/ v_addc_u32      v60, vcc, v7, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f000006*/ flat_load_dwordx4 v[63:66], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -5633,7 +5626,7 @@
 /*d11c6a3b 01a90107*/ v_addc_u32      v59, vcc, v7, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -5648,7 +5641,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -5676,7 +5669,7 @@
 /*d11c6a3a 01a90107*/ v_addc_u32      v58, vcc, v7, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d000006*/ flat_load_dwordx4 v[61:64], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -5690,7 +5683,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -5720,7 +5713,7 @@
 /*2a7262b0         */ v_xor_b32       v57, 48, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -5735,7 +5728,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -5772,7 +5765,7 @@
 /*2a7e62b2         */ v_xor_b32       v63, 50, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6c6d2b         */ v_xor_b32       v54, v43, v54
 /*d2860043 00026d24*/ v_mul_hi_u32    v67, v36, v54
@@ -5786,7 +5779,7 @@
 /*32866c01         */ v_add_u32       v67, vcc, s1, v54
 /*d1000036 00226d43*/ v_cndmask_b32   v54, v67, v54, s[8:9]
 /*d1000036 002a6cc1*/ v_cndmask_b32   v54, -1, v54, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003615*/ ds_write_b32    v21, v54 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -5821,12 +5814,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -5864,7 +5857,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -5878,7 +5871,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -5907,7 +5900,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606d2e         */ v_xor_b32       v48, v46, v54
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -5921,7 +5914,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -5950,9 +5943,9 @@
 /*d11c6a3c 01a90140*/ v_addc_u32      v60, vcc, v64, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f00003f*/ flat_load_dwordx4 v[63:66], v[63:64] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -5993,7 +5986,7 @@
 /*d11c6a3b 01a9013f*/ v_addc_u32      v59, vcc, v63, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -6008,7 +6001,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -6036,7 +6029,7 @@
 /*d11c6a3a 01a9013e*/ v_addc_u32      v58, vcc, v62, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -6050,7 +6043,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -6080,7 +6073,7 @@
 /*2a7262b8         */ v_xor_b32       v57, 56, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -6095,7 +6088,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -6132,7 +6125,7 @@
 /*2a6262ba         */ v_xor_b32       v49, 58, v49
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a6a6b2b         */ v_xor_b32       v53, v43, v53
 /*d286003b 00026b24*/ v_mul_hi_u32    v59, v36, v53
@@ -6146,7 +6139,7 @@
 /*32766a01         */ v_add_u32       v59, vcc, s1, v53
 /*d1000035 00226b3b*/ v_cndmask_b32   v53, v59, v53, s[8:9]
 /*d1000035 002a6ac1*/ v_cndmask_b32   v53, -1, v53, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003515*/ ds_write_b32    v21, v53 offset:3072
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
@@ -6181,12 +6174,12 @@
 /*d11c6a3d 01a9013b*/ v_addc_u32      v61, vcc, v59, 0, vcc
 /*dc5c0000 3c00003c*/ flat_load_dwordx4 v[60:63], v[60:61] slc glc
 /*dc5c0000 4000003a*/ flat_load_dwordx4 v[64:67], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567f2b         */ v_xor_b32       v43, v43, v63
 /*2a547d2a         */ v_xor_b32       v42, v42, v62
 /*2a527b29         */ v_xor_b32       v41, v41, v61
 /*2a507928         */ v_xor_b32       v40, v40, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e872f         */ v_xor_b32       v47, v47, v67
 /*2a5c852e         */ v_xor_b32       v46, v46, v66
 /*2a5a832d         */ v_xor_b32       v45, v45, v65
@@ -6224,7 +6217,7 @@
 /*d11c6a3b 01a9013e*/ v_addc_u32      v59, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003a*/ flat_load_dwordx4 v[65:68], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7d2d         */ v_xor_b32       v45, v45, v62
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -6238,7 +6231,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -6267,7 +6260,7 @@
 /*d11c6a3b 01a9013d*/ v_addc_u32      v59, vcc, v61, 0, vcc
 /*dc5c0000 3c00003c*/ flat_load_dwordx4 v[60:63], v[60:61] slc glc
 /*dc5c0000 4000003a*/ flat_load_dwordx4 v[64:67], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7d2e         */ v_xor_b32       v46, v46, v62
 /*2a60632e         */ v_xor_b32       v48, v46, v49
 /*d2860031 00026124*/ v_mul_hi_u32    v49, v36, v48
@@ -6281,7 +6274,7 @@
 /*32626001         */ v_add_u32       v49, vcc, s1, v48
 /*d1000030 00226131*/ v_cndmask_b32   v48, v49, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a54852a         */ v_xor_b32       v42, v42, v66
@@ -6310,9 +6303,9 @@
 /*d11c6a3b 01a90131*/ v_addc_u32      v59, vcc, v49, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000030*/ flat_load_dwordx4 v[62:65], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e832f         */ v_xor_b32       v47, v47, v65
 /*2a606b2f         */ v_xor_b32       v48, v47, v53
 /*d2860031 00026124*/ v_mul_hi_u32    v49, v36, v48
@@ -6353,7 +6346,7 @@
 /*d11c6a35 01a90131*/ v_addc_u32      v53, vcc, v49, 0, vcc
 /*dc5c0000 3a000034*/ flat_load_dwordx4 v[58:61], v[52:53] slc glc
 /*dc5c0000 3e000030*/ flat_load_dwordx4 v[62:65], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -6368,7 +6361,7 @@
 /*32626001         */ v_add_u32       v49, vcc, s1, v48
 /*d1000030 00226131*/ v_cndmask_b32   v48, v49, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -6396,7 +6389,7 @@
 /*d11c6a35 01a90131*/ v_addc_u32      v53, vcc, v49, 0, vcc
 /*dc5c0000 39000034*/ flat_load_dwordx4 v[57:60], v[52:53] slc glc
 /*dc5c0000 3d000030*/ flat_load_dwordx4 v[61:64], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860031 00026124*/ v_mul_hi_u32    v49, v36, v48
@@ -6410,7 +6403,7 @@
 /*32626001         */ v_add_u32       v49, vcc, s1, v48
 /*d1000030 00226131*/ v_cndmask_b32   v48, v49, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -6439,7 +6432,7 @@
 /*d11c6a35 01a90131*/ v_addc_u32      v53, vcc, v49, 0, vcc
 /*dc5c0000 38000034*/ flat_load_dwordx4 v[56:59], v[52:53] slc glc
 /*dc5c0000 3c000030*/ flat_load_dwordx4 v[60:63], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56772b         */ v_xor_b32       v43, v43, v59
 /*2a54752a         */ v_xor_b32       v42, v42, v58
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -6454,7 +6447,7 @@
 /*32626001         */ v_add_u32       v49, vcc, s1, v48
 /*d1000030 00226131*/ v_cndmask_b32   v48, v49, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527329         */ v_xor_b32       v41, v41, v57
@@ -6482,7 +6475,7 @@
 /*d11c6a35 01a90131*/ v_addc_u32      v53, vcc, v49, 0, vcc
 /*dc5c0000 37000034*/ flat_load_dwordx4 v[55:58], v[52:53] slc glc
 /*dc5c0000 3b000030*/ flat_load_dwordx4 v[59:62], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56752b         */ v_xor_b32       v43, v43, v58
 /*2a606d2b         */ v_xor_b32       v48, v43, v54
 /*d2860024 00026124*/ v_mul_hi_u32    v36, v36, v48
@@ -6496,7 +6489,7 @@
 /*32604801         */ v_add_u32       v48, vcc, s1, v36
 /*d1000024 00224930*/ v_cndmask_b32   v36, v48, v36, s[8:9]
 /*d1000024 002a48c1*/ v_cndmask_b32   v36, -1, v36, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002415*/ ds_write_b32    v21, v36 offset:3072
 /*2a48732a         */ v_xor_b32       v36, v42, v57
 /*2a527129         */ v_xor_b32       v41, v41, v56
@@ -6525,12 +6518,12 @@
 /*d11c6a31 01a90107*/ v_addc_u32      v49, vcc, v7, 0, vcc
 /*dc5c0000 34000030*/ flat_load_dwordx4 v[52:55], v[48:49] slc glc
 /*dc5c0000 38000006*/ flat_load_dwordx4 v[56:59], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4c6f2b         */ v_xor_b32       v38, v43, v55
 /*2a486d24         */ v_xor_b32       v36, v36, v54
 /*2a526b29         */ v_xor_b32       v41, v41, v53
 /*2a506928         */ v_xor_b32       v40, v40, v52
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a54772a         */ v_xor_b32       v42, v42, v59
 /*2a56752e         */ v_xor_b32       v43, v46, v58
 /*2a5a732d         */ v_xor_b32       v45, v45, v57
@@ -6555,7 +6548,7 @@
 /*bf88000b         */ s_cbranch_execz .L37732_0
 /*d8ee0302 08000003*/ ds_read2_b64    v[8:11], v3 offset0:2 offset1:3
 /*d8ee0100 65000003*/ ds_read2_b64    v[101:104], v3 offset1:1
-/*bf8c017f         */ s_waitcnt       lgkmcnt(1)
+/*bf8c017f         */ s_waitcnt       lgkmcnt(0)
 /*7e9a0309         */ v_mov_b32       v77, v9
 /*7e9c030b         */ v_mov_b32       v78, v11
 /*7e36030a         */ v_mov_b32       v27, v10
@@ -6639,7 +6632,7 @@
 /*d11c6a07 01a9013b*/ v_addc_u32      v7, vcc, v59, 0, vcc
 /*dc5c0000 3e00003a*/ flat_load_dwordx4 v[62:65], v[58:59] slc glc
 /*dc5c0000 3a000006*/ flat_load_dwordx4 v[58:61], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a58592d         */ v_xor_b32       v44, v45, v44
 /*d286003f 00025924*/ v_mul_hi_u32    v63, v36, v44
@@ -6653,7 +6646,7 @@
 /*327e5801         */ v_add_u32       v63, vcc, s1, v44
 /*d100002c 0022593f*/ v_cndmask_b32   v44, v63, v44, s[8:9]
 /*d100002c 002a58c1*/ v_cndmask_b32   v44, -1, v44, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002c15*/ ds_write_b32    v21, v44 offset:3072
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
@@ -6683,7 +6676,7 @@
 /*d11c6a3b 01a9013e*/ v_addc_u32      v59, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003a*/ flat_load_dwordx4 v[65:68], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a60732e         */ v_xor_b32       v48, v46, v57
 /*d2860039 00026124*/ v_mul_hi_u32    v57, v36, v48
@@ -6697,7 +6690,7 @@
 /*32726001         */ v_add_u32       v57, vcc, s1, v48
 /*d1000030 00226139*/ v_cndmask_b32   v48, v57, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -6726,9 +6719,9 @@
 /*d11c6a3b 01a9013f*/ v_addc_u32      v59, vcc, v63, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e832f         */ v_xor_b32       v47, v47, v65
 /*2a60712f         */ v_xor_b32       v48, v47, v56
 /*d2860038 00026124*/ v_mul_hi_u32    v56, v36, v48
@@ -6769,7 +6762,7 @@
 /*d11c6a3a 01a9013e*/ v_addc_u32      v58, vcc, v62, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a507328         */ v_xor_b32       v40, v40, v57
 /*2a606f28         */ v_xor_b32       v48, v40, v55
@@ -6784,7 +6777,7 @@
 /*326e6001         */ v_add_u32       v55, vcc, s1, v48
 /*d1000030 00226137*/ v_cndmask_b32   v48, v55, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
@@ -6812,7 +6805,7 @@
 /*d11c6a39 01a9013d*/ v_addc_u32      v57, vcc, v61, 0, vcc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
 /*dc5c0000 3c00003c*/ flat_load_dwordx4 v[60:63], v[60:61] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527329         */ v_xor_b32       v41, v41, v57
 /*2a606d29         */ v_xor_b32       v48, v41, v54
 /*d2860036 00026124*/ v_mul_hi_u32    v54, v36, v48
@@ -6826,7 +6819,7 @@
 /*326c6001         */ v_add_u32       v54, vcc, s1, v48
 /*d1000030 00226136*/ v_cndmask_b32   v48, v54, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56772b         */ v_xor_b32       v43, v43, v59
 /*2a54752a         */ v_xor_b32       v42, v42, v58
@@ -6856,7 +6849,7 @@
 /*2a726288         */ v_xor_b32       v57, 8, v49
 /*dc5c0000 3a000037*/ flat_load_dwordx4 v[58:61], v[55:56] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606b2a         */ v_xor_b32       v48, v42, v53
@@ -6871,7 +6864,7 @@
 /*326a6001         */ v_add_u32       v53, vcc, s1, v48
 /*d1000030 00226135*/ v_cndmask_b32   v48, v53, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -6908,7 +6901,7 @@
 /*2a7e628a         */ v_xor_b32       v63, 10, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a68692b         */ v_xor_b32       v52, v43, v52
 /*d2860043 00026924*/ v_mul_hi_u32    v67, v36, v52
@@ -6922,7 +6915,7 @@
 /*32866801         */ v_add_u32       v67, vcc, s1, v52
 /*d1000034 00226943*/ v_cndmask_b32   v52, v67, v52, s[8:9]
 /*d1000034 002a68c1*/ v_cndmask_b32   v52, -1, v52, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003415*/ ds_write_b32    v21, v52 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -6957,12 +6950,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -7000,7 +6993,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a606b2d         */ v_xor_b32       v48, v45, v53
 /*d2860035 00026124*/ v_mul_hi_u32    v53, v36, v48
@@ -7014,7 +7007,7 @@
 /*326a6001         */ v_add_u32       v53, vcc, s1, v48
 /*d1000030 00226135*/ v_cndmask_b32   v48, v53, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -7043,7 +7036,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a60692e         */ v_xor_b32       v48, v46, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -7057,7 +7050,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -7086,9 +7079,9 @@
 /*d11c6a3c 01a90107*/ v_addc_u32      v60, vcc, v7, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f000006*/ flat_load_dwordx4 v[63:66], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -7129,7 +7122,7 @@
 /*d11c6a3b 01a90107*/ v_addc_u32      v59, vcc, v7, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -7144,7 +7137,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -7172,7 +7165,7 @@
 /*d11c6a3a 01a90107*/ v_addc_u32      v58, vcc, v7, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d000006*/ flat_load_dwordx4 v[61:64], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -7186,7 +7179,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -7216,7 +7209,7 @@
 /*2a726290         */ v_xor_b32       v57, 16, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -7231,7 +7224,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -7268,7 +7261,7 @@
 /*2a7e6292         */ v_xor_b32       v63, 18, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6c6d2b         */ v_xor_b32       v54, v43, v54
 /*d2860043 00026d24*/ v_mul_hi_u32    v67, v36, v54
@@ -7282,7 +7275,7 @@
 /*32866c01         */ v_add_u32       v67, vcc, s1, v54
 /*d1000036 00226d43*/ v_cndmask_b32   v54, v67, v54, s[8:9]
 /*d1000036 002a6cc1*/ v_cndmask_b32   v54, -1, v54, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003615*/ ds_write_b32    v21, v54 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -7317,12 +7310,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -7360,7 +7353,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -7374,7 +7367,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -7403,7 +7396,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606d2e         */ v_xor_b32       v48, v46, v54
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -7417,7 +7410,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -7446,9 +7439,9 @@
 /*d11c6a3c 01a90140*/ v_addc_u32      v60, vcc, v64, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f00003f*/ flat_load_dwordx4 v[63:66], v[63:64] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -7489,7 +7482,7 @@
 /*d11c6a3b 01a9013f*/ v_addc_u32      v59, vcc, v63, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -7504,7 +7497,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -7532,7 +7525,7 @@
 /*d11c6a3a 01a9013e*/ v_addc_u32      v58, vcc, v62, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -7546,7 +7539,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -7576,7 +7569,7 @@
 /*2a726298         */ v_xor_b32       v57, 24, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -7591,7 +7584,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -7628,7 +7621,7 @@
 /*2a7e629a         */ v_xor_b32       v63, 26, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6a6b2b         */ v_xor_b32       v53, v43, v53
 /*d2860043 00026b24*/ v_mul_hi_u32    v67, v36, v53
@@ -7642,7 +7635,7 @@
 /*32866a01         */ v_add_u32       v67, vcc, s1, v53
 /*d1000035 00226b43*/ v_cndmask_b32   v53, v67, v53, s[8:9]
 /*d1000035 002a6ac1*/ v_cndmask_b32   v53, -1, v53, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003515*/ ds_write_b32    v21, v53 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -7677,12 +7670,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -7720,7 +7713,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -7734,7 +7727,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -7763,7 +7756,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606b2e         */ v_xor_b32       v48, v46, v53
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -7777,7 +7770,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -7806,9 +7799,9 @@
 /*d11c6a3c 01a90107*/ v_addc_u32      v60, vcc, v7, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f000006*/ flat_load_dwordx4 v[63:66], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -7849,7 +7842,7 @@
 /*d11c6a3b 01a90107*/ v_addc_u32      v59, vcc, v7, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -7864,7 +7857,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -7892,7 +7885,7 @@
 /*d11c6a3a 01a90107*/ v_addc_u32      v58, vcc, v7, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d000006*/ flat_load_dwordx4 v[61:64], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -7906,7 +7899,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -7936,7 +7929,7 @@
 /*2a7262a0         */ v_xor_b32       v57, 32, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -7951,7 +7944,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -7988,7 +7981,7 @@
 /*2a7e62a2         */ v_xor_b32       v63, 34, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6c6d2b         */ v_xor_b32       v54, v43, v54
 /*d2860043 00026d24*/ v_mul_hi_u32    v67, v36, v54
@@ -8002,7 +7995,7 @@
 /*32866c01         */ v_add_u32       v67, vcc, s1, v54
 /*d1000036 00226d43*/ v_cndmask_b32   v54, v67, v54, s[8:9]
 /*d1000036 002a6cc1*/ v_cndmask_b32   v54, -1, v54, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003615*/ ds_write_b32    v21, v54 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -8037,12 +8030,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -8080,7 +8073,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -8094,7 +8087,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -8123,7 +8116,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606d2e         */ v_xor_b32       v48, v46, v54
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -8137,7 +8130,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -8166,9 +8159,9 @@
 /*d11c6a3c 01a90140*/ v_addc_u32      v60, vcc, v64, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f00003f*/ flat_load_dwordx4 v[63:66], v[63:64] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -8209,7 +8202,7 @@
 /*d11c6a3b 01a9013f*/ v_addc_u32      v59, vcc, v63, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -8224,7 +8217,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -8252,7 +8245,7 @@
 /*d11c6a3a 01a9013e*/ v_addc_u32      v58, vcc, v62, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -8266,7 +8259,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -8296,7 +8289,7 @@
 /*2a7262a8         */ v_xor_b32       v57, 40, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -8311,7 +8304,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -8348,7 +8341,7 @@
 /*2a7e62aa         */ v_xor_b32       v63, 42, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6a6b2b         */ v_xor_b32       v53, v43, v53
 /*d2860043 00026b24*/ v_mul_hi_u32    v67, v36, v53
@@ -8362,7 +8355,7 @@
 /*32866a01         */ v_add_u32       v67, vcc, s1, v53
 /*d1000035 00226b43*/ v_cndmask_b32   v53, v67, v53, s[8:9]
 /*d1000035 002a6ac1*/ v_cndmask_b32   v53, -1, v53, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003515*/ ds_write_b32    v21, v53 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -8397,12 +8390,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -8440,7 +8433,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -8454,7 +8447,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -8483,7 +8476,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606b2e         */ v_xor_b32       v48, v46, v53
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -8497,7 +8490,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -8526,9 +8519,9 @@
 /*d11c6a3c 01a90107*/ v_addc_u32      v60, vcc, v7, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f000006*/ flat_load_dwordx4 v[63:66], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -8569,7 +8562,7 @@
 /*d11c6a3b 01a90107*/ v_addc_u32      v59, vcc, v7, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -8584,7 +8577,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -8612,7 +8605,7 @@
 /*d11c6a3a 01a90107*/ v_addc_u32      v58, vcc, v7, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d000006*/ flat_load_dwordx4 v[61:64], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -8626,7 +8619,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -8656,7 +8649,7 @@
 /*2a7262b0         */ v_xor_b32       v57, 48, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000006*/ flat_load_dwordx4 v[62:65], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -8671,7 +8664,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -8708,7 +8701,7 @@
 /*2a7e62b2         */ v_xor_b32       v63, 50, v49
 /*dc5c0000 4000003d*/ flat_load_dwordx4 v[64:67], v[61:62] slc glc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a6c6d2b         */ v_xor_b32       v54, v43, v54
 /*d2860043 00026d24*/ v_mul_hi_u32    v67, v36, v54
@@ -8722,7 +8715,7 @@
 /*32866c01         */ v_add_u32       v67, vcc, s1, v54
 /*d1000036 00226d43*/ v_cndmask_b32   v54, v67, v54, s[8:9]
 /*d1000036 002a6cc1*/ v_cndmask_b32   v54, -1, v54, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003615*/ ds_write_b32    v21, v54 offset:3072
 /*2a54852a         */ v_xor_b32       v42, v42, v66
 /*2a528329         */ v_xor_b32       v41, v41, v65
@@ -8757,12 +8750,12 @@
 /*d11c6a3e 01a9013c*/ v_addc_u32      v62, vcc, v60, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e892f         */ v_xor_b32       v47, v47, v68
 /*2a5c872e         */ v_xor_b32       v46, v46, v67
 /*2a5a852d         */ v_xor_b32       v45, v45, v66
@@ -8800,7 +8793,7 @@
 /*d11c6a3c 01a9013f*/ v_addc_u32      v60, vcc, v63, 0, vcc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
 /*dc5c0000 4200003b*/ flat_load_dwordx4 v[66:69], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7f2d         */ v_xor_b32       v45, v45, v63
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -8814,7 +8807,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a568b2b         */ v_xor_b32       v43, v43, v69
 /*2a54892a         */ v_xor_b32       v42, v42, v68
@@ -8843,7 +8836,7 @@
 /*d11c6a3c 01a9013e*/ v_addc_u32      v60, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7f2e         */ v_xor_b32       v46, v46, v63
 /*2a606d2e         */ v_xor_b32       v48, v46, v54
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -8857,7 +8850,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -8886,9 +8879,9 @@
 /*d11c6a3c 01a90140*/ v_addc_u32      v60, vcc, v64, 0, vcc
 /*dc5c0000 3b00003b*/ flat_load_dwordx4 v[59:62], v[59:60] slc glc
 /*dc5c0000 3f00003f*/ flat_load_dwordx4 v[63:66], v[63:64] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e852f         */ v_xor_b32       v47, v47, v66
 /*2a60752f         */ v_xor_b32       v48, v47, v58
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -8929,7 +8922,7 @@
 /*d11c6a3b 01a9013f*/ v_addc_u32      v59, vcc, v63, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -8944,7 +8937,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -8972,7 +8965,7 @@
 /*d11c6a3a 01a9013e*/ v_addc_u32      v58, vcc, v62, 0, vcc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -8986,7 +8979,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -9016,7 +9009,7 @@
 /*2a7262b8         */ v_xor_b32       v57, 56, v49
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e00003e*/ flat_load_dwordx4 v[62:65], v[62:63] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567b2b         */ v_xor_b32       v43, v43, v61
 /*2a54792a         */ v_xor_b32       v42, v42, v60
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -9031,7 +9024,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527729         */ v_xor_b32       v41, v41, v59
@@ -9068,7 +9061,7 @@
 /*2a6262ba         */ v_xor_b32       v49, 58, v49
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003b*/ flat_load_dwordx4 v[65:68], v[59:60] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56812b         */ v_xor_b32       v43, v43, v64
 /*2a6a6b2b         */ v_xor_b32       v53, v43, v53
 /*d286003b 00026b24*/ v_mul_hi_u32    v59, v36, v53
@@ -9082,7 +9075,7 @@
 /*32766a01         */ v_add_u32       v59, vcc, s1, v53
 /*d1000035 00226b3b*/ v_cndmask_b32   v53, v59, v53, s[8:9]
 /*d1000035 002a6ac1*/ v_cndmask_b32   v53, -1, v53, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003515*/ ds_write_b32    v21, v53 offset:3072
 /*2a547f2a         */ v_xor_b32       v42, v42, v63
 /*2a527d29         */ v_xor_b32       v41, v41, v62
@@ -9117,12 +9110,12 @@
 /*d11c6a3d 01a9013b*/ v_addc_u32      v61, vcc, v59, 0, vcc
 /*dc5c0000 3c00003c*/ flat_load_dwordx4 v[60:63], v[60:61] slc glc
 /*dc5c0000 4000003a*/ flat_load_dwordx4 v[64:67], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a567f2b         */ v_xor_b32       v43, v43, v63
 /*2a547d2a         */ v_xor_b32       v42, v42, v62
 /*2a527b29         */ v_xor_b32       v41, v41, v61
 /*2a507928         */ v_xor_b32       v40, v40, v60
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e872f         */ v_xor_b32       v47, v47, v67
 /*2a5c852e         */ v_xor_b32       v46, v46, v66
 /*2a5a832d         */ v_xor_b32       v45, v45, v65
@@ -9160,7 +9153,7 @@
 /*d11c6a3b 01a9013e*/ v_addc_u32      v59, vcc, v62, 0, vcc
 /*dc5c0000 3d00003d*/ flat_load_dwordx4 v[61:64], v[61:62] slc glc
 /*dc5c0000 4100003a*/ flat_load_dwordx4 v[65:68], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5a7d2d         */ v_xor_b32       v45, v45, v62
 /*2a60692d         */ v_xor_b32       v48, v45, v52
 /*d2860034 00026124*/ v_mul_hi_u32    v52, v36, v48
@@ -9174,7 +9167,7 @@
 /*32686001         */ v_add_u32       v52, vcc, s1, v48
 /*d1000030 00226134*/ v_cndmask_b32   v48, v52, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56892b         */ v_xor_b32       v43, v43, v68
 /*2a54872a         */ v_xor_b32       v42, v42, v67
@@ -9203,7 +9196,7 @@
 /*d11c6a3b 01a9013d*/ v_addc_u32      v59, vcc, v61, 0, vcc
 /*dc5c0000 3c00003c*/ flat_load_dwordx4 v[60:63], v[60:61] slc glc
 /*dc5c0000 4000003a*/ flat_load_dwordx4 v[64:67], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5c7d2e         */ v_xor_b32       v46, v46, v62
 /*2a60632e         */ v_xor_b32       v48, v46, v49
 /*d2860031 00026124*/ v_mul_hi_u32    v49, v36, v48
@@ -9217,7 +9210,7 @@
 /*32626001         */ v_add_u32       v49, vcc, s1, v48
 /*d1000030 00226131*/ v_cndmask_b32   v48, v49, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56872b         */ v_xor_b32       v43, v43, v67
 /*2a54852a         */ v_xor_b32       v42, v42, v66
@@ -9246,9 +9239,9 @@
 /*d11c6a3b 01a90131*/ v_addc_u32      v59, vcc, v49, 0, vcc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
 /*dc5c0000 3e000030*/ flat_load_dwordx4 v[62:65], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a5e832f         */ v_xor_b32       v47, v47, v65
 /*2a606b2f         */ v_xor_b32       v48, v47, v53
 /*d2860031 00026124*/ v_mul_hi_u32    v49, v36, v48
@@ -9289,7 +9282,7 @@
 /*d11c6a35 01a90131*/ v_addc_u32      v53, vcc, v49, 0, vcc
 /*dc5c0000 3a000034*/ flat_load_dwordx4 v[58:61], v[52:53] slc glc
 /*dc5c0000 3e000030*/ flat_load_dwordx4 v[62:65], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a507528         */ v_xor_b32       v40, v40, v58
 /*2a607328         */ v_xor_b32       v48, v40, v57
@@ -9304,7 +9297,7 @@
 /*32626001         */ v_add_u32       v49, vcc, s1, v48
 /*d1000030 00226131*/ v_cndmask_b32   v48, v49, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850029 00024f29*/ v_mul_lo_u32    v41, v41, v39
 /*2a5c812e         */ v_xor_b32       v46, v46, v64
@@ -9332,7 +9325,7 @@
 /*d11c6a35 01a90131*/ v_addc_u32      v53, vcc, v49, 0, vcc
 /*dc5c0000 39000034*/ flat_load_dwordx4 v[57:60], v[52:53] slc glc
 /*dc5c0000 3d000030*/ flat_load_dwordx4 v[61:64], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527529         */ v_xor_b32       v41, v41, v58
 /*2a607129         */ v_xor_b32       v48, v41, v56
 /*d2860031 00026124*/ v_mul_hi_u32    v49, v36, v48
@@ -9346,7 +9339,7 @@
 /*32626001         */ v_add_u32       v49, vcc, s1, v48
 /*d1000030 00226131*/ v_cndmask_b32   v48, v49, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*2a56792b         */ v_xor_b32       v43, v43, v60
 /*2a54772a         */ v_xor_b32       v42, v42, v59
@@ -9375,7 +9368,7 @@
 /*d11c6a35 01a90131*/ v_addc_u32      v53, vcc, v49, 0, vcc
 /*dc5c0000 38000034*/ flat_load_dwordx4 v[56:59], v[52:53] slc glc
 /*dc5c0000 3c000030*/ flat_load_dwordx4 v[60:63], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56772b         */ v_xor_b32       v43, v43, v59
 /*2a54752a         */ v_xor_b32       v42, v42, v58
 /*2a606f2a         */ v_xor_b32       v48, v42, v55
@@ -9390,7 +9383,7 @@
 /*32626001         */ v_add_u32       v49, vcc, s1, v48
 /*d1000030 00226131*/ v_cndmask_b32   v48, v49, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d285002b 00024f2b*/ v_mul_lo_u32    v43, v43, v39
 /*2a527329         */ v_xor_b32       v41, v41, v57
@@ -9418,7 +9411,7 @@
 /*d11c6a35 01a90131*/ v_addc_u32      v53, vcc, v49, 0, vcc
 /*dc5c0000 37000034*/ flat_load_dwordx4 v[55:58], v[52:53] slc glc
 /*dc5c0000 3b000030*/ flat_load_dwordx4 v[59:62], v[48:49] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a56752b         */ v_xor_b32       v43, v43, v58
 /*2a606d2b         */ v_xor_b32       v48, v43, v54
 /*d2860024 00026124*/ v_mul_hi_u32    v36, v36, v48
@@ -9432,7 +9425,7 @@
 /*32604801         */ v_add_u32       v48, vcc, s1, v36
 /*d1000024 00224930*/ v_cndmask_b32   v36, v48, v36, s[8:9]
 /*d1000024 002a48c1*/ v_cndmask_b32   v36, -1, v36, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002415*/ ds_write_b32    v21, v36 offset:3072
 /*2a48732a         */ v_xor_b32       v36, v42, v57
 /*2a527129         */ v_xor_b32       v41, v41, v56
@@ -9461,12 +9454,12 @@
 /*d11c6a31 01a90107*/ v_addc_u32      v49, vcc, v7, 0, vcc
 /*dc5c0000 34000030*/ flat_load_dwordx4 v[52:55], v[48:49] slc glc
 /*dc5c0000 38000006*/ flat_load_dwordx4 v[56:59], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4c6f2b         */ v_xor_b32       v38, v43, v55
 /*2a486d24         */ v_xor_b32       v36, v36, v54
 /*2a526b29         */ v_xor_b32       v41, v41, v53
 /*2a506928         */ v_xor_b32       v40, v40, v52
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a54772a         */ v_xor_b32       v42, v42, v59
 /*2a56752e         */ v_xor_b32       v43, v46, v58
 /*2a5a732d         */ v_xor_b32       v45, v45, v57
@@ -9491,7 +9484,7 @@
 /*bf88000c         */ s_cbranch_execz .L55200_0
 /*d8ee0302 08000003*/ ds_read2_b64    v[8:11], v3 offset0:2 offset1:3
 /*d8ee0100 57000003*/ ds_read2_b64    v[87:90], v3 offset1:1
-/*bf8c017f         */ s_waitcnt       lgkmcnt(1)
+/*bf8c017f         */ s_waitcnt       lgkmcnt(0)
 /*7e9a0309         */ v_mov_b32       v77, v9
 /*7e9c030b         */ v_mov_b32       v78, v11
 /*7e36030a         */ v_mov_b32       v27, v10
@@ -9577,7 +9570,7 @@
 /*d11c6a07 01a90135*/ v_addc_u32      v7, vcc, v53, 0, vcc
 /*dc5c0000 38000034*/ flat_load_dwordx4 v[56:59], v[52:53] slc glc
 /*dc5c0000 34000006*/ flat_load_dwordx4 v[52:55], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a3e731f         */ v_xor_b32       v31, v31, v57
 /*2a54551f         */ v_xor_b32       v42, v31, v42
 /*d2860039 00025505*/ v_mul_hi_u32    v57, v5, v42
@@ -9591,7 +9584,7 @@
 /*32725401         */ v_add_u32       v57, vcc, s1, v42
 /*d100002a 00225539*/ v_cndmask_b32   v42, v57, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e6f27         */ v_xor_b32       v39, v39, v55
 /*2a4c6d26         */ v_xor_b32       v38, v38, v54
@@ -9621,7 +9614,7 @@
 /*d11c6a35 01a90138*/ v_addc_u32      v53, vcc, v56, 0, vcc
 /*dc5c0000 37000037*/ flat_load_dwordx4 v[55:58], v[55:56] slc glc
 /*dc5c0000 3b000034*/ flat_load_dwordx4 v[59:62], v[52:53] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a507328         */ v_xor_b32       v40, v40, v57
 /*2a546328         */ v_xor_b32       v42, v40, v49
 /*d2860031 00025505*/ v_mul_hi_u32    v49, v5, v42
@@ -9635,7 +9628,7 @@
 /*32625401         */ v_add_u32       v49, vcc, s1, v42
 /*d100002a 00225531*/ v_cndmask_b32   v42, v49, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e7d27         */ v_xor_b32       v39, v39, v62
 /*2a4c7b26         */ v_xor_b32       v38, v38, v61
@@ -9664,9 +9657,9 @@
 /*d11c6a35 01a90139*/ v_addc_u32      v53, vcc, v57, 0, vcc
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426b21         */ v_xor_b32       v33, v33, v53
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527729         */ v_xor_b32       v41, v41, v59
 /*2a546129         */ v_xor_b32       v42, v41, v48
 /*d2860030 00025505*/ v_mul_hi_u32    v48, v5, v42
@@ -9707,7 +9700,7 @@
 /*d11c6a35 01a90107*/ v_addc_u32      v53, vcc, v7, 0, vcc
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000006*/ flat_load_dwordx4 v[56:59], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426b21         */ v_xor_b32       v33, v33, v53
 /*2a466923         */ v_xor_b32       v35, v35, v52
 /*2a545f23         */ v_xor_b32       v42, v35, v47
@@ -9722,7 +9715,7 @@
 /*325e5401         */ v_add_u32       v47, vcc, s1, v42
 /*d100002a 0022552f*/ v_cndmask_b32   v42, v47, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*d2850021 00023d21*/ v_mul_lo_u32    v33, v33, v30
 /*2a507528         */ v_xor_b32       v40, v40, v58
@@ -9750,7 +9743,7 @@
 /*d11c6a31 01a90107*/ v_addc_u32      v49, vcc, v7, 0, vcc
 /*dc5c0000 34000030*/ flat_load_dwordx4 v[52:55], v[48:49] slc glc
 /*dc5c0000 38000006*/ flat_load_dwordx4 v[56:59], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426b21         */ v_xor_b32       v33, v33, v53
 /*2a545d21         */ v_xor_b32       v42, v33, v46
 /*d286002e 00025505*/ v_mul_hi_u32    v46, v5, v42
@@ -9764,7 +9757,7 @@
 /*325c5401         */ v_add_u32       v46, vcc, s1, v42
 /*d100002a 0022552e*/ v_cndmask_b32   v42, v46, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e6f27         */ v_xor_b32       v39, v39, v55
 /*2a4c6d26         */ v_xor_b32       v38, v38, v54
@@ -9794,7 +9787,7 @@
 /*2a625688         */ v_xor_b32       v49, 8, v43
 /*dc5c0000 3400002f*/ flat_load_dwordx4 v[52:55], v[47:48] slc glc
 /*dc5c0000 38000006*/ flat_load_dwordx4 v[56:59], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e6f27         */ v_xor_b32       v39, v39, v55
 /*2a4c6d26         */ v_xor_b32       v38, v38, v54
 /*2a545b26         */ v_xor_b32       v42, v38, v45
@@ -9809,7 +9802,7 @@
 /*325a5401         */ v_add_u32       v45, vcc, s1, v42
 /*d100002a 0022552d*/ v_cndmask_b32   v42, v45, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*d2850027 00023d27*/ v_mul_lo_u32    v39, v39, v30
 /*2a426b21         */ v_xor_b32       v33, v33, v53
@@ -9846,7 +9839,7 @@
 /*2a72568a         */ v_xor_b32       v57, 10, v43
 /*dc5c0000 3a000037*/ flat_load_dwordx4 v[58:61], v[55:56] slc glc
 /*dc5c0000 35000035*/ flat_load_dwordx4 v[53:56], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7b27         */ v_xor_b32       v39, v39, v61
 /*2a585927         */ v_xor_b32       v44, v39, v44
 /*d286003d 00025905*/ v_mul_hi_u32    v61, v5, v44
@@ -9860,7 +9853,7 @@
 /*327a5801         */ v_add_u32       v61, vcc, s1, v44
 /*d100002c 0022593d*/ v_cndmask_b32   v44, v61, v44, s[8:9]
 /*d100002c 002a58c1*/ v_cndmask_b32   v44, -1, v44, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002c15*/ ds_write_b32    v21, v44 offset:3072
 /*2a4c7926         */ v_xor_b32       v38, v38, v60
 /*2a427721         */ v_xor_b32       v33, v33, v59
@@ -9895,12 +9888,12 @@
 /*d11c6a38 01a90136*/ v_addc_u32      v56, vcc, v54, 0, vcc
 /*dc5c0000 37000037*/ flat_load_dwordx4 v[55:58], v[55:56] slc glc
 /*dc5c0000 3b000035*/ flat_load_dwordx4 v[59:62], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7527         */ v_xor_b32       v39, v39, v58
 /*2a4c7326         */ v_xor_b32       v38, v38, v57
 /*2a427121         */ v_xor_b32       v33, v33, v56
 /*2a466f23         */ v_xor_b32       v35, v35, v55
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
 /*2a3e791f         */ v_xor_b32       v31, v31, v60
@@ -9938,7 +9931,7 @@
 /*d11c6a36 01a90139*/ v_addc_u32      v54, vcc, v57, 0, vcc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
 /*dc5c0000 3c000035*/ flat_load_dwordx4 v[60:63], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a3e731f         */ v_xor_b32       v31, v31, v57
 /*2a545b1f         */ v_xor_b32       v42, v31, v45
 /*d286002d 00025505*/ v_mul_hi_u32    v45, v5, v42
@@ -9952,7 +9945,7 @@
 /*325a5401         */ v_add_u32       v45, vcc, s1, v42
 /*d100002a 0022552d*/ v_cndmask_b32   v42, v45, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e7f27         */ v_xor_b32       v39, v39, v63
 /*2a4c7d26         */ v_xor_b32       v38, v38, v62
@@ -9981,7 +9974,7 @@
 /*d11c6a36 01a90138*/ v_addc_u32      v54, vcc, v56, 0, vcc
 /*dc5c0000 37000037*/ flat_load_dwordx4 v[55:58], v[55:56] slc glc
 /*dc5c0000 3b000035*/ flat_load_dwordx4 v[59:62], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a507328         */ v_xor_b32       v40, v40, v57
 /*2a545928         */ v_xor_b32       v42, v40, v44
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -9995,7 +9988,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e7d27         */ v_xor_b32       v39, v39, v62
 /*2a4c7b26         */ v_xor_b32       v38, v38, v61
@@ -10024,9 +10017,9 @@
 /*d11c6a36 01a90107*/ v_addc_u32      v54, vcc, v7, 0, vcc
 /*dc5c0000 35000035*/ flat_load_dwordx4 v[53:56], v[53:54] slc glc
 /*dc5c0000 39000006*/ flat_load_dwordx4 v[57:60], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426d21         */ v_xor_b32       v33, v33, v54
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
 /*2a546929         */ v_xor_b32       v42, v41, v52
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -10067,7 +10060,7 @@
 /*d11c6a35 01a90107*/ v_addc_u32      v53, vcc, v7, 0, vcc
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000006*/ flat_load_dwordx4 v[56:59], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426b21         */ v_xor_b32       v33, v33, v53
 /*2a466923         */ v_xor_b32       v35, v35, v52
 /*2a546323         */ v_xor_b32       v42, v35, v49
@@ -10082,7 +10075,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*d2850021 00023d21*/ v_mul_lo_u32    v33, v33, v30
 /*2a507528         */ v_xor_b32       v40, v40, v58
@@ -10110,7 +10103,7 @@
 /*d11c6a35 01a90107*/ v_addc_u32      v53, vcc, v7, 0, vcc
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000006*/ flat_load_dwordx4 v[56:59], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426b21         */ v_xor_b32       v33, v33, v53
 /*2a546121         */ v_xor_b32       v42, v33, v48
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -10124,7 +10117,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e6f27         */ v_xor_b32       v39, v39, v55
 /*2a4c6d26         */ v_xor_b32       v38, v38, v54
@@ -10154,7 +10147,7 @@
 /*2a625690         */ v_xor_b32       v49, 16, v43
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000006*/ flat_load_dwordx4 v[56:59], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e6f27         */ v_xor_b32       v39, v39, v55
 /*2a4c6d26         */ v_xor_b32       v38, v38, v54
 /*2a545f26         */ v_xor_b32       v42, v38, v47
@@ -10169,7 +10162,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*d2850027 00023d27*/ v_mul_lo_u32    v39, v39, v30
 /*2a426b21         */ v_xor_b32       v33, v33, v53
@@ -10206,7 +10199,7 @@
 /*2a725692         */ v_xor_b32       v57, 18, v43
 /*dc5c0000 3a000037*/ flat_load_dwordx4 v[58:61], v[55:56] slc glc
 /*dc5c0000 35000035*/ flat_load_dwordx4 v[53:56], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7b27         */ v_xor_b32       v39, v39, v61
 /*2a5c5d27         */ v_xor_b32       v46, v39, v46
 /*d286003d 00025d05*/ v_mul_hi_u32    v61, v5, v46
@@ -10220,7 +10213,7 @@
 /*327a5c01         */ v_add_u32       v61, vcc, s1, v46
 /*d100002e 00225d3d*/ v_cndmask_b32   v46, v61, v46, s[8:9]
 /*d100002e 002a5cc1*/ v_cndmask_b32   v46, -1, v46, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002e15*/ ds_write_b32    v21, v46 offset:3072
 /*2a4c7926         */ v_xor_b32       v38, v38, v60
 /*2a427721         */ v_xor_b32       v33, v33, v59
@@ -10255,12 +10248,12 @@
 /*d11c6a38 01a90136*/ v_addc_u32      v56, vcc, v54, 0, vcc
 /*dc5c0000 37000037*/ flat_load_dwordx4 v[55:58], v[55:56] slc glc
 /*dc5c0000 3b000035*/ flat_load_dwordx4 v[59:62], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7527         */ v_xor_b32       v39, v39, v58
 /*2a4c7326         */ v_xor_b32       v38, v38, v57
 /*2a427121         */ v_xor_b32       v33, v33, v56
 /*2a466f23         */ v_xor_b32       v35, v35, v55
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
 /*2a3e791f         */ v_xor_b32       v31, v31, v60
@@ -10298,7 +10291,7 @@
 /*d11c6a36 01a90139*/ v_addc_u32      v54, vcc, v57, 0, vcc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
 /*dc5c0000 3c000035*/ flat_load_dwordx4 v[60:63], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a3e731f         */ v_xor_b32       v31, v31, v57
 /*2a54591f         */ v_xor_b32       v42, v31, v44
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -10312,7 +10305,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e7f27         */ v_xor_b32       v39, v39, v63
 /*2a4c7d26         */ v_xor_b32       v38, v38, v62
@@ -10341,7 +10334,7 @@
 /*d11c6a36 01a90138*/ v_addc_u32      v54, vcc, v56, 0, vcc
 /*dc5c0000 37000037*/ flat_load_dwordx4 v[55:58], v[55:56] slc glc
 /*dc5c0000 3b000035*/ flat_load_dwordx4 v[59:62], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a507328         */ v_xor_b32       v40, v40, v57
 /*2a545d28         */ v_xor_b32       v42, v40, v46
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -10355,7 +10348,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e7d27         */ v_xor_b32       v39, v39, v62
 /*2a4c7b26         */ v_xor_b32       v38, v38, v61
@@ -10384,9 +10377,9 @@
 /*d11c6a36 01a9013a*/ v_addc_u32      v54, vcc, v58, 0, vcc
 /*dc5c0000 35000035*/ flat_load_dwordx4 v[53:56], v[53:54] slc glc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426d21         */ v_xor_b32       v33, v33, v54
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
 /*2a546929         */ v_xor_b32       v42, v41, v52
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -10427,7 +10420,7 @@
 /*d11c6a35 01a90139*/ v_addc_u32      v53, vcc, v57, 0, vcc
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426b21         */ v_xor_b32       v33, v33, v53
 /*2a466923         */ v_xor_b32       v35, v35, v52
 /*2a546323         */ v_xor_b32       v42, v35, v49
@@ -10442,7 +10435,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*d2850021 00023d21*/ v_mul_lo_u32    v33, v33, v30
 /*2a507528         */ v_xor_b32       v40, v40, v58
@@ -10470,7 +10463,7 @@
 /*d11c6a35 01a90139*/ v_addc_u32      v53, vcc, v57, 0, vcc
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426b21         */ v_xor_b32       v33, v33, v53
 /*2a546121         */ v_xor_b32       v42, v33, v48
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -10484,7 +10477,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e6f27         */ v_xor_b32       v39, v39, v55
 /*2a4c6d26         */ v_xor_b32       v38, v38, v54
@@ -10514,7 +10507,7 @@
 /*2a625698         */ v_xor_b32       v49, 24, v43
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e6f27         */ v_xor_b32       v39, v39, v55
 /*2a4c6d26         */ v_xor_b32       v38, v38, v54
 /*2a545f26         */ v_xor_b32       v42, v38, v47
@@ -10529,7 +10522,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*d2850027 00023d27*/ v_mul_lo_u32    v39, v39, v30
 /*2a426b21         */ v_xor_b32       v33, v33, v53
@@ -10566,7 +10559,7 @@
 /*2a72569a         */ v_xor_b32       v57, 26, v43
 /*dc5c0000 3a000037*/ flat_load_dwordx4 v[58:61], v[55:56] slc glc
 /*dc5c0000 35000035*/ flat_load_dwordx4 v[53:56], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7b27         */ v_xor_b32       v39, v39, v61
 /*2a5a5b27         */ v_xor_b32       v45, v39, v45
 /*d286003d 00025b05*/ v_mul_hi_u32    v61, v5, v45
@@ -10580,7 +10573,7 @@
 /*327a5a01         */ v_add_u32       v61, vcc, s1, v45
 /*d100002d 00225b3d*/ v_cndmask_b32   v45, v61, v45, s[8:9]
 /*d100002d 002a5ac1*/ v_cndmask_b32   v45, -1, v45, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002d15*/ ds_write_b32    v21, v45 offset:3072
 /*2a4c7926         */ v_xor_b32       v38, v38, v60
 /*2a427721         */ v_xor_b32       v33, v33, v59
@@ -10615,12 +10608,12 @@
 /*d11c6a38 01a90136*/ v_addc_u32      v56, vcc, v54, 0, vcc
 /*dc5c0000 37000037*/ flat_load_dwordx4 v[55:58], v[55:56] slc glc
 /*dc5c0000 3b000035*/ flat_load_dwordx4 v[59:62], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7527         */ v_xor_b32       v39, v39, v58
 /*2a4c7326         */ v_xor_b32       v38, v38, v57
 /*2a427121         */ v_xor_b32       v33, v33, v56
 /*2a466f23         */ v_xor_b32       v35, v35, v55
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
 /*2a3e791f         */ v_xor_b32       v31, v31, v60
@@ -10658,7 +10651,7 @@
 /*d11c6a36 01a90139*/ v_addc_u32      v54, vcc, v57, 0, vcc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
 /*dc5c0000 3c000035*/ flat_load_dwordx4 v[60:63], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a3e731f         */ v_xor_b32       v31, v31, v57
 /*2a54591f         */ v_xor_b32       v42, v31, v44
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -10672,7 +10665,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e7f27         */ v_xor_b32       v39, v39, v63
 /*2a4c7d26         */ v_xor_b32       v38, v38, v62
@@ -10701,7 +10694,7 @@
 /*d11c6a36 01a90138*/ v_addc_u32      v54, vcc, v56, 0, vcc
 /*dc5c0000 37000037*/ flat_load_dwordx4 v[55:58], v[55:56] slc glc
 /*dc5c0000 3b000035*/ flat_load_dwordx4 v[59:62], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a507328         */ v_xor_b32       v40, v40, v57
 /*2a545b28         */ v_xor_b32       v42, v40, v45
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -10715,7 +10708,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e7d27         */ v_xor_b32       v39, v39, v62
 /*2a4c7b26         */ v_xor_b32       v38, v38, v61
@@ -10744,9 +10737,9 @@
 /*d11c6a36 01a90107*/ v_addc_u32      v54, vcc, v7, 0, vcc
 /*dc5c0000 35000035*/ flat_load_dwordx4 v[53:56], v[53:54] slc glc
 /*dc5c0000 39000006*/ flat_load_dwordx4 v[57:60], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426d21         */ v_xor_b32       v33, v33, v54
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
 /*2a546929         */ v_xor_b32       v42, v41, v52
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -10787,7 +10780,7 @@
 /*d11c6a35 01a90107*/ v_addc_u32      v53, vcc, v7, 0, vcc
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000006*/ flat_load_dwordx4 v[56:59], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426b21         */ v_xor_b32       v33, v33, v53
 /*2a466923         */ v_xor_b32       v35, v35, v52
 /*2a546323         */ v_xor_b32       v42, v35, v49
@@ -10802,7 +10795,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*d2850021 00023d21*/ v_mul_lo_u32    v33, v33, v30
 /*2a507528         */ v_xor_b32       v40, v40, v58
@@ -10830,7 +10823,7 @@
 /*d11c6a35 01a90107*/ v_addc_u32      v53, vcc, v7, 0, vcc
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000006*/ flat_load_dwordx4 v[56:59], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426b21         */ v_xor_b32       v33, v33, v53
 /*2a546121         */ v_xor_b32       v42, v33, v48
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -10844,7 +10837,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e6f27         */ v_xor_b32       v39, v39, v55
 /*2a4c6d26         */ v_xor_b32       v38, v38, v54
@@ -10874,7 +10867,7 @@
 /*2a6256a0         */ v_xor_b32       v49, 32, v43
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000006*/ flat_load_dwordx4 v[56:59], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e6f27         */ v_xor_b32       v39, v39, v55
 /*2a4c6d26         */ v_xor_b32       v38, v38, v54
 /*2a545f26         */ v_xor_b32       v42, v38, v47
@@ -10889,7 +10882,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*d2850027 00023d27*/ v_mul_lo_u32    v39, v39, v30
 /*2a426b21         */ v_xor_b32       v33, v33, v53
@@ -10926,7 +10919,7 @@
 /*2a7256a2         */ v_xor_b32       v57, 34, v43
 /*dc5c0000 3a000037*/ flat_load_dwordx4 v[58:61], v[55:56] slc glc
 /*dc5c0000 35000035*/ flat_load_dwordx4 v[53:56], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7b27         */ v_xor_b32       v39, v39, v61
 /*2a5c5d27         */ v_xor_b32       v46, v39, v46
 /*d286003d 00025d05*/ v_mul_hi_u32    v61, v5, v46
@@ -10940,7 +10933,7 @@
 /*327a5c01         */ v_add_u32       v61, vcc, s1, v46
 /*d100002e 00225d3d*/ v_cndmask_b32   v46, v61, v46, s[8:9]
 /*d100002e 002a5cc1*/ v_cndmask_b32   v46, -1, v46, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002e15*/ ds_write_b32    v21, v46 offset:3072
 /*2a4c7926         */ v_xor_b32       v38, v38, v60
 /*2a427721         */ v_xor_b32       v33, v33, v59
@@ -10975,12 +10968,12 @@
 /*d11c6a38 01a90136*/ v_addc_u32      v56, vcc, v54, 0, vcc
 /*dc5c0000 37000037*/ flat_load_dwordx4 v[55:58], v[55:56] slc glc
 /*dc5c0000 3b000035*/ flat_load_dwordx4 v[59:62], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7527         */ v_xor_b32       v39, v39, v58
 /*2a4c7326         */ v_xor_b32       v38, v38, v57
 /*2a427121         */ v_xor_b32       v33, v33, v56
 /*2a466f23         */ v_xor_b32       v35, v35, v55
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527d29         */ v_xor_b32       v41, v41, v62
 /*2a507b28         */ v_xor_b32       v40, v40, v61
 /*2a3e791f         */ v_xor_b32       v31, v31, v60
@@ -11018,7 +11011,7 @@
 /*d11c6a36 01a90139*/ v_addc_u32      v54, vcc, v57, 0, vcc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
 /*dc5c0000 3c000035*/ flat_load_dwordx4 v[60:63], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a3e731f         */ v_xor_b32       v31, v31, v57
 /*2a54591f         */ v_xor_b32       v42, v31, v44
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -11032,7 +11025,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e7f27         */ v_xor_b32       v39, v39, v63
 /*2a4c7d26         */ v_xor_b32       v38, v38, v62
@@ -11061,7 +11054,7 @@
 /*d11c6a36 01a90138*/ v_addc_u32      v54, vcc, v56, 0, vcc
 /*dc5c0000 37000037*/ flat_load_dwordx4 v[55:58], v[55:56] slc glc
 /*dc5c0000 3b000035*/ flat_load_dwordx4 v[59:62], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a507328         */ v_xor_b32       v40, v40, v57
 /*2a545d28         */ v_xor_b32       v42, v40, v46
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -11075,7 +11068,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e7d27         */ v_xor_b32       v39, v39, v62
 /*2a4c7b26         */ v_xor_b32       v38, v38, v61
@@ -11104,9 +11097,9 @@
 /*d11c6a36 01a9013a*/ v_addc_u32      v54, vcc, v58, 0, vcc
 /*dc5c0000 35000035*/ flat_load_dwordx4 v[53:56], v[53:54] slc glc
 /*dc5c0000 39000039*/ flat_load_dwordx4 v[57:60], v[57:58] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426d21         */ v_xor_b32       v33, v33, v54
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a527929         */ v_xor_b32       v41, v41, v60
 /*2a546929         */ v_xor_b32       v42, v41, v52
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -11147,7 +11140,7 @@
 /*d11c6a35 01a90139*/ v_addc_u32      v53, vcc, v57, 0, vcc
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426b21         */ v_xor_b32       v33, v33, v53
 /*2a466923         */ v_xor_b32       v35, v35, v52
 /*2a546323         */ v_xor_b32       v42, v35, v49
@@ -11162,7 +11155,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*d2850021 00023d21*/ v_mul_lo_u32    v33, v33, v30
 /*2a507528         */ v_xor_b32       v40, v40, v58
@@ -11190,7 +11183,7 @@
 /*d11c6a35 01a90139*/ v_addc_u32      v53, vcc, v57, 0, vcc
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426b21         */ v_xor_b32       v33, v33, v53
 /*2a546121         */ v_xor_b32       v42, v33, v48
 /*d286002c 00025505*/ v_mul_hi_u32    v44, v5, v42
@@ -11204,7 +11197,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*2a4e6f27         */ v_xor_b32       v39, v39, v55
 /*2a4c6d26         */ v_xor_b32       v38, v38, v54
@@ -11234,7 +11227,7 @@
 /*2a6256a8         */ v_xor_b32       v49, 40, v43
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000038*/ flat_load_dwordx4 v[56:59], v[56:57] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e6f27         */ v_xor_b32       v39, v39, v55
 /*2a4c6d26         */ v_xor_b32       v38, v38, v54
 /*2a545f26         */ v_xor_b32       v42, v38, v47
@@ -11249,7 +11242,7 @@
 /*32585401         */ v_add_u32       v44, vcc, s1, v42
 /*d100002a 0022552c*/ v_cndmask_b32   v42, v44, v42, s[8:9]
 /*d100002a 002a54c1*/ v_cndmask_b32   v42, -1, v42, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002a15*/ ds_write_b32    v21, v42 offset:3072
 /*d2850027 00023d27*/ v_mul_lo_u32    v39, v39, v30
 /*2a426b21         */ v_xor_b32       v33, v33, v53
@@ -11286,7 +11279,7 @@
 /*2a7256aa         */ v_xor_b32       v57, 42, v43
 /*dc5c0000 3a000037*/ flat_load_dwordx4 v[58:61], v[55:56] slc glc
 /*dc5c0000 35000035*/ flat_load_dwordx4 v[53:56], v[53:54] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7b27         */ v_xor_b32       v39, v39, v61
 /*2a5a5b27         */ v_xor_b32       v45, v39, v45
 /*d286003d 00025b05*/ v_mul_hi_u32    v61, v5, v45
@@ -11300,7 +11293,7 @@
 /*327a5a01         */ v_add_u32       v61, vcc, s1, v45
 /*d100002d 00225b3d*/ v_cndmask_b32   v45, v61, v45, s[8:9]
 /*d100002d 002a5ac1*/ v_cndmask_b32   v45, -1, v45, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002d15*/ ds_write_b32    v21, v45 offset:3072
 /*2a4c7926         */ v_xor_b32       v38, v38, v60
 /*2a427721         */ v_xor_b32       v33, v33, v59
@@ -11335,12 +11328,12 @@
 /*d11c6a37 01a9013b*/ v_addc_u32      v55, vcc, v59, 0, vcc
 /*dc5c0000 36000036*/ flat_load_dwordx4 v[54:57], v[54:55] slc glc
 /*dc5c0000 3a00003a*/ flat_load_dwordx4 v[58:61], v[58:59] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4a7327         */ v_xor_b32       v37, v39, v57
 /*2a4c7126         */ v_xor_b32       v38, v38, v56
 /*2a426f21         */ v_xor_b32       v33, v33, v55
 /*2a466d23         */ v_xor_b32       v35, v35, v54
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7b29         */ v_xor_b32       v39, v41, v61
 /*2a507928         */ v_xor_b32       v40, v40, v60
 /*2a3e771f         */ v_xor_b32       v31, v31, v59
@@ -11378,7 +11371,7 @@
 /*d11c6a07 01a9012a*/ v_addc_u32      v7, vcc, v42, 0, vcc
 /*dc5c0000 37000029*/ flat_load_dwordx4 v[55:58], v[41:42] slc glc
 /*dc5c0000 3b000006*/ flat_load_dwordx4 v[59:62], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a3e711f         */ v_xor_b32       v31, v31, v56
 /*2a52591f         */ v_xor_b32       v41, v31, v44
 /*d286002a 00025305*/ v_mul_hi_u32    v42, v5, v41
@@ -11392,7 +11385,7 @@
 /*32545201         */ v_add_u32       v42, vcc, s1, v41
 /*d1000029 0022532a*/ v_cndmask_b32   v41, v42, v41, s[8:9]
 /*d1000029 002a52c1*/ v_cndmask_b32   v41, -1, v41, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002915*/ ds_write_b32    v21, v41 offset:3072
 /*2a4a7d25         */ v_xor_b32       v37, v37, v62
 /*2a4c7b26         */ v_xor_b32       v38, v38, v61
@@ -11421,7 +11414,7 @@
 /*d11c6a07 01a9012a*/ v_addc_u32      v7, vcc, v42, 0, vcc
 /*dc5c0000 36000029*/ flat_load_dwordx4 v[54:57], v[41:42] slc glc
 /*dc5c0000 3a000006*/ flat_load_dwordx4 v[58:61], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a507128         */ v_xor_b32       v40, v40, v56
 /*2a525b28         */ v_xor_b32       v41, v40, v45
 /*d286002a 00025305*/ v_mul_hi_u32    v42, v5, v41
@@ -11435,7 +11428,7 @@
 /*32545201         */ v_add_u32       v42, vcc, s1, v41
 /*d1000029 0022532a*/ v_cndmask_b32   v41, v42, v41, s[8:9]
 /*d1000029 002a52c1*/ v_cndmask_b32   v41, -1, v41, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002915*/ ds_write_b32    v21, v41 offset:3072
 /*2a4a7b25         */ v_xor_b32       v37, v37, v61
 /*2a4c7926         */ v_xor_b32       v38, v38, v60
@@ -11464,9 +11457,9 @@
 /*d11c6a2d 01a9012a*/ v_addc_u32      v45, vcc, v42, 0, vcc
 /*dc5c0000 3500002c*/ flat_load_dwordx4 v[53:56], v[44:45] slc glc
 /*dc5c0000 39000029*/ flat_load_dwordx4 v[57:60], v[41:42] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426d21         */ v_xor_b32       v33, v33, v54
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7927         */ v_xor_b32       v39, v39, v60
 /*2a526927         */ v_xor_b32       v41, v39, v52
 /*d286002a 00025305*/ v_mul_hi_u32    v42, v5, v41
@@ -11507,7 +11500,7 @@
 /*d11c6a2d 01a9012a*/ v_addc_u32      v45, vcc, v42, 0, vcc
 /*dc5c0000 3400002c*/ flat_load_dwordx4 v[52:55], v[44:45] slc glc
 /*dc5c0000 38000029*/ flat_load_dwordx4 v[56:59], v[41:42] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426b21         */ v_xor_b32       v33, v33, v53
 /*2a466923         */ v_xor_b32       v35, v35, v52
 /*2a526323         */ v_xor_b32       v41, v35, v49
@@ -11522,7 +11515,7 @@
 /*32545201         */ v_add_u32       v42, vcc, s1, v41
 /*d1000029 0022532a*/ v_cndmask_b32   v41, v42, v41, s[8:9]
 /*d1000029 002a52c1*/ v_cndmask_b32   v41, -1, v41, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002915*/ ds_write_b32    v21, v41 offset:3072
 /*d2850021 00023d21*/ v_mul_lo_u32    v33, v33, v30
 /*2a507528         */ v_xor_b32       v40, v40, v58
@@ -11550,7 +11543,7 @@
 /*d11c6a2d 01a9012a*/ v_addc_u32      v45, vcc, v42, 0, vcc
 /*dc5c0000 3400002c*/ flat_load_dwordx4 v[52:55], v[44:45] slc glc
 /*dc5c0000 38000029*/ flat_load_dwordx4 v[56:59], v[41:42] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426b21         */ v_xor_b32       v33, v33, v53
 /*2a526121         */ v_xor_b32       v41, v33, v48
 /*d286002a 00025305*/ v_mul_hi_u32    v42, v5, v41
@@ -11564,7 +11557,7 @@
 /*32545201         */ v_add_u32       v42, vcc, s1, v41
 /*d1000029 0022532a*/ v_cndmask_b32   v41, v42, v41, s[8:9]
 /*d1000029 002a52c1*/ v_cndmask_b32   v41, -1, v41, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002915*/ ds_write_b32    v21, v41 offset:3072
 /*2a4a6f25         */ v_xor_b32       v37, v37, v55
 /*2a4c6d26         */ v_xor_b32       v38, v38, v54
@@ -11594,7 +11587,7 @@
 /*2a6056b0         */ v_xor_b32       v48, 48, v43
 /*dc5c0000 3400002c*/ flat_load_dwordx4 v[52:55], v[44:45] slc glc
 /*dc5c0000 38000029*/ flat_load_dwordx4 v[56:59], v[41:42] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4a6f25         */ v_xor_b32       v37, v37, v55
 /*2a4c6d26         */ v_xor_b32       v38, v38, v54
 /*2a525f26         */ v_xor_b32       v41, v38, v47
@@ -11609,7 +11602,7 @@
 /*32545201         */ v_add_u32       v42, vcc, s1, v41
 /*d1000029 0022532a*/ v_cndmask_b32   v41, v42, v41, s[8:9]
 /*d1000029 002a52c1*/ v_cndmask_b32   v41, -1, v41, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002915*/ ds_write_b32    v21, v41 offset:3072
 /*d2850025 00023d25*/ v_mul_lo_u32    v37, v37, v30
 /*2a426b21         */ v_xor_b32       v33, v33, v53
@@ -11646,7 +11639,7 @@
 /*2a7056b2         */ v_xor_b32       v56, 50, v43
 /*dc5c0000 39000036*/ flat_load_dwordx4 v[57:60], v[54:55] slc glc
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4a7925         */ v_xor_b32       v37, v37, v60
 /*2a5c5d25         */ v_xor_b32       v46, v37, v46
 /*d286003c 00025d05*/ v_mul_hi_u32    v60, v5, v46
@@ -11660,7 +11653,7 @@
 /*32785c01         */ v_add_u32       v60, vcc, s1, v46
 /*d100002e 00225d3c*/ v_cndmask_b32   v46, v60, v46, s[8:9]
 /*d100002e 002a5cc1*/ v_cndmask_b32   v46, -1, v46, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002e15*/ ds_write_b32    v21, v46 offset:3072
 /*2a4c7726         */ v_xor_b32       v38, v38, v59
 /*2a427521         */ v_xor_b32       v33, v33, v58
@@ -11695,12 +11688,12 @@
 /*d11c6a36 01a90134*/ v_addc_u32      v54, vcc, v52, 0, vcc
 /*dc5c0000 35000035*/ flat_load_dwordx4 v[53:56], v[53:54] slc glc
 /*dc5c0000 39000033*/ flat_load_dwordx4 v[57:60], v[51:52] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4a7125         */ v_xor_b32       v37, v37, v56
 /*2a4c6f26         */ v_xor_b32       v38, v38, v55
 /*2a426d21         */ v_xor_b32       v33, v33, v54
 /*2a466b23         */ v_xor_b32       v35, v35, v53
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7927         */ v_xor_b32       v39, v39, v60
 /*2a507728         */ v_xor_b32       v40, v40, v59
 /*2a3e751f         */ v_xor_b32       v31, v31, v58
@@ -11738,7 +11731,7 @@
 /*d11c6a34 01a90137*/ v_addc_u32      v52, vcc, v55, 0, vcc
 /*dc5c0000 36000036*/ flat_load_dwordx4 v[54:57], v[54:55] slc glc
 /*dc5c0000 3a000033*/ flat_load_dwordx4 v[58:61], v[51:52] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a3e6f1f         */ v_xor_b32       v31, v31, v55
 /*2a52551f         */ v_xor_b32       v41, v31, v42
 /*d286002a 00025305*/ v_mul_hi_u32    v42, v5, v41
@@ -11752,7 +11745,7 @@
 /*32545201         */ v_add_u32       v42, vcc, s1, v41
 /*d1000029 0022532a*/ v_cndmask_b32   v41, v42, v41, s[8:9]
 /*d1000029 002a52c1*/ v_cndmask_b32   v41, -1, v41, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002915*/ ds_write_b32    v21, v41 offset:3072
 /*2a4a7b25         */ v_xor_b32       v37, v37, v61
 /*2a4c7926         */ v_xor_b32       v38, v38, v60
@@ -11781,7 +11774,7 @@
 /*d11c6a07 01a9012a*/ v_addc_u32      v7, vcc, v42, 0, vcc
 /*dc5c0000 35000029*/ flat_load_dwordx4 v[53:56], v[41:42] slc glc
 /*dc5c0000 39000006*/ flat_load_dwordx4 v[57:60], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a506f28         */ v_xor_b32       v40, v40, v55
 /*2a525d28         */ v_xor_b32       v41, v40, v46
 /*d286002a 00025305*/ v_mul_hi_u32    v42, v5, v41
@@ -11795,7 +11788,7 @@
 /*32545201         */ v_add_u32       v42, vcc, s1, v41
 /*d1000029 0022532a*/ v_cndmask_b32   v41, v42, v41, s[8:9]
 /*d1000029 002a52c1*/ v_cndmask_b32   v41, -1, v41, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002915*/ ds_write_b32    v21, v41 offset:3072
 /*2a4a7925         */ v_xor_b32       v37, v37, v60
 /*2a4c7726         */ v_xor_b32       v38, v38, v59
@@ -11824,9 +11817,9 @@
 /*d11c6a34 01a9012a*/ v_addc_u32      v52, vcc, v42, 0, vcc
 /*dc5c0000 33000033*/ flat_load_dwordx4 v[51:54], v[51:52] slc glc
 /*dc5c0000 37000029*/ flat_load_dwordx4 v[55:58], v[41:42] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426921         */ v_xor_b32       v33, v33, v52
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7527         */ v_xor_b32       v39, v39, v58
 /*2a526327         */ v_xor_b32       v41, v39, v49
 /*d286002a 00025305*/ v_mul_hi_u32    v42, v5, v41
@@ -11867,7 +11860,7 @@
 /*d11c6a34 01a9012a*/ v_addc_u32      v52, vcc, v42, 0, vcc
 /*dc5c0000 33000033*/ flat_load_dwordx4 v[51:54], v[51:52] slc glc
 /*dc5c0000 37000029*/ flat_load_dwordx4 v[55:58], v[41:42] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426921         */ v_xor_b32       v33, v33, v52
 /*2a466723         */ v_xor_b32       v35, v35, v51
 /*2a526123         */ v_xor_b32       v41, v35, v48
@@ -11882,7 +11875,7 @@
 /*32545201         */ v_add_u32       v42, vcc, s1, v41
 /*d1000029 0022532a*/ v_cndmask_b32   v41, v42, v41, s[8:9]
 /*d1000029 002a52c1*/ v_cndmask_b32   v41, -1, v41, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002915*/ ds_write_b32    v21, v41 offset:3072
 /*d2850021 00023d21*/ v_mul_lo_u32    v33, v33, v30
 /*2a507328         */ v_xor_b32       v40, v40, v57
@@ -11910,7 +11903,7 @@
 /*d11c6a31 01a9012a*/ v_addc_u32      v49, vcc, v42, 0, vcc
 /*dc5c0000 33000030*/ flat_load_dwordx4 v[51:54], v[48:49] slc glc
 /*dc5c0000 37000029*/ flat_load_dwordx4 v[55:58], v[41:42] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426921         */ v_xor_b32       v33, v33, v52
 /*2a525f21         */ v_xor_b32       v41, v33, v47
 /*d286002a 00025305*/ v_mul_hi_u32    v42, v5, v41
@@ -11924,7 +11917,7 @@
 /*32545201         */ v_add_u32       v42, vcc, s1, v41
 /*d1000029 0022532a*/ v_cndmask_b32   v41, v42, v41, s[8:9]
 /*d1000029 002a52c1*/ v_cndmask_b32   v41, -1, v41, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002915*/ ds_write_b32    v21, v41 offset:3072
 /*2a4a6d25         */ v_xor_b32       v37, v37, v54
 /*2a4c6b26         */ v_xor_b32       v38, v38, v53
@@ -11954,7 +11947,7 @@
 /*2a6056b8         */ v_xor_b32       v48, 56, v43
 /*dc5c0000 3300002e*/ flat_load_dwordx4 v[51:54], v[46:47] slc glc
 /*dc5c0000 37000029*/ flat_load_dwordx4 v[55:58], v[41:42] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4a6d25         */ v_xor_b32       v37, v37, v54
 /*2a4c6b26         */ v_xor_b32       v38, v38, v53
 /*2a525b26         */ v_xor_b32       v41, v38, v45
@@ -11969,7 +11962,7 @@
 /*32545201         */ v_add_u32       v42, vcc, s1, v41
 /*d1000029 0022532a*/ v_cndmask_b32   v41, v42, v41, s[8:9]
 /*d1000029 002a52c1*/ v_cndmask_b32   v41, -1, v41, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002915*/ ds_write_b32    v21, v41 offset:3072
 /*d2850025 00023d25*/ v_mul_lo_u32    v37, v37, v30
 /*2a426921         */ v_xor_b32       v33, v33, v52
@@ -12006,7 +11999,7 @@
 /*2a5656ba         */ v_xor_b32       v43, 58, v43
 /*dc5c0000 35000035*/ flat_load_dwordx4 v[53:56], v[53:54] slc glc
 /*dc5c0000 39000033*/ flat_load_dwordx4 v[57:60], v[51:52] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4a7125         */ v_xor_b32       v37, v37, v56
 /*2a585925         */ v_xor_b32       v44, v37, v44
 /*d2860033 00025905*/ v_mul_hi_u32    v51, v5, v44
@@ -12020,7 +12013,7 @@
 /*32665801         */ v_add_u32       v51, vcc, s1, v44
 /*d100002c 00225933*/ v_cndmask_b32   v44, v51, v44, s[8:9]
 /*d100002c 002a58c1*/ v_cndmask_b32   v44, -1, v44, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002c15*/ ds_write_b32    v21, v44 offset:3072
 /*2a4c6f26         */ v_xor_b32       v38, v38, v55
 /*2a426d21         */ v_xor_b32       v33, v33, v54
@@ -12055,12 +12048,12 @@
 /*d11c6a34 01a90132*/ v_addc_u32      v52, vcc, v50, 0, vcc
 /*dc5c0000 33000033*/ flat_load_dwordx4 v[51:54], v[51:52] slc glc
 /*dc5c0000 37000031*/ flat_load_dwordx4 v[55:58], v[49:50] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4a6d25         */ v_xor_b32       v37, v37, v54
 /*2a4c6b26         */ v_xor_b32       v38, v38, v53
 /*2a426921         */ v_xor_b32       v33, v33, v52
 /*2a466723         */ v_xor_b32       v35, v35, v51
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7527         */ v_xor_b32       v39, v39, v58
 /*2a507328         */ v_xor_b32       v40, v40, v57
 /*2a3e711f         */ v_xor_b32       v31, v31, v56
@@ -12098,7 +12091,7 @@
 /*d11c6a32 01a90135*/ v_addc_u32      v50, vcc, v53, 0, vcc
 /*dc5c0000 34000034*/ flat_load_dwordx4 v[52:55], v[52:53] slc glc
 /*dc5c0000 38000031*/ flat_load_dwordx4 v[56:59], v[49:50] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a3e6b1f         */ v_xor_b32       v31, v31, v53
 /*2a52551f         */ v_xor_b32       v41, v31, v42
 /*d286002a 00025305*/ v_mul_hi_u32    v42, v5, v41
@@ -12112,7 +12105,7 @@
 /*32545201         */ v_add_u32       v42, vcc, s1, v41
 /*d1000029 0022532a*/ v_cndmask_b32   v41, v42, v41, s[8:9]
 /*d1000029 002a52c1*/ v_cndmask_b32   v41, -1, v41, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002915*/ ds_write_b32    v21, v41 offset:3072
 /*2a4a7725         */ v_xor_b32       v37, v37, v59
 /*2a4c7526         */ v_xor_b32       v38, v38, v58
@@ -12141,7 +12134,7 @@
 /*d11c6a07 01a9012a*/ v_addc_u32      v7, vcc, v42, 0, vcc
 /*dc5c0000 33000029*/ flat_load_dwordx4 v[51:54], v[41:42] slc glc
 /*dc5c0000 37000006*/ flat_load_dwordx4 v[55:58], v[6:7] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a506b28         */ v_xor_b32       v40, v40, v53
 /*2a525728         */ v_xor_b32       v41, v40, v43
 /*d286002a 00025305*/ v_mul_hi_u32    v42, v5, v41
@@ -12155,7 +12148,7 @@
 /*32545201         */ v_add_u32       v42, vcc, s1, v41
 /*d1000029 0022532a*/ v_cndmask_b32   v41, v42, v41, s[8:9]
 /*d1000029 002a52c1*/ v_cndmask_b32   v41, -1, v41, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002915*/ ds_write_b32    v21, v41 offset:3072
 /*2a4a7525         */ v_xor_b32       v37, v37, v58
 /*2a4c7326         */ v_xor_b32       v38, v38, v57
@@ -12184,9 +12177,9 @@
 /*d11c6a32 01a9012a*/ v_addc_u32      v50, vcc, v42, 0, vcc
 /*dc5c0000 31000031*/ flat_load_dwordx4 v[49:52], v[49:50] slc glc
 /*dc5c0000 35000029*/ flat_load_dwordx4 v[53:56], v[41:42] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426521         */ v_xor_b32       v33, v33, v50
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4e7127         */ v_xor_b32       v39, v39, v56
 /*2a525927         */ v_xor_b32       v41, v39, v44
 /*d286002a 00025305*/ v_mul_hi_u32    v42, v5, v41
@@ -12227,7 +12220,7 @@
 /*d11c6a2c 01a9012a*/ v_addc_u32      v44, vcc, v42, 0, vcc
 /*dc5c0000 3100002b*/ flat_load_dwordx4 v[49:52], v[43:44] slc glc
 /*dc5c0000 29000029*/ flat_load_dwordx4 v[41:44], v[41:42] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426521         */ v_xor_b32       v33, v33, v50
 /*2a466323         */ v_xor_b32       v35, v35, v49
 /*2a606123         */ v_xor_b32       v48, v35, v48
@@ -12242,7 +12235,7 @@
 /*32626001         */ v_add_u32       v49, vcc, s1, v48
 /*d1000030 00226131*/ v_cndmask_b32   v48, v49, v48, s[8:9]
 /*d1000030 002a60c1*/ v_cndmask_b32   v48, -1, v48, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00003015*/ ds_write_b32    v21, v48 offset:3072
 /*d2850021 00023d21*/ v_mul_lo_u32    v33, v33, v30
 /*2a505728         */ v_xor_b32       v40, v40, v43
@@ -12270,7 +12263,7 @@
 /*d11c6a2c 01a9012a*/ v_addc_u32      v44, vcc, v42, 0, vcc
 /*dc5c0000 3000002b*/ flat_load_dwordx4 v[48:51], v[43:44] slc glc
 /*dc5c0000 29000029*/ flat_load_dwordx4 v[41:44], v[41:42] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a426321         */ v_xor_b32       v33, v33, v49
 /*2a5e5f21         */ v_xor_b32       v47, v33, v47
 /*d2860031 00025f05*/ v_mul_hi_u32    v49, v5, v47
@@ -12284,7 +12277,7 @@
 /*32625e01         */ v_add_u32       v49, vcc, s1, v47
 /*d100002f 00225f31*/ v_cndmask_b32   v47, v49, v47, s[8:9]
 /*d100002f 002a5ec1*/ v_cndmask_b32   v47, -1, v47, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002f15*/ ds_write_b32    v21, v47 offset:3072
 /*2a4a6725         */ v_xor_b32       v37, v37, v51
 /*2a4c6526         */ v_xor_b32       v38, v38, v50
@@ -12313,7 +12306,7 @@
 /*d11c6a2c 01a9012a*/ v_addc_u32      v44, vcc, v42, 0, vcc
 /*dc5c0000 2f00002b*/ flat_load_dwordx4 v[47:50], v[43:44] slc glc
 /*dc5c0000 29000029*/ flat_load_dwordx4 v[41:44], v[41:42] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4a6525         */ v_xor_b32       v37, v37, v50
 /*2a4c6326         */ v_xor_b32       v38, v38, v49
 /*2a5c5d26         */ v_xor_b32       v46, v38, v46
@@ -12328,7 +12321,7 @@
 /*32625c01         */ v_add_u32       v49, vcc, s1, v46
 /*d100002e 00225d31*/ v_cndmask_b32   v46, v49, v46, s[8:9]
 /*d100002e 002a5cc1*/ v_cndmask_b32   v46, -1, v46, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00002e15*/ ds_write_b32    v21, v46 offset:3072
 /*d2850025 00023d25*/ v_mul_lo_u32    v37, v37, v30
 /*2a426121         */ v_xor_b32       v33, v33, v48
@@ -12356,7 +12349,7 @@
 /*d11c6a2c 01a9012a*/ v_addc_u32      v44, vcc, v42, 0, vcc
 /*dc5c0000 2e00002b*/ flat_load_dwordx4 v[46:49], v[43:44] slc glc
 /*dc5c0000 29000029*/ flat_load_dwordx4 v[41:44], v[41:42] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a4a6325         */ v_xor_b32       v37, v37, v49
 /*2a5a5b25         */ v_xor_b32       v45, v37, v45
 /*d2860005 00025b05*/ v_mul_hi_u32    v5, v5, v45
@@ -12370,7 +12363,7 @@
 /*325a0a01         */ v_add_u32       v45, vcc, s1, v5
 /*d1000005 00220b2d*/ v_cndmask_b32   v5, v45, v5, s[8:9]
 /*d1000005 002a0ac1*/ v_cndmask_b32   v5, -1, v5, s[10:11]
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*d81a0c00 00000515*/ ds_write_b32    v21, v5 offset:3072
 /*2a0a6126         */ v_xor_b32       v5, v38, v48
 /*2a2a5f21         */ v_xor_b32       v21, v33, v47
@@ -12399,12 +12392,12 @@
 /*d11c6a28 01a9012c*/ v_addc_u32      v40, vcc, v44, 0, vcc
 /*dc5c0000 27000027*/ flat_load_dwordx4 v[39:42], v[39:40] slc glc
 /*dc5c0000 2b00002b*/ flat_load_dwordx4 v[43:46], v[43:44] slc glc
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a005525         */ v_xor_b32       v0, v37, v42
 /*2a0a5305         */ v_xor_b32       v5, v5, v41
 /*2a2a5115         */ v_xor_b32       v21, v21, v40
 /*2a344f21         */ v_xor_b32       v26, v33, v39
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a385d23         */ v_xor_b32       v28, v35, v46
 /*2a425b26         */ v_xor_b32       v33, v38, v45
 /*2a3e591f         */ v_xor_b32       v31, v31, v44
@@ -12429,7 +12422,7 @@
 /*bf88000c         */ s_cbranch_execz .L72672_0
 /*d8ee0302 08000003*/ ds_read2_b64    v[8:11], v3 offset0:2 offset1:3
 /*d8ee0100 57000003*/ ds_read2_b64    v[87:90], v3 offset1:1
-/*bf8c017f         */ s_waitcnt       lgkmcnt(1)
+/*bf8c017f         */ s_waitcnt       lgkmcnt(0)
 /*7e9a0309         */ v_mov_b32       v77, v9
 /*7e9c030b         */ v_mov_b32       v78, v11
 /*7e36030a         */ v_mov_b32       v27, v10
@@ -12886,7 +12879,7 @@
 /*7e040204         */ v_mov_b32       v2, s4
 /*7e060205         */ v_mov_b32       v3, s5
 /*dd090000 00000002*/ flat_atomic_add v0, v[2:3], v0 glc slc glc
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*1c0400ff 000000fe*/ v_min_u32       v2, 0xfe, v0
 /*7e060280         */ v_mov_b32       v3, 0
 /*d28f0002 00020482*/ v_lshlrev_b64   v[2:3], 2, v[2:3]
@@ -12974,7 +12967,7 @@
 /*dc5c0000 4a000009*/ flat_load_dwordx4 v[74:77], v[9:10] slc glc
 /*dc5c0000 6000000b*/ flat_load_dwordx4 v[96:99], v[11:12] slc glc
 /*dc5c0000 0a000005*/ flat_load_dwordx4 v[10:13], v[5:6] slc glc
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2adc010a         */ v_xor_b32       v110, v10, v0
 /*7eb00280         */ v_mov_b32       v88, 0
 /*7eb20280         */ v_mov_b32       v89, 0
@@ -13564,7 +13557,7 @@
 /*7e2a02ff 01000193*/ v_mov_b32       v21, 0x1000193
 /*d2850012 00022b6e*/ v_mul_lo_u32    v18, v110, v21
 /*d2850011 00022b6d*/ v_mul_lo_u32    v17, v109, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243312         */ v_xor_b32       v18, v18, v25
 /*d285000c 00022b4a*/ v_mul_lo_u32    v12, v74, v21
 /*2a223511         */ v_xor_b32       v17, v17, v26
@@ -13575,7 +13568,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b48*/ v_mul_lo_u32    v10, v72, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3b07         */ v_xor_b32       v7, v7, v29
 /*d285000f 00022b4d*/ v_mul_lo_u32    v15, v77, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -13588,7 +13581,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b46*/ v_mul_lo_u32    v8, v70, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264313         */ v_xor_b32       v19, v19, v33
 /*d2850006 00022b44*/ v_mul_lo_u32    v6, v68, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -13601,7 +13594,7 @@
 /*d2850014 00022b52*/ v_mul_lo_u32    v20, v82, v21
 /*d285000b 00022b57*/ v_mul_lo_u32    v11, v87, v21
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284b14         */ v_xor_b32       v20, v20, v37
 /*7ef40306         */ v_mov_b32       v122, v6
 /*2a164d0b         */ v_xor_b32       v11, v11, v38
@@ -13652,7 +13645,7 @@
 /*dc5c0000 26000018*/ flat_load_dwordx4 v[38:41], v[24:25] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243512         */ v_xor_b32       v18, v18, v26
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2a223711         */ v_xor_b32       v17, v17, v27
@@ -13663,7 +13656,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3d07         */ v_xor_b32       v7, v7, v30
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -13676,7 +13669,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264513         */ v_xor_b32       v19, v19, v34
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -13688,7 +13681,7 @@
 /*2a0a4b05         */ v_xor_b32       v5, v5, v37
 /*7ef00313         */ v_mov_b32       v120, v19
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284d14         */ v_xor_b32       v20, v20, v38
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef40306         */ v_mov_b32       v122, v6
@@ -13740,7 +13733,7 @@
 /*dc5c0000 26000018*/ flat_load_dwordx4 v[38:41], v[24:25] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243512         */ v_xor_b32       v18, v18, v26
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2a223711         */ v_xor_b32       v17, v17, v27
@@ -13751,7 +13744,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3d07         */ v_xor_b32       v7, v7, v30
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -13764,7 +13757,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264513         */ v_xor_b32       v19, v19, v34
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -13777,7 +13770,7 @@
 /*7ef00313         */ v_mov_b32       v120, v19
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284d14         */ v_xor_b32       v20, v20, v38
 /*d285000d 00022b0d*/ v_mul_lo_u32    v13, v13, v21
 /*7ef40306         */ v_mov_b32       v122, v6
@@ -13826,7 +13819,7 @@
 /*dc5c0000 26000018*/ flat_load_dwordx4 v[38:41], v[24:25] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243512         */ v_xor_b32       v18, v18, v26
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2a223711         */ v_xor_b32       v17, v17, v27
@@ -13837,7 +13830,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3d07         */ v_xor_b32       v7, v7, v30
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -13850,7 +13843,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264513         */ v_xor_b32       v19, v19, v34
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -13863,7 +13856,7 @@
 /*7ef00313         */ v_mov_b32       v120, v19
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284d14         */ v_xor_b32       v20, v20, v38
 /*d285000d 00022b0d*/ v_mul_lo_u32    v13, v13, v21
 /*7ef40306         */ v_mov_b32       v122, v6
@@ -13914,7 +13907,7 @@
 /*dc5c0000 26000018*/ flat_load_dwordx4 v[38:41], v[24:25] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243512         */ v_xor_b32       v18, v18, v26
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2a223711         */ v_xor_b32       v17, v17, v27
@@ -13925,7 +13918,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3d07         */ v_xor_b32       v7, v7, v30
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -13938,7 +13931,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264513         */ v_xor_b32       v19, v19, v34
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -13951,7 +13944,7 @@
 /*d2850014 00022b14*/ v_mul_lo_u32    v20, v20, v21
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284d14         */ v_xor_b32       v20, v20, v38
 /*7ef40306         */ v_mov_b32       v122, v6
 /*2a164f0b         */ v_xor_b32       v11, v11, v39
@@ -14002,7 +13995,7 @@
 /*dc5c0000 26000018*/ flat_load_dwordx4 v[38:41], v[24:25] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243512         */ v_xor_b32       v18, v18, v26
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2a223711         */ v_xor_b32       v17, v17, v27
@@ -14013,7 +14006,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3d07         */ v_xor_b32       v7, v7, v30
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -14026,7 +14019,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264513         */ v_xor_b32       v19, v19, v34
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -14038,7 +14031,7 @@
 /*2a0a4b05         */ v_xor_b32       v5, v5, v37
 /*7ef00313         */ v_mov_b32       v120, v19
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284d14         */ v_xor_b32       v20, v20, v38
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef40306         */ v_mov_b32       v122, v6
@@ -14090,7 +14083,7 @@
 /*dc5c0000 26000018*/ flat_load_dwordx4 v[38:41], v[24:25] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243512         */ v_xor_b32       v18, v18, v26
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2a223711         */ v_xor_b32       v17, v17, v27
@@ -14101,7 +14094,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3d07         */ v_xor_b32       v7, v7, v30
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -14114,7 +14107,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264513         */ v_xor_b32       v19, v19, v34
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -14127,7 +14120,7 @@
 /*7ef00313         */ v_mov_b32       v120, v19
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284d14         */ v_xor_b32       v20, v20, v38
 /*d285000d 00022b0d*/ v_mul_lo_u32    v13, v13, v21
 /*7ef40306         */ v_mov_b32       v122, v6
@@ -14178,7 +14171,7 @@
 /*dc5c0000 26000018*/ flat_load_dwordx4 v[38:41], v[24:25] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243512         */ v_xor_b32       v18, v18, v26
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2a223711         */ v_xor_b32       v17, v17, v27
@@ -14189,7 +14182,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3d07         */ v_xor_b32       v7, v7, v30
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -14202,7 +14195,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264513         */ v_xor_b32       v19, v19, v34
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -14215,7 +14208,7 @@
 /*7ef00313         */ v_mov_b32       v120, v19
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284d14         */ v_xor_b32       v20, v20, v38
 /*d285000d 00022b0d*/ v_mul_lo_u32    v13, v13, v21
 /*7ef40306         */ v_mov_b32       v122, v6
@@ -14266,7 +14259,7 @@
 /*dc5c0000 26000018*/ flat_load_dwordx4 v[38:41], v[24:25] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243512         */ v_xor_b32       v18, v18, v26
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2a223711         */ v_xor_b32       v17, v17, v27
@@ -14277,7 +14270,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3d07         */ v_xor_b32       v7, v7, v30
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -14290,7 +14283,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264513         */ v_xor_b32       v19, v19, v34
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -14303,7 +14296,7 @@
 /*d2850014 00022b14*/ v_mul_lo_u32    v20, v20, v21
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284d14         */ v_xor_b32       v20, v20, v38
 /*7ef40306         */ v_mov_b32       v122, v6
 /*2a164f0b         */ v_xor_b32       v11, v11, v39
@@ -14354,7 +14347,7 @@
 /*dc5c0000 26000018*/ flat_load_dwordx4 v[38:41], v[24:25] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243512         */ v_xor_b32       v18, v18, v26
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2a223711         */ v_xor_b32       v17, v17, v27
@@ -14365,7 +14358,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3d07         */ v_xor_b32       v7, v7, v30
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -14378,7 +14371,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264513         */ v_xor_b32       v19, v19, v34
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -14390,7 +14383,7 @@
 /*2a0a4b05         */ v_xor_b32       v5, v5, v37
 /*7ef00313         */ v_mov_b32       v120, v19
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284d14         */ v_xor_b32       v20, v20, v38
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef40306         */ v_mov_b32       v122, v6
@@ -14442,7 +14435,7 @@
 /*dc5c0000 26000018*/ flat_load_dwordx4 v[38:41], v[24:25] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243512         */ v_xor_b32       v18, v18, v26
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2a223711         */ v_xor_b32       v17, v17, v27
@@ -14453,7 +14446,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3d07         */ v_xor_b32       v7, v7, v30
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -14466,7 +14459,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264513         */ v_xor_b32       v19, v19, v34
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -14479,7 +14472,7 @@
 /*7ef00313         */ v_mov_b32       v120, v19
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284d14         */ v_xor_b32       v20, v20, v38
 /*d285000d 00022b0d*/ v_mul_lo_u32    v13, v13, v21
 /*7ef40306         */ v_mov_b32       v122, v6
@@ -14530,7 +14523,7 @@
 /*dc5c0000 26000018*/ flat_load_dwordx4 v[38:41], v[24:25] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243512         */ v_xor_b32       v18, v18, v26
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2a223711         */ v_xor_b32       v17, v17, v27
@@ -14541,7 +14534,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3d07         */ v_xor_b32       v7, v7, v30
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -14554,7 +14547,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264513         */ v_xor_b32       v19, v19, v34
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -14567,7 +14560,7 @@
 /*7ef00313         */ v_mov_b32       v120, v19
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284d14         */ v_xor_b32       v20, v20, v38
 /*d285000d 00022b0d*/ v_mul_lo_u32    v13, v13, v21
 /*7ef40306         */ v_mov_b32       v122, v6
@@ -14618,7 +14611,7 @@
 /*dc5c0000 26000018*/ flat_load_dwordx4 v[38:41], v[24:25] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243512         */ v_xor_b32       v18, v18, v26
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2a223711         */ v_xor_b32       v17, v17, v27
@@ -14629,7 +14622,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3d07         */ v_xor_b32       v7, v7, v30
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -14642,7 +14635,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264513         */ v_xor_b32       v19, v19, v34
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -14655,7 +14648,7 @@
 /*d2850014 00022b14*/ v_mul_lo_u32    v20, v20, v21
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284d14         */ v_xor_b32       v20, v20, v38
 /*7ef40306         */ v_mov_b32       v122, v6
 /*2a164f0b         */ v_xor_b32       v11, v11, v39
@@ -14706,7 +14699,7 @@
 /*dc5c0000 26000018*/ flat_load_dwordx4 v[38:41], v[24:25] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243512         */ v_xor_b32       v18, v18, v26
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2a223711         */ v_xor_b32       v17, v17, v27
@@ -14717,7 +14710,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3d07         */ v_xor_b32       v7, v7, v30
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -14730,7 +14723,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264513         */ v_xor_b32       v19, v19, v34
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -14742,7 +14735,7 @@
 /*2a0a4b05         */ v_xor_b32       v5, v5, v37
 /*7ef00313         */ v_mov_b32       v120, v19
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284d14         */ v_xor_b32       v20, v20, v38
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef40306         */ v_mov_b32       v122, v6
@@ -14794,7 +14787,7 @@
 /*dc5c0000 26000018*/ flat_load_dwordx4 v[38:41], v[24:25] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a243512         */ v_xor_b32       v18, v18, v26
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2a223711         */ v_xor_b32       v17, v17, v27
@@ -14805,7 +14798,7 @@
 /*7ee00312         */ v_mov_b32       v112, v18
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee20311         */ v_mov_b32       v113, v17
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a0e3d07         */ v_xor_b32       v7, v7, v30
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4030c         */ v_mov_b32       v114, v12
@@ -14818,7 +14811,7 @@
 /*7ee80307         */ v_mov_b32       v116, v7
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea030a         */ v_mov_b32       v117, v10
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a264513         */ v_xor_b32       v19, v19, v34
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec030f         */ v_mov_b32       v118, v15
@@ -14831,7 +14824,7 @@
 /*7ef00313         */ v_mov_b32       v120, v19
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef20308         */ v_mov_b32       v121, v8
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a284d14         */ v_xor_b32       v20, v20, v38
 /*d285000d 00022b0d*/ v_mul_lo_u32    v13, v13, v21
 /*7ef40306         */ v_mov_b32       v122, v6
@@ -14882,7 +14875,7 @@
 /*dc5c0000 24000016*/ flat_load_dwordx4 v[36:39], v[22:23] slc glc
 /*d2850012 00022b12*/ v_mul_lo_u32    v18, v18, v21
 /*d2850011 00022b11*/ v_mul_lo_u32    v17, v17, v21
-/*bf8c0373         */ s_waitcnt       vmcnt(3) & lgkmcnt(3)
+/*bf8c0373         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2adc3112         */ v_xor_b32       v110, v18, v24
 /*d285000c 00022b0c*/ v_mul_lo_u32    v12, v12, v21
 /*2ada3311         */ v_xor_b32       v109, v17, v25
@@ -14893,7 +14886,7 @@
 /*7ee0036e         */ v_mov_b32       v112, v110
 /*d285000a 00022b0a*/ v_mul_lo_u32    v10, v10, v21
 /*7ee2036d         */ v_mov_b32       v113, v109
-/*bf8c0272         */ s_waitcnt       vmcnt(2) & lgkmcnt(2)
+/*bf8c0272         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2a8a3907         */ v_xor_b32       v69, v7, v28
 /*d285000f 00022b0f*/ v_mul_lo_u32    v15, v15, v21
 /*7ee4034a         */ v_mov_b32       v114, v74
@@ -14906,7 +14899,7 @@
 /*7ee80345         */ v_mov_b32       v116, v69
 /*d2850008 00022b08*/ v_mul_lo_u32    v8, v8, v21
 /*7eea0348         */ v_mov_b32       v117, v72
-/*bf8c0171         */ s_waitcnt       vmcnt(1) & lgkmcnt(1)
+/*bf8c0171         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2aa24113         */ v_xor_b32       v81, v19, v32
 /*d2850006 00022b06*/ v_mul_lo_u32    v6, v6, v21
 /*7eec034d         */ v_mov_b32       v118, v77
@@ -14919,7 +14912,7 @@
 /*7ef00351         */ v_mov_b32       v120, v81
 /*d285000b 00022b0b*/ v_mul_lo_u32    v11, v11, v21
 /*7ef20346         */ v_mov_b32       v121, v70
-/*bf8c0070         */ s_waitcnt       vmcnt(0) & lgkmcnt(0)
+/*bf8c0070         */ s_sleep 100; s_waitcnt       vmcnt(0) & lgkmcnt(0)
 /*2aa44914         */ v_xor_b32       v82, v20, v36
 /*d285000d 00022b0d*/ v_mul_lo_u32    v13, v13, v21
 /*7ef40344         */ v_mov_b32       v122, v68

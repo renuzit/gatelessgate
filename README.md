@@ -1,7 +1,7 @@
 # Gateless Gate
 
-- [Download precompiled binaries for 64-bit Windows (0.1.3-pre5)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.3-pre5/gatelessgate-0.1.3-pre5-win64.zip)
-- [Download the source code for Linux (0.1.3-pre5)](https://github.com/zawawawa/gatelessgate/archive/v0.1.3-pre5.tar.gz)
+- [Download precompiled binaries for 64-bit Windows (0.1.3-pre6)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.3-pre6/gatelessgate-0.1.3-pre6-win64.zip)
+- [Download the source code for Linux (0.1.3-pre6)](https://github.com/zawawawa/gatelessgate/archive/v0.1.3-pre6.tar.gz)
 - [Download precompiled binaries for 64-bit Windows (0.1.2)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.2/gatelessgate-0.1.2-win64.zip) 
 - [Download the source code for Linux (0.1.2)](https://github.com/zawawawa/gatelessgate/archive/v0.1.2.tar.gz)
 
@@ -10,14 +10,14 @@ It is a completely redesigned fork of [Marc Bevand's SILENTARMY V5](https://gith
 boost combined with the well-tested user-interface and back-end of [sgminer-gm](https://github.com/genesismining/sgminer-gm).
 This miner runs at around 256 sol/s on stock RX 480 and 193 sol/s on stock GTX 1060 3GB. (For optimal performance for ZEC mining, you need to run the miner on Linux for now.)
 
-On 64-bit Windows operating systems, all you have to do for mining is to download the precompiled binary and edit and run 
-one of the .BAT files. This miner has been tested against AMD Crimson Software 16.9.2 and NVIDIA Display Driver 376.33.
+On 64-bit Windows operating systems, all you have to do for mining is to download the precompiled binary, edit one of the .conf files, and run 
+the corresponding .bat file. This miner has been tested against AMD Crimson Software 16.9.2 and NVIDIA Display Driver 376.33.
 
-On Linux, you should be able to build the miner with the Makefile in the repository. Both AMDGPU-PRO drivers and fglrx drivers are supported now. Please refer to the documentation of the original sgminer-gm below for details. This miner has been tested with the following distributions:
+On Linux, you should be able to build the miner with the Makefile in the repository. Both AMDGPU-PRO drivers and fglrx drivers are supported now. Please refer to the documentation of the original sgminer-gm below for details.
+Once the miner is successfully built, you can edit one of the .conf files and run the corresponding .sh script. This miner has been tested with the following distributions:
 
 * Ubuntu 16.04.01 LTS with Linux Kernel 4.10.1 and AMDGPU-PRO 16.60.
 * Ubuntu 14.04.01 LTS with fglrx-updates.
-
 
 Please note that this software is still in the alpha stage, and some of its features are highly experimental. If you have questions or
 feedback, please post them to:
@@ -25,10 +25,12 @@ feedback, please post them to:
 * https://bitcointalk.org/index.php?topic=1716584
 * https://forum.z.cash/t/gateless-gate-a-fork-of-the-silentarmy-miner-has-arrived/12838
 
-If you find this miner useful or would like to contribute to further development, please consider donations to:
+There is a voluntary 1% devfee. Please keep the entries for it in the .conf file as I am totally broke now and I won't be able to continue open-source development for too long without it. You could also send additional donations to:
 
 * `1BHwDWVerUTiKxhHPf2ubqKKiBMiKQGomZ` (Bitcoin)
 * `t1NwUDeSKu4BxkD58mtEYKDjzw5toiLfmCu` (Zcash) 
+
+Last but not least, I would like to thank nerdralph, sp_, and eXtremal for invaluable advice.
 
 zawawa @ bitcointalk.org
 
