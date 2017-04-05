@@ -25,7 +25,7 @@ feedback, please post them to:
 * https://bitcointalk.org/index.php?topic=1716584
 * https://forum.z.cash/t/gateless-gate-a-fork-of-the-silentarmy-miner-has-arrived/12838
 
-There is a voluntary 1% devfee. Please keep the entries for it in the .conf file as I am totally broke now and I won't be able to continue open-source development for too long without it. You could also send additional donations to:
+There is a voluntary 1% developer's fee. Please keep the entries for it in the .conf file as I am totally broke now and I won't be able to continue open-source development for too long without it. You could also send additional donations to:
 
 * `1BHwDWVerUTiKxhHPf2ubqKKiBMiKQGomZ` (Bitcoin)
 * `t1NwUDeSKu4BxkD58mtEYKDjzw5toiLfmCu` (Zcash) 
