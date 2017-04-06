@@ -19,8 +19,7 @@ Once the miner is successfully built, you can edit one of the .conf files and ru
 * Ubuntu 16.04.01 LTS with Linux Kernel 4.10.1 and AMDGPU-PRO 16.60.
 * Ubuntu 14.04.01 LTS with fglrx-updates.
 
-Please note that this software is still in the alpha stage, and some of its features are highly experimental. If you have questions or
-feedback, please post them to:
+Please note that software/BIOS configurations for other miners do not necessarily transfer to Gateless Gate. When you are using it for the first time, you need to disable overclocking/underclocking/overvolting/undervolting/custom memory straps. Please also note that this software is still in the alpha stage, and some of its features are highly experimental. If you have questions or feedback, please post them to:
 
 * https://bitcointalk.org/index.php?topic=1716584
 * https://forum.z.cash/t/gateless-gate-a-fork-of-the-silentarmy-miner-has-arrived/12838
