@@ -1,5 +1,7 @@
 # Gateless Gate
 
+- [Download precompiled binaries for 64-bit Windows (0.1.3-pre6a)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.3-pre6a/gatelessgate-0.1.3-pre6a-win64.zip)
+- [Download the source code for Linux (0.1.3-pre6a)](https://github.com/zawawawa/gatelessgate/archive/v0.1.3-pre6a.tar.gz)
 - [Download precompiled binaries for 64-bit Windows (0.1.3-pre6)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.3-pre6/gatelessgate-0.1.3-pre6-win64.zip)
 - [Download the source code for Linux (0.1.3-pre6)](https://github.com/zawawawa/gatelessgate/archive/v0.1.3-pre6.tar.gz)
 - [Download precompiled binaries for 64-bit Windows (0.1.2)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.2/gatelessgate-0.1.2-win64.zip) 
