@@ -1,3 +1,5 @@
+**This project has been superseded by [Gateless Gate #](https://github.com/zawawawa/GatelessGateSharp).**
+
 # Gateless Gate
 
 - [Download precompiled binaries for 64-bit Windows (0.1.3-pre6b)](https://github.com/zawawawa/gatelessgate/releases/download/v0.1.3-pre6b/gatelessgate-0.1.3-pre6b-win64.zip)
