@@ -1,4 +1,4 @@
-**This project has been superseded by [Gateless Gate #](https://github.com/zawawawa/GatelessGateSharp).**
+**This project has been superseded by [Gateless Gate Sharp](https://github.com/zawawawa/GatelessGateSharp). I am just too busy and I am no longer able to provide support for the original Gateless Gate.**
 
 # Gateless Gate
 
@@ -21,10 +21,7 @@ Once the miner is successfully built, you can edit one of the .conf files and ru
 * Ubuntu 16.04.01 LTS with Linux Kernel 4.10.1 and AMDGPU-PRO 16.60.
 * Ubuntu 14.04.01 LTS with fglrx-updates.
 
-Please note that software/BIOS configurations for other miners do not necessarily transfer to Gateless Gate. When you are using it for the first time, you need to disable overclocking/underclocking/overvolting/undervolting/custom memory straps. Please also note that this software is still in the alpha stage, and some of its features are highly experimental. If you have questions or feedback, please post them to:
-
-* https://bitcointalk.org/index.php?topic=1716584
-* https://forum.z.cash/t/gateless-gate-a-fork-of-the-silentarmy-miner-has-arrived/12838
+Please note that software/BIOS configurations for other miners do not necessarily transfer to Gateless Gate. When you are using it for the first time, you need to disable overclocking/underclocking/overvolting/undervolting/custom memory straps. Please also note that this software is still in the alpha stage, and some of its features are highly experimental. 
 
 There is a voluntary 1% developer's fee. Please keep the entries for it in the .conf file as I am totally broke now and I won't be able to continue open-source development for too long without it. You could also send additional donations to:
 
