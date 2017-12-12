@@ -1,4 +1,4 @@
-**This project has been superseded by [Gateless Gate Sharp](https://github.com/zawawawa/GatelessGateSharp). I am just too busy and no longer able to provide support for the original Gateless Gate.**
+**This project has been superseded by [Gateless Gate Sharp](https://github.com/zawawawa/GatelessGateSharp). I am just too busy and no longer able to provide support for the original Gateless Gate.** - zawawa
 
 # Gateless Gate
 
