@@ -40,7 +40,7 @@
 // Parameters for Hash Tables
 //
 
-#define _NR_ROWS_LOG(round)      12
+#define _NR_ROWS_LOG(round)      12 
 #define _NR_SLOTS(round)         688
 #define _LDS_COLL_SIZE(round)    ((round) <= 6 ? 784 : 800)
 #define _NR_ROWS(round)          4096
@@ -120,10 +120,10 @@
 
 
 
-#define MAX_PARAM_N              200
-#define MAX_PARAM_K              9
+#define MAX_PARAM_N              197 
+#define MAX_PARAM_K              7
 #define PREFIX(n, k)             ((n) / ((k) + 1))
-#define MAX_PREFIX               PREFIX(200, 9)
+#define MAX_PREFIX               PREFIX(192, 7)
 #define NR_INPUTS(n, k)          (1 << PREFIX((n), (k)))
 #define HASH_TABLE_SIZE(round)	 (_NR_ROWS(round) * (_NR_SLOTS(round) + 64) * _SLOT_LEN(round))
 #define ZCASH_BLOCK_HEADER_LEN	 140

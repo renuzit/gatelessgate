@@ -1523,7 +1523,6 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
                 delta = dend - dstart;
                 thrdata->kern_avg_run_time = thrdata->kern_avg_run_time * 6.0 / 10.0 + delta * ((4.0 / 10.0));
             }
-
             if (status == CL_SUCCESS) {
                 if (sols->nr > MAX_SOLS) {
                     applog(LOG_DEBUG, "equihash: %d (probably invalid) solutions were dropped!", sols->nr - MAX_SOLS);
@@ -1534,7 +1533,7 @@ static int64_t opencl_scanhash(struct thr_info *thr, struct work *work,
                         ret += equihash_verify_sol(work, sols, sol_i, 192, 7);
                 } else {
                     for (int sol_i = 0; sol_i < sols->nr; sol_i++)
-                        ret += equihash_verify_sol(work, sols, sol_i, 200, 9);
+                        ret += equihash_verify_sol(work, sols, sol_i, 192, 7);
                 }
             } else {
                 applog(LOG_ERR, "Error %d: Reading result buffer for ALGO_EQUIHASH failed. (clEnqueueReadBuffer)", status);

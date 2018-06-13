@@ -1304,7 +1304,7 @@ static cl_int queue_equihash_kernel_generic(_clState *clState, dev_blk_ctx *blk,
 
 static cl_int queue_equihash_kernel(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint device_thread)
 {
-    return queue_equihash_kernel_generic(clState, blk, device_thread, 200, 9);
+    return queue_equihash_kernel_generic(clState, blk, device_thread, 192, 7);
 }
 
 static cl_int queue_equihash_kernel_zero(_clState *clState, dev_blk_ctx *blk, __maybe_unused cl_uint device_thread)

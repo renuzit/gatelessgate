@@ -1538,7 +1538,7 @@ struct work {
     
   uint32_t XMRNonce;
   
-  unsigned char equihash_data[1344 + 143]; // 1487
+  unsigned char equihash_data[400 + 143]; // 543 
 
   int   rolls;
   int   drv_rolllimit; /* How much the driver can roll ntime */

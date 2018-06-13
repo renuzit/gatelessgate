@@ -19,10 +19,10 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 #ifndef PARAM_N
-#define PARAM_N				   200
+#define PARAM_N				   192 
 #endif
 #ifndef PARAM_K
-#define PARAM_K			       9
+#define PARAM_K			       7
 #endif
 
 #include "equihash-param.h"
@@ -355,6 +355,7 @@ void kernel_round0(uint device_thread, __constant ulong *blake_state, __global c
     // message block
     ulong word1 = (ulong)input << 32;
     // init vector v
+
     v[0] = blake_state[0];
     v[1] = blake_state[1];
     v[2] = blake_state[2];

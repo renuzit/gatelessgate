@@ -2201,7 +2201,8 @@ static double get_work_blockdiff(const struct work *work)
     return numerator / (double)diff64;
 }
 
-#define ZCASH_SOL_LEN (!strcmp("equihash-zero", pool->algorithm.name) ? 400 : 1344)
+// #define ZCASH_SOL_LEN (!strcmp("equihash-zero", pool->algorithm.name) ? 400 : 1344)
+#define ZCASH_SOL_LEN 400
 
 static void gen_gbt_work(struct pool *pool, struct work *work)
 {
